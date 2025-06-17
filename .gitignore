@@ -239,3 +239,4 @@ docker-compose.override.yml
 alembic/versions/*.bak
 
 sites.md
+config.json 
