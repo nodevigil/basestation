@@ -5,6 +5,7 @@ from tools.nmap import nmap_scan
 from tools.whatweb import whatweb_scan
 from tools.ssltester import ssl_test
 from tools.docker import DockerExposureChecker
+from utils.cve_updater import search_cves_for_banner
 
 class Scanner:
     ## TODO add more known vulnerabilities and their CVEs
@@ -24,11 +25,31 @@ class Scanner:
             return None
 
     def match_known_vulns(self, banner):
+        """Match banner against known vulnerabilities from database.
+        
+        Args:
+            banner: Service banner string
+            
+        Returns:
+            List of matching CVE dictionaries or None
+        """
         if not banner:
             return None
+        
+        # First check static KNOWN_VULNS for backwards compatibility
         for key, cve in self.KNOWN_VULNS.items():
             if key.lower() in banner.lower():
-                return cve
+                return [{"cve_id": cve.split(" - ")[0], "description": cve}]
+        
+        # Then check database for more comprehensive matches
+        try:
+            database_cves = search_cves_for_banner(banner)
+            if database_cves:
+                return database_cves[:5]  # Return top 5 matches
+        except Exception as e:
+            # Fallback to static check if database is unavailable
+            pass
+        
         return None
 
     def get_tls_info(self, ip):

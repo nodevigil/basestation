@@ -13,6 +13,7 @@ from core.logging import setup_logging
 from core.database import create_tables
 from utils.pipeline import create_orchestrator
 from utils.agent_registry import get_agent_registry
+from utils.cve_updater import update_cves_database, get_cve_stats
 
 
 def setup_environment(config: Config) -> None:
@@ -163,6 +164,63 @@ def list_agents() -> None:
     print("  python main.py --stage recon --recon-agents SuiReconAgent")
 
 
+def update_cve_database(replace_existing: bool = False, offline: bool = False, 
+                        initial_populate: bool = False) -> None:
+    """Update the CVE database with latest vulnerability data.
+    
+    Args:
+        replace_existing: Whether to replace existing CVEs or merge them
+        offline: Whether to use offline CVE data without API calls  
+        initial_populate: Whether to perform initial database population
+    """
+    print("🔄 Updating CVE database...")
+    
+    if offline:
+        print("   ⚠️  Offline mode not supported for database updates")
+        print("   💡 Use --initial flag for initial database population instead")
+        return
+    
+    if initial_populate:
+        print("   📥 Performing initial CVE database population...")
+        print("   ⏱️  This may take several minutes...")
+    else:
+        print("   🔍 Checking for CVE updates from NVD API...")
+    
+    try:
+        success = update_cves_database(
+            force_update=replace_existing,
+            initial_populate=initial_populate,
+            days_back=7 if not initial_populate else 30
+        )
+        
+        if success:
+            print("✅ CVE database updated successfully!")
+            
+            # Show database statistics
+            stats = get_cve_stats()
+            print("📊 Database Statistics:")
+            print(f"   • Total CVEs: {stats.get('total_cves', 'Unknown')}")
+            print(f"   • High Severity CVEs: {stats.get('high_severity_count', 'Unknown')}")
+            print(f"   • Recent CVEs (30 days): {stats.get('recent_cves_30_days', 'Unknown')}")
+            
+            if stats.get('last_update'):
+                print(f"   • Last Update: {stats['last_update']}")
+                print(f"   • New CVEs Added: {stats.get('last_update_new_cves', 0)}")
+                print(f"   • CVEs Updated: {stats.get('last_update_updated_cves', 0)}")
+            
+            if initial_populate:
+                print("   🎉 Initial database population completed!")
+            else:
+                print("   📈 CVE database is now up to date")
+        else:
+            print("❌ CVE database update failed. Check logs for details.")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"❌ Error updating CVE database: {e}")
+        sys.exit(1)
+
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -182,6 +240,11 @@ Examples:
   python main.py --scan-target 139.84.148.36 --debug # Scan target with debug
   python main.py --list-agents                # List available agents
   python main.py --recon-agents SuiReconAgent # Run specific recon agent
+  python main.py --update-cves                # Update CVE database with latest data
+  python main.py --update-cves --replace-cves # Force update of CVE database
+  python main.py --update-cves --initial-cves # Initial CVE database population
+  python main.py --start-cve-scheduler        # Start daily CVE update scheduler
+  python main.py --update-cves --offline-cves # Use offline CVE data (no API calls)
         """
     )
     
@@ -214,8 +277,33 @@ Examples:
     )
     
     parser.add_argument(
-        '--protocol',
-        help='Filter nodes by protocol (e.g., filecoin, sui) for scanning'
+        '--update-cves',
+        action='store_true',
+        help='Update CVE database with latest vulnerability data'
+    )
+    
+    parser.add_argument(
+        '--replace-cves',
+        action='store_true',
+        help='Force update of CVE database (use with --update-cves)'
+    )
+    
+    parser.add_argument(
+        '--initial-cves',
+        action='store_true',
+        help='Perform initial CVE database population (use with --update-cves)'
+    )
+    
+    parser.add_argument(
+        '--start-cve-scheduler',
+        action='store_true',
+        help='Start the CVE update scheduler (runs daily at 2 AM)'
+    )
+    
+    parser.add_argument(
+        '--cve-update-time',
+        default='02:00',
+        help='Time for daily CVE updates (HH:MM format, default: 02:00)'
     )
     
     parser.add_argument(
@@ -395,6 +483,29 @@ def main():
             list_agents()
             return
         
+        # Update CVE database and exit
+        if args.update_cves:
+            update_cve_database(args.replace_cves, False, args.initial_cves)
+            return
+        
+        # Start CVE scheduler and exit
+        if args.start_cve_scheduler:
+            from utils.cve_scheduler import start_cve_scheduler
+            print(f"🕐 Starting CVE scheduler with daily updates at {args.cve_update_time}")
+            print("   Press Ctrl+C to stop the scheduler")
+            start_cve_scheduler(args.cve_update_time, enabled=True)
+            
+            try:
+                while True:
+                    import time
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\n⏹️  Stopping CVE scheduler...")
+                from utils.cve_scheduler import stop_cve_scheduler
+                stop_cve_scheduler()
+                print("   CVE scheduler stopped")
+            return
+        
         # Load configuration
         config = load_config(args)
         
@@ -418,6 +529,10 @@ def main():
         else:
             # Run full pipeline
             run_full_pipeline(config, args.recon_agents)
+        
+        # Update CVE database if requested
+        if args.update_cves:
+            update_cve_database(args.replace_cves, args.offline_cves)
         
         print("\n🎉 Execution completed successfully!")
         

@@ -78,6 +78,85 @@ class ValidatorScan(Base):
         }
 
 
+class CVERecord(Base):
+    """Model for storing CVE vulnerability data."""
+    __tablename__ = 'cve_records'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cve_id = Column(String(20), unique=True, nullable=False)  # e.g., CVE-2019-20372
+    published_date = Column(DateTime, nullable=True)
+    last_modified = Column(DateTime, nullable=True)
+    source = Column(String(50), default='NVD', nullable=False)  # NVD, MITRE, etc.
+    
+    # Vulnerability details
+    description = Column(String(2000), nullable=True)
+    severity = Column(String(20), nullable=True)  # LOW, MEDIUM, HIGH, CRITICAL
+    cvss_score = Column(String(10), nullable=True)  # e.g., "7.5"
+    cvss_vector = Column(String(100), nullable=True)
+    
+    # Affected software (JSON array of CPE URIs and version ranges)
+    affected_products = Column(JSON, nullable=True)
+    
+    # Raw CVE data for future reference
+    raw_data = Column(JSON, nullable=True)
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __repr__(self):
+        return f"<CVERecord(cve_id='{self.cve_id}', severity='{self.severity}', cvss_score='{self.cvss_score}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'cve_id': self.cve_id,
+            'published_date': self.published_date.isoformat() if self.published_date else None,
+            'last_modified': self.last_modified.isoformat() if self.last_modified else None,
+            'source': self.source,
+            'description': self.description,
+            'severity': self.severity,
+            'cvss_score': self.cvss_score,
+            'cvss_vector': self.cvss_vector,
+            'affected_products': self.affected_products,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class CVEUpdateLog(Base):
+    """Model for tracking CVE database updates."""
+    __tablename__ = 'cve_update_logs'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    update_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    total_cves_processed = Column(Integer, default=0, nullable=False)
+    new_cves_added = Column(Integer, default=0, nullable=False)
+    updated_cves = Column(Integer, default=0, nullable=False)
+    source = Column(String(50), default='NVD', nullable=False)
+    status = Column(String(20), default='SUCCESS', nullable=False)  # SUCCESS, FAILED, PARTIAL
+    error_message = Column(String(1000), nullable=True)
+    processing_time_seconds = Column(Integer, nullable=True)
+    
+    def __repr__(self):
+        return f"<CVEUpdateLog(update_date='{self.update_date}', status='{self.status}', new_cves={self.new_cves_added})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'update_date': self.update_date.isoformat() if self.update_date else None,
+            'total_cves_processed': self.total_cves_processed,
+            'new_cves_added': self.new_cves_added,
+            'updated_cves': self.updated_cves,
+            'source': self.source,
+            'status': self.status,
+            'error_message': self.error_message,
+            'processing_time_seconds': self.processing_time_seconds
+        }
+
+
 class DatabaseManager:
     """
     Manages database connections and operations.
