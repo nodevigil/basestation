@@ -73,7 +73,9 @@ def run_single_stage(
     config: Config,
     stage: str,
     agent_name: Optional[str] = None,
-    recon_agents: Optional[List[str]] = None
+    recon_agents: Optional[List[str]] = None,
+    protocol_filter: Optional[str] = None,
+    debug: bool = False
 ) -> None:
     """
     Run a single pipeline stage.
@@ -83,10 +85,12 @@ def run_single_stage(
         stage: Stage name to run
         agent_name: Specific agent name to use
         recon_agents: List of recon agents (for recon stage)
+        protocol_filter: Protocol filter for scanning (e.g., 'filecoin', 'sui')
+        debug: Enable debug logging for scanners
     """
-    orchestrator = create_orchestrator(config)
-    
     print(f"🎯 Running single stage: {stage}")
+    if debug:
+        print("🐛 Debug mode enabled - detailed logs will be created")
     
     # Show config info for scan stage
     if stage == 'scan':
@@ -94,21 +98,30 @@ def run_single_stage(
         print(f"🔧 Scan mode: {scan_mode}")
         print(f"⏱️  Sleep between scans: {config.scanning.sleep_between_scans}s")
         print(f"⏰ Scan timeout: {config.scanning.timeout_seconds}s")
+        if protocol_filter:
+            print(f"🔍 Protocol filter: {protocol_filter}")
     
     try:
         if stage == 'recon':
+            orchestrator = create_orchestrator(config)
             results = orchestrator.run_single_stage(stage, agent_names=recon_agents)
             print(f"✅ Reconnaissance completed: {len(results)} nodes discovered")
             
         elif stage == 'scan':
-            results = orchestrator.run_single_stage(stage, agent_name)
+            # For scanning, we'll use the scanner agent directly to support protocol filtering
+            from agents.scan.node_scanner_agent import NodeScannerAgent
+            
+            scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
+            results = scanner_agent.scan_nodes()
             print(f"✅ Scanning completed: {len(results)} nodes scanned")
             
         elif stage == 'process':
+            orchestrator = create_orchestrator(config)
             results = orchestrator.run_single_stage(stage, agent_name)
             print(f"✅ Processing completed: {len(results)} results processed")
             
         elif stage == 'publish':
+            orchestrator = create_orchestrator(config)
             success = orchestrator.run_single_stage(stage, agent_name)
             status = "Success" if success else "Failed"
             print(f"✅ Publishing completed: {status}")
@@ -159,9 +172,13 @@ Examples:
   python main.py                              # Run full pipeline
   python main.py --stage recon                # Run only reconnaissance
   python main.py --stage scan                 # Run only scanning
+  python main.py --stage scan --protocol filecoin # Scan only Filecoin nodes
+  python main.py --stage scan --protocol filecoin --debug # Scan with debug logging
+  python main.py --stage scan --protocol sui  # Scan only Sui nodes
   python main.py --stage process              # Run only processing
   python main.py --stage publish              # Run only publishing
   python main.py --scan-target 139.84.148.36 # Scan specific IP/hostname
+  python main.py --scan-target 139.84.148.36 --debug # Scan target with debug
   python main.py --list-agents                # List available agents
   python main.py --recon-agents SuiReconAgent # Run specific recon agent
         """
@@ -196,6 +213,11 @@ Examples:
     )
     
     parser.add_argument(
+        '--protocol',
+        help='Filter nodes by protocol (e.g., filecoin, sui) for scanning'
+    )
+    
+    parser.add_argument(
         '--config',
         help='Path to configuration file (JSON format)'
     )
@@ -205,6 +227,12 @@ Examples:
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
         default='INFO',
         help='Set logging level'
+    )
+    
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging for scanners (creates detailed log files)'
     )
     
     return parser.parse_args()
@@ -257,7 +285,7 @@ def load_config(args) -> Config:
     return config
 
 
-def scan_target(config: Config, target: str) -> None:
+def scan_target(config: Config, target: str, debug: bool = False) -> None:
     """
     Scan a specific target (IP or hostname) directly using the agent architecture.
     
@@ -289,7 +317,7 @@ def scan_target(config: Config, target: str) -> None:
         }
         
         # Initialize scanner agent
-        scanner_agent = NodeScannerAgent(config)
+        scanner_agent = NodeScannerAgent(config, debug=debug)
         
         print(f"�️  Running comprehensive security scan...")
         
@@ -368,14 +396,16 @@ def main():
         # Run pipeline based on arguments
         if args.scan_target:
             # Scan specific target
-            scan_target(config, args.scan_target)
+            scan_target(config, args.scan_target, args.debug)
         elif args.stage:
             # Run single stage
             run_single_stage(
                 config,
                 args.stage,
                 args.agent,
-                args.recon_agents
+                args.recon_agents,
+                args.protocol,
+                args.debug
             )
         else:
             # Run full pipeline

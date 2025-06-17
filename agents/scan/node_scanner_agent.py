@@ -18,8 +18,9 @@ from scanning.scanner import Scanner
 class ProtocolScannerRegistry:
     """Registry for protocol-specific scanners."""
     
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         self._scanners = {}
+        self.debug = debug
         self._register_scanners()
     
     def _register_scanners(self):
@@ -47,7 +48,7 @@ class ProtocolScannerRegistry:
         """Get scanner for a specific protocol."""
         scanner_class = self._scanners.get(protocol.lower())
         if scanner_class:
-            return scanner_class()
+            return scanner_class(debug=self.debug)
         return None
     
     def get_supported_protocols(self) -> List[str]:
@@ -64,24 +65,30 @@ class NodeScannerAgent(ScanAgent):
     detection, SSL testing, and protocol-specific checks.
     """
     
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(self, config: Optional[Config] = None, protocol_filter: Optional[str] = None, debug: bool = False):
         """
         Initialize node scanner agent.
         
         Args:
             config: Configuration instance
+            protocol_filter: Optional protocol to filter nodes by (e.g., 'filecoin', 'sui')
+            debug: Enable debug logging for scanners
         """
         super().__init__(config, "NodeScannerAgent")
         self.scan_interval_days = self.config.scanning.scan_interval_days
         self.sleep_between_scans = self.config.scanning.sleep_between_scans
         self.timeout_seconds = self.config.scanning.timeout_seconds
         self.max_concurrent_scans = self.config.scanning.max_concurrent_scans
+        self.protocol_filter = protocol_filter
+        self.debug = debug
         
         # Initialize scanners
         self.generic_scanner = Scanner()
-        self.protocol_registry = ProtocolScannerRegistry()
+        self.protocol_registry = ProtocolScannerRegistry(debug=debug)
         
-        self.logger.info(f"🔧 Initialized with support for protocols: {self.protocol_registry.get_supported_protocols()}")
+        filter_msg = f" (filtering for {protocol_filter})" if protocol_filter else ""
+        debug_msg = " [DEBUG MODE]" if debug else ""
+        self.logger.info(f"🔧 Initialized with support for protocols: {self.protocol_registry.get_supported_protocols()}{filter_msg}{debug_msg}")
     
     def scan_nodes(self, nodes: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
@@ -131,12 +138,21 @@ class NodeScannerAgent(ScanAgent):
                     ValidatorScan.scan_date > cutoff_date
                 ).subquery()
                 
-                validators_needing_scan = session.query(ValidatorAddress).filter(
+                # Base query
+                query = session.query(ValidatorAddress).filter(
                     and_(
                         ValidatorAddress.active == True,
                         ~ValidatorAddress.id.in_(subquery)
                     )
-                ).order_by(ValidatorAddress.created_at.desc()).all()
+                )
+                
+                # Apply protocol filter if specified
+                if self.protocol_filter:
+                    # Filter by source containing the protocol name
+                    query = query.filter(ValidatorAddress.source.like(f'{self.protocol_filter}%'))
+                    self.logger.info(f"🔍 Filtering nodes by protocol: {self.protocol_filter}")
+                
+                validators_needing_scan = query.order_by(ValidatorAddress.created_at.desc()).all()
                 
                 nodes = []
                 for validator in validators_needing_scan:
