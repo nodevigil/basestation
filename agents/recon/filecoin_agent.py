@@ -1,10 +1,12 @@
 """
 Filecoin reconnaissance agent for discovering storage providers and nodes.
-NOW: Only discovers peers from a running Lotus Docker container.
+Discovers peers from both a running Lotus Docker container and public Filecoin APIs.
 """
 
 import subprocess
 import re
+import requests
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -15,7 +17,7 @@ from core.database import get_db_session, ValidatorAddress
 class FilecoinReconAgent(ReconAgent):
     """
     Filecoin network reconnaissance agent.
-    This version only discovers peer IPs from a running Lotus Docker container.
+    Discovers peer IPs from a running Lotus Docker container and public Filecoin APIs.
     """
 
     def __init__(self, config: Optional[object] = None, lotus_container_name: str = "lotus"):
@@ -23,34 +25,22 @@ class FilecoinReconAgent(ReconAgent):
         super().__init__(config, "FilecoinReconAgent")
         self.lotus_container_name = lotus_container_name
 
-        # # Filecoin network endpoints (DISABLED)
-        # self.filecoin_api_urls = [
-        #     "https://filfox.info/api/v1/storage-provider/list",
-        #     "https://spacegap.github.io/database/miners.json",
-        # ]
-        # self.request_timeout = 30
-        # self.max_retries = 3
-        # self.delay_between_requests = 1.0
+        # API-based endpoints
+        self.filecoin_api_urls = [
+            "https://filfox.info/api/v1/miner/list?pageSize=100&page=1"
+        ]
+        self.request_timeout = 30
+        self.max_retries = 3
+        self.delay_between_requests = 1.0
 
     def discover_nodes(self) -> List[Dict[str, Any]]:
         """
-        Discover Filecoin nodes from running Lotus Docker peer list.
+        Discover Filecoin nodes from Lotus Docker peers and public APIs.
         """
         discovered_nodes = []
-        self.logger.info("🔍 Starting Filecoin Docker Lotus peer reconnaissance...")
+        self.logger.info("🔍 Starting Filecoin peer discovery (Docker + API)...")
 
-        # # API-based discovery (DISABLED)
-        # for api_url in self.filecoin_api_urls:
-        #     try:
-        #         self.logger.info(f"📡 Querying {api_url}")
-        #         nodes = self._query_filecoin_api(api_url)
-        #         discovered_nodes.extend(nodes)
-        #         time.sleep(self.delay_between_requests)
-        #     except Exception as e:
-        #         self.logger.warning(f"Failed to query {api_url}: {e}")
-        #         continue
-
-        # Lotus peer scraping (ENABLED)
+        # Docker Lotus peer scraping
         try:
             peer_nodes = self.discover_peers_from_lotus()
             if peer_nodes:
@@ -58,6 +48,17 @@ class FilecoinReconAgent(ReconAgent):
                 discovered_nodes.extend(peer_nodes)
         except Exception as e:
             self.logger.warning(f"Failed to discover peers from Lotus: {e}")
+
+        # API-based discovery
+        for api_url in self.filecoin_api_urls:
+            try:
+                self.logger.info(f"📡 Querying {api_url}")
+                nodes = self._query_filecoin_api(api_url)
+                discovered_nodes.extend(nodes)
+                time.sleep(self.delay_between_requests)
+            except Exception as e:
+                self.logger.warning(f"Failed to query {api_url}: {e}")
+                continue
 
         # Deduplicate nodes by address
         unique_nodes = {}
@@ -67,7 +68,6 @@ class FilecoinReconAgent(ReconAgent):
                 unique_nodes[address] = node
 
         final_nodes = list(unique_nodes.values())
-
         self.logger.info(f"🎯 Discovered {len(final_nodes)} unique Filecoin nodes from {len(discovered_nodes)} total records")
         saved_count = self._save_nodes_to_database(final_nodes)
         self.logger.info(f"💾 Saved {saved_count} new Filecoin nodes to database")
@@ -99,15 +99,94 @@ class FilecoinReconAgent(ReconAgent):
                 })
         return nodes
 
-    # Commented-out API-based node extraction logic
-    # def _query_filecoin_api(self, api_url: str) -> List[Dict[str, Any]]:
-    #     pass
+    def _query_filecoin_api(self, api_url: str) -> List[Dict[str, Any]]:
+        """Query a Filecoin API endpoint for storage provider data."""
+        nodes = []
+        try:
+            response = requests.get(api_url, timeout=self.request_timeout)
+            response.raise_for_status()
+            data = response.json()
+            # Handle different API response formats
+            if isinstance(data, list):
+                providers = data
+            elif isinstance(data, dict):
+                if 'miners' in data:
+                    providers = data['miners']
+                elif 'storage_providers' in data:
+                    providers = data['storage_providers']
+                elif 'data' in data:
+                    providers = data['data']
+                else:
+                    # Try to find the main data array
+                    providers = []
+                    for key, value in data.items():
+                        if isinstance(value, list) and len(value) > 0:
+                            providers = value
+                            break
+            else:
+                providers = []
 
-    # def _extract_node_info(self, provider_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    #     pass
+            # Extract node information
+            for provider in providers[:100]:  # Limit to first 100 for speed/test
+                try:
+                    node_info = self._extract_node_info(provider)
+                    if node_info:
+                        nodes.append(node_info)
+                except Exception as e:
+                    self.logger.debug(f"Failed to extract node info from provider: {e}")
+                    continue
 
-    # def _is_valid_address(self, address: str) -> bool:
-    #     pass
+        except Exception as e:
+            self.logger.error(f"Failed to query {api_url}: {e}")
+            # Do not raise; just return what you have so far
+        return nodes
+
+    def _extract_node_info(self, provider_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract node information from provider data."""
+        address = None
+        name = None
+        # Common fields that might contain addresses
+        address_fields = [
+            'address', 'peer_id', 'multiaddress', 'multiaddr',
+            'network_address', 'ip', 'hostname', 'domain',
+            'worker_address', 'owner_address'
+        ]
+        name_fields = [
+            'name', 'label', 'organization', 'org', 'title'
+        ]
+        for field in address_fields:
+            if field in provider_data and provider_data[field]:
+                potential_address = str(provider_data[field])
+                if potential_address.startswith('f'):
+                    continue
+                if '/ip4/' in potential_address:
+                    try:
+                        parts = potential_address.split('/ip4/')[1].split('/')
+                        address = parts[0]
+                        break
+                    except Exception:
+                        continue
+                if self._is_valid_address(potential_address):
+                    address = potential_address
+                    break
+        for field in name_fields:
+            if field in provider_data and provider_data[field]:
+                name = str(provider_data[field])
+                break
+        if not address:
+            return None
+        return {
+            'address': address,
+            'name': name,
+            'source': 'filecoin_api',
+            'raw_data': provider_data
+        }
+
+    def _is_valid_address(self, address: str) -> bool:
+        """Check if a string looks like a valid IP or hostname."""
+        ip_pattern = r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+        return bool(re.match(ip_pattern, address) or re.match(hostname_pattern, address))
 
     def _save_nodes_to_database(self, nodes: List[Dict[str, Any]]) -> int:
         """Save discovered nodes to database."""
@@ -117,13 +196,10 @@ class FilecoinReconAgent(ReconAgent):
         with get_db_session() as session:
             for node in nodes:
                 try:
-                    # Check if address already exists
                     existing = session.query(ValidatorAddress).filter_by(
                         address=node['address']
                     ).first()
-
                     if not existing:
-                        # Create new validator address entry
                         validator_address = ValidatorAddress(
                             address=node['address'],
                             name=node.get('name'),
@@ -131,21 +207,18 @@ class FilecoinReconAgent(ReconAgent):
                             created_at=datetime.utcnow(),
                             active=True
                         )
-
                         session.add(validator_address)
                         saved_count += 1
-
                 except Exception as e:
                     self.logger.warning(f"Failed to save node {node.get('address', 'unknown')}: {e}")
                     continue
-
             session.commit()
         return saved_count
 
     def run(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute Filecoin reconnaissance.
-        Only runs Docker-based Lotus peer discovery.
+        Discovers peers from Docker and public APIs.
         """
         return self.discover_nodes()
 

@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: depin
+      POSTGRES_USER: simon
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simon -d depin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for future caching/queuing needs)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # Main application
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      # Override with Docker-specific values
+      DATABASE_URL: postgresql://simon:devpassword@postgres:5432/depin
+      PYTHONPATH: /app
+      PYTHONUNBUFFERED: 1
+    volumes:
+      # Mount source code for live editing
+      - .:/app
+      # Mount a volume for logs
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"  # If you add a web interface later
+    # Allow access to host network for some scanning operations if needed
+    # network_mode: host  # Uncomment if needed for certain network scans
+    # Add capabilities for network tools
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # Keep container running for interactive development
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # Optional: Web interface container (for future development)
+  # web:
+  #   build: .
+  #   depends_on:
+  #     - app
+  #   ports:
+  #     - "3000:3000"
+  #   command: python -m http.server 3000
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    driver: bridge

@@ -36,6 +36,12 @@ class FilecoinSpecificScanner:
         self.debug = debug
         self.logger = self._setup_logging()
         
+        # Log debug initialization
+        if self.debug:
+            self.logger.debug(f"🐛 FilecoinSpecificScanner debug logging is ACTIVE")
+        else:
+            self.logger.info(f"ℹ️ FilecoinSpecificScanner initialized (debug mode: {self.debug})")
+        
         # Expanded Filecoin ports based on real deployments
         self.lotus_api_ports = [1234, 3453, 8080, 80, 443, 8443]
         self.storage_api_ports = [2345, 1235, 8081]

@@ -4,6 +4,7 @@ New main.py - DePIN Infrastructure Scanner with Agentic Architecture
 
 import argparse
 import sys
+import os
 from typing import Optional, List
 from datetime import datetime
 
@@ -248,14 +249,21 @@ def load_config(args) -> Config:
     Returns:
         Configuration instance
     """
+    import json
+    
     config = Config()
     
-    # Try to load config.json automatically if it exists
-    config_file = args.config if args.config else 'config.json'
+    # Determine config file: explicit > docker > default
+    if args.config:
+        config_file = args.config
+    elif os.getenv('DATABASE_URL') and os.path.exists('config.docker.json'):
+        # Auto-detect Docker environment
+        config_file = 'config.docker.json'
+        print("🐳 Docker environment detected, using docker configuration")
+    else:
+        config_file = 'config.json'
     
     try:
-        import json
-        import os
         
         if os.path.exists(config_file):
             print(f"📄 Loading configuration from: {config_file}")
@@ -267,7 +275,7 @@ def load_config(args) -> Config:
             print(f"❌ Config file not found: {args.config}")
             sys.exit(1)
         else:
-            print("📄 No config.json found, using defaults and environment variables")
+            print("📄 No config file found, using defaults and environment variables")
             
     except Exception as e:
         print(f"❌ Failed to load config file {config_file}: {e}")
