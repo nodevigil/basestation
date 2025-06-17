@@ -7,6 +7,7 @@ from tools.ssltester import ssl_test
 from tools.docker import DockerExposureChecker
 
 class Scanner:
+    ## TODO add more known vulnerabilities and their CVEs
     KNOWN_VULNS = {
         "nginx/1.14.0": "CVE-2019-20372 - Heap buffer overflow in HTTP/2",
         "OpenSSH_7.2p2": "CVE-2016-0777 - Information leak via roaming feature",

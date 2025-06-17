@@ -1,0 +1,33 @@
+{
+  "database": {
+    "url": "postgresql://simon@localhost/depin",
+    "echo_sql": false,
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_timeout": 30,
+    "pool_recycle": 3600
+  },
+  "scanning": {
+    "scan_interval_days": 7,
+    "sleep_between_scans": 5.0,
+    "timeout_seconds": 30,
+    "max_concurrent_scans": 5,
+    "enable_vulnerability_scanning": true,
+    "enable_ssl_testing": true
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s %(levelname)s [%(name)s]: %(message)s",
+    "disable_sqlalchemy": true
+  },
+  "recon": {
+    "sui_rpc_url": "https://fullnode.mainnet.sui.io",
+    "dns_timeout": 10.0,
+    "max_retries": 3
+  },
+  "publish": {
+    "enabled_publishers": ["database", "console", "json_file"],
+    "blockchain_endpoint": null,
+    "api_endpoint": null
+  }
+}
