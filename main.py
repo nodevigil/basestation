@@ -259,14 +259,13 @@ def load_config(args) -> Config:
 
 def scan_target(config: Config, target: str) -> None:
     """
-    Scan a specific target (IP or hostname) directly.
+    Scan a specific target (IP or hostname) directly using the agent architecture.
     
     Args:
         config: Configuration instance
         target: IP address or hostname to scan
     """
-    from scanning.scanner import Scanner
-    from scanning.sui_scanner import SuiSpecificScanner
+    from agents.scan.node_scanner_agent import NodeScannerAgent
     import socket
     import json
     
@@ -281,57 +280,73 @@ def scan_target(config: Config, target: str) -> None:
             print(f"❌ DNS resolution failed for {target}")
             return
         
-        # Initialize scanners
-        generic_scanner = Scanner()
-        sui_scanner = SuiSpecificScanner()
-        
-        print(f"🛡️  Running generic security scan...")
-        generic_result = generic_scanner.scan(ip_address)
-        
-        print(f"🔍 Running Sui-specific scan...")
-        sui_result = sui_scanner.scan(ip_address)
-        
-        # Combine results
-        scan_result = {
-            'target': target,
-            'ip_address': ip_address,
-            'generic_scan': generic_result,
-            'sui_scan': sui_result,
-            'scan_timestamp': datetime.utcnow().isoformat()
+        # Create a mock node entry for the scanner agent
+        mock_node = {
+            'id': 0,
+            'address': target,
+            'source': 'manual_scan',  # Generic source since we don't know the protocol
+            'name': f'Direct scan of {target}'
         }
         
-        print(f"\n✅ Scan completed for {target}")
-        print(f"📊 Results Summary:")
+        # Initialize scanner agent
+        scanner_agent = NodeScannerAgent(config)
         
-        # Generic scan summary
-        if generic_result and 'open_ports' in generic_result:
-            ports = generic_result['open_ports']
-            print(f"   🔓 Open ports: {ports}")
+        print(f"�️  Running comprehensive security scan...")
         
-        # Sui scan summary
-        if sui_result:
-            if sui_result.get('metrics_exposed'):
-                metrics_url = sui_result.get('metrics_url', 'Unknown')
-                sui_count = sui_result.get('sui_metrics_count', 0)
-                print(f"   📊 Sui metrics: ✅ EXPOSED at {metrics_url} ({sui_count} sui metrics)")
-            else:
-                print(f"   📊 Sui metrics: ❌ Not exposed")
+        # Run the scan using the agent
+        scan_results = scanner_agent.scan_nodes([mock_node])
+        
+        if scan_results:
+            scan_result = scan_results[0]
+            print(f"\n✅ Scan completed for {target}")
+            print(f"📊 Results Summary:")
             
-            if sui_result.get('rpc_exposed'):
-                rpc_url = sui_result.get('rpc_url', 'Unknown')
-                print(f"   🔗 Sui RPC: ✅ EXPOSED at {rpc_url}")
-            else:
-                print(f"   🔗 Sui RPC: ❌ Not exposed")
-        
-        # Optionally save to file
-        output_file = f"scan_result_{target.replace('.', '_').replace(':', '_')}.json"
-        with open(output_file, 'w') as f:
-            json.dump(scan_result, f, indent=2)
-        print(f"💾 Full results saved to: {output_file}")
-        
+            # Generic scan summary
+            if scan_result.get('generic_scan') and 'open_ports' in scan_result['generic_scan']:
+                ports = scan_result['generic_scan']['open_ports']
+                print(f"   🔓 Open ports: {ports}")
+            
+            # Protocol scan summary (if available)
+            if scan_result.get('protocol_scan'):
+                protocol_result = scan_result['protocol_scan']
+                if isinstance(protocol_result, dict) and not protocol_result.get('error'):
+                    if protocol_result.get('metrics_exposed'):
+                        metrics_url = protocol_result.get('metrics_url', 'Unknown')
+                        protocol_metrics_count = protocol_result.get('sui_metrics_count', 0)
+                        print(f"   📊 Protocol metrics: ✅ EXPOSED at {metrics_url} ({protocol_metrics_count} metrics)")
+                    else:
+                        print(f"   📊 Protocol metrics: ❌ Not exposed")
+                    
+                    if protocol_result.get('rpc_exposed'):
+                        rpc_url = protocol_result.get('rpc_url', 'Unknown')
+                        print(f"   🔌 RPC endpoint: ✅ EXPOSED at {rpc_url}")
+                    else:
+                        print(f"   🔌 RPC endpoint: ❌ Not exposed")
+            
+            # Web probes summary
+            if scan_result.get('web_probes'):
+                web_probes = scan_result['web_probes']
+                for endpoint, probe_result in web_probes.items():
+                    if isinstance(probe_result, dict) and not probe_result.get('error'):
+                        waf_detected = probe_result.get('waf', {}).get('detected', False)
+                        waf_name = probe_result.get('waf', {}).get('name', 'Unknown')
+                        if waf_detected:
+                            print(f"   🛡️  WAF detected on {endpoint}: {waf_name}")
+                        else:
+                            print(f"   🌐 Web service on {endpoint}: No WAF detected")
+            
+            # Save results to file
+            output_file = f"scan_result_{ip_address.replace('.', '_')}.json"
+            with open(output_file, 'w') as f:
+                json.dump(scan_result, f, indent=2)
+            print(f"💾 Results saved to: {output_file}")
+        else:
+            print(f"❌ Scan failed for {target}")
+    
     except Exception as e:
-        print(f"❌ Scan failed for {target}: {e}")
-        sys.exit(1)
+        print(f"❌ Error scanning {target}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def main():

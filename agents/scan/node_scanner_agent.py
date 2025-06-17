@@ -13,7 +13,46 @@ from core.database import get_db_session, ValidatorAddress, ValidatorScan
 from core.config import Config
 from core.web_probe_runner import run_web_probes
 from scanning.scanner import Scanner
-from scanning.sui_scanner import SuiSpecificScanner
+
+
+class ProtocolScannerRegistry:
+    """Registry for protocol-specific scanners."""
+    
+    def __init__(self):
+        self._scanners = {}
+        self._register_scanners()
+    
+    def _register_scanners(self):
+        """Register available protocol-specific scanners."""
+        try:
+            from scanning.sui_scanner import SuiSpecificScanner
+            self._scanners['sui'] = SuiSpecificScanner
+        except ImportError:
+            pass
+        
+        try:
+            from scanning.filecoin_scanner import FilecoinSpecificScanner
+            self._scanners['filecoin'] = FilecoinSpecificScanner
+        except ImportError:
+            pass
+        
+        # Add more protocol scanners as needed
+        # try:
+        #     from scanning.ethereum_scanner import EthereumSpecificScanner
+        #     self._scanners['ethereum'] = EthereumSpecificScanner
+        # except ImportError:
+        #     pass
+    
+    def get_scanner(self, protocol: str):
+        """Get scanner for a specific protocol."""
+        scanner_class = self._scanners.get(protocol.lower())
+        if scanner_class:
+            return scanner_class()
+        return None
+    
+    def get_supported_protocols(self) -> List[str]:
+        """Get list of supported protocols."""
+        return list(self._scanners.keys())
 
 
 class NodeScannerAgent(ScanAgent):
@@ -40,7 +79,9 @@ class NodeScannerAgent(ScanAgent):
         
         # Initialize scanners
         self.generic_scanner = Scanner()
-        self.sui_scanner = SuiSpecificScanner()
+        self.protocol_registry = ProtocolScannerRegistry()
+        
+        self.logger.info(f"🔧 Initialized with support for protocols: {self.protocol_registry.get_supported_protocols()}")
     
     def scan_nodes(self, nodes: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
@@ -209,11 +250,22 @@ class NodeScannerAgent(ScanAgent):
             
             # Perform protocol-specific scans based on source
             protocol_result = None
-            if node['source'].startswith('sui'):
-                self.logger.info(f"🔍 Running Sui-specific scan for {address} (source: {node['source']})")
-                protocol_result = self.sui_scanner.scan(ip_address)
-                self.logger.debug(f"🔍 Sui scan result for {address}: {protocol_result}")
-            # Add more protocol-specific scanners here as needed
+            node_source = node['source'].lower()
+            
+            # Extract protocol name from source (e.g., 'sui_recon_agent' -> 'sui')
+            protocol = node_source.split('_')[0] if '_' in node_source else node_source
+            
+            protocol_scanner = self.protocol_registry.get_scanner(protocol)
+            if protocol_scanner:
+                self.logger.info(f"🔍 Running {protocol.upper()}-specific scan for {address} (source: {node['source']})")
+                try:
+                    protocol_result = protocol_scanner.scan(ip_address)
+                    self.logger.debug(f"🔍 {protocol.upper()} scan result for {address}: {protocol_result}")
+                except Exception as e:
+                    self.logger.warning(f"Protocol-specific scan failed for {address}: {e}")
+                    protocol_result = {"error": str(e)}
+            else:
+                self.logger.debug(f"ℹ️  No protocol-specific scanner available for {protocol} (source: {node['source']})")
             
             # Run web probes on detected HTTP/HTTPS services (same logic as WhatWeb)
             web_probe_results = {}
