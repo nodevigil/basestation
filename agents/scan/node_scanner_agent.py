@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from agents.base import ScanAgent
 from core.database import get_db_session, ValidatorAddress, ValidatorScan
 from core.config import Config
+from core.web_probe_runner import run_web_probes
 from scanning.scanner import Scanner
 from scanning.sui_scanner import SuiSpecificScanner
 
@@ -70,7 +71,7 @@ class NodeScannerAgent(ScanAgent):
         
         self.logger.info(f"✅ Completed scanning {len(scan_results)} nodes")
         return scan_results
-    
+   
     def _get_nodes_needing_scan(self) -> List[Dict[str, Any]]:
         """
         Get nodes that need scanning from the database.
@@ -214,6 +215,22 @@ class NodeScannerAgent(ScanAgent):
                 self.logger.debug(f"🔍 Sui scan result for {address}: {protocol_result}")
             # Add more protocol-specific scanners here as needed
             
+            # Run web probes on detected HTTP/HTTPS services (same logic as WhatWeb)
+            web_probe_results = {}
+            if generic_result and 'nmap' in generic_result:
+                from scanning.scanner import Scanner
+                web_ports = Scanner.get_web_ports_and_schemes(generic_result['nmap'])
+                for port, scheme in web_ports:
+                    self.logger.info(f"🌐 Running web probes on {scheme}://{address}:{port}")
+                    try:
+                        probe_result = run_web_probes(address, port)
+                        if probe_result:
+                            web_probe_results[f"{address}:{port}"] = probe_result
+                            self.logger.debug(f"🌐 Web probe results for {address}:{port}: {probe_result}")
+                    except Exception as e:
+                        self.logger.warning(f"Web probe failed for {address}:{port}: {e}")
+                        web_probe_results[f"{address}:{port}"] = {"error": str(e)}
+            
             # Combine results
             scan_result = {
                 'node_id': node['id'],
@@ -222,6 +239,7 @@ class NodeScannerAgent(ScanAgent):
                 'scan_date': datetime.utcnow().isoformat(),
                 'generic_scan': generic_result,
                 'protocol_scan': protocol_result,
+                'web_probes': web_probe_results if web_probe_results else None,
                 'source': node['source'],
                 'failed': False
             }
