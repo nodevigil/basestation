@@ -5,6 +5,7 @@ New main.py - DePIN Infrastructure Scanner with Agentic Architecture
 import argparse
 import sys
 from typing import Optional, List
+from datetime import datetime
 
 from core.config import Config
 from core.logging import setup_logging
@@ -87,6 +88,13 @@ def run_single_stage(
     
     print(f"🎯 Running single stage: {stage}")
     
+    # Show config info for scan stage
+    if stage == 'scan':
+        scan_mode = "sequential" if config.scanning.max_concurrent_scans <= 1 else f"concurrent (max={config.scanning.max_concurrent_scans})"
+        print(f"🔧 Scan mode: {scan_mode}")
+        print(f"⏱️  Sleep between scans: {config.scanning.sleep_between_scans}s")
+        print(f"⏰ Scan timeout: {config.scanning.timeout_seconds}s")
+    
     try:
         if stage == 'recon':
             results = orchestrator.run_single_stage(stage, agent_names=recon_agents)
@@ -153,6 +161,7 @@ Examples:
   python main.py --stage scan                 # Run only scanning
   python main.py --stage process              # Run only processing
   python main.py --stage publish              # Run only publishing
+  python main.py --scan-target 139.84.148.36 # Scan specific IP/hostname
   python main.py --list-agents                # List available agents
   python main.py --recon-agents SuiReconAgent # Run specific recon agent
         """
@@ -167,6 +176,11 @@ Examples:
     parser.add_argument(
         '--agent',
         help='Specific agent name to use for the stage'
+    )
+    
+    parser.add_argument(
+        '--scan-target',
+        help='Scan a specific IP address or hostname (bypasses database)'
     )
     
     parser.add_argument(
@@ -208,20 +222,32 @@ def load_config(args) -> Config:
     """
     config = Config()
     
-    # Override log level if specified
+    # Try to load config.json automatically if it exists
+    config_file = args.config if args.config else 'config.json'
+    
+    try:
+        import json
+        import os
+        
+        if os.path.exists(config_file):
+            print(f"📄 Loading configuration from: {config_file}")
+            with open(config_file, 'r') as f:
+                config_data = json.load(f)
+                config = Config(config_overrides=config_data)
+        elif args.config:
+            # Only error if user explicitly specified a config file that doesn't exist
+            print(f"❌ Config file not found: {args.config}")
+            sys.exit(1)
+        else:
+            print("📄 No config.json found, using defaults and environment variables")
+            
+    except Exception as e:
+        print(f"❌ Failed to load config file {config_file}: {e}")
+        sys.exit(1)
+    
+    # Override log level if specified on command line (takes precedence)
     if args.log_level:
         config.logging.level = args.log_level
-    
-    # Load from config file if specified
-    if args.config:
-        try:
-            import json
-            with open(args.config, 'r') as f:
-                config_data = json.load(f)
-                config = Config.from_dict(config_data)
-        except Exception as e:
-            print(f"❌ Failed to load config file {args.config}: {e}")
-            sys.exit(1)
     
     # Validate configuration
     if not config.validate():
@@ -229,6 +255,83 @@ def load_config(args) -> Config:
         sys.exit(1)
     
     return config
+
+
+def scan_target(config: Config, target: str) -> None:
+    """
+    Scan a specific target (IP or hostname) directly.
+    
+    Args:
+        config: Configuration instance
+        target: IP address or hostname to scan
+    """
+    from scanning.scanner import Scanner
+    from scanning.sui_scanner import SuiSpecificScanner
+    import socket
+    import json
+    
+    print(f"🎯 Direct target scan: {target}")
+    
+    try:
+        # Resolve hostname to IP if needed
+        try:
+            ip_address = socket.gethostbyname(target)
+            print(f"🌍 Resolved {target} to IP: {ip_address}")
+        except socket.gaierror:
+            print(f"❌ DNS resolution failed for {target}")
+            return
+        
+        # Initialize scanners
+        generic_scanner = Scanner()
+        sui_scanner = SuiSpecificScanner()
+        
+        print(f"🛡️  Running generic security scan...")
+        generic_result = generic_scanner.scan(ip_address)
+        
+        print(f"🔍 Running Sui-specific scan...")
+        sui_result = sui_scanner.scan(ip_address)
+        
+        # Combine results
+        scan_result = {
+            'target': target,
+            'ip_address': ip_address,
+            'generic_scan': generic_result,
+            'sui_scan': sui_result,
+            'scan_timestamp': datetime.utcnow().isoformat()
+        }
+        
+        print(f"\n✅ Scan completed for {target}")
+        print(f"📊 Results Summary:")
+        
+        # Generic scan summary
+        if generic_result and 'open_ports' in generic_result:
+            ports = generic_result['open_ports']
+            print(f"   🔓 Open ports: {ports}")
+        
+        # Sui scan summary
+        if sui_result:
+            if sui_result.get('metrics_exposed'):
+                metrics_url = sui_result.get('metrics_url', 'Unknown')
+                sui_count = sui_result.get('sui_metrics_count', 0)
+                print(f"   📊 Sui metrics: ✅ EXPOSED at {metrics_url} ({sui_count} sui metrics)")
+            else:
+                print(f"   📊 Sui metrics: ❌ Not exposed")
+            
+            if sui_result.get('rpc_exposed'):
+                rpc_url = sui_result.get('rpc_url', 'Unknown')
+                print(f"   🔗 Sui RPC: ✅ EXPOSED at {rpc_url}")
+            else:
+                print(f"   🔗 Sui RPC: ❌ Not exposed")
+        
+        # Optionally save to file
+        output_file = f"scan_result_{target.replace('.', '_').replace(':', '_')}.json"
+        with open(output_file, 'w') as f:
+            json.dump(scan_result, f, indent=2)
+        print(f"💾 Full results saved to: {output_file}")
+        
+    except Exception as e:
+        print(f"❌ Scan failed for {target}: {e}")
+        sys.exit(1)
 
 
 def main():
@@ -248,7 +351,10 @@ def main():
         setup_environment(config)
         
         # Run pipeline based on arguments
-        if args.stage:
+        if args.scan_target:
+            # Scan specific target
+            scan_target(config, args.scan_target)
+        elif args.stage:
             # Run single stage
             run_single_stage(
                 config,

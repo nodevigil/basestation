@@ -209,7 +209,9 @@ class NodeScannerAgent(ScanAgent):
             # Perform protocol-specific scans based on source
             protocol_result = None
             if node['source'].startswith('sui'):
+                self.logger.info(f"🔍 Running Sui-specific scan for {address} (source: {node['source']})")
                 protocol_result = self.sui_scanner.scan(ip_address)
+                self.logger.debug(f"🔍 Sui scan result for {address}: {protocol_result}")
             # Add more protocol-specific scanners here as needed
             
             # Combine results

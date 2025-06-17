@@ -17,6 +17,7 @@ class PipelineMode(Enum):
     SEQUENTIAL = "sequential"  # Run all stages in sequence
     STAGE_ONLY = "stage_only"  # Run only specified stage
     PARALLEL_RECON = "parallel_recon"  # Run multiple recon agents in parallel
+    SEQUENTIAL_SCAN = "sequential_scan"  # Force sequential scanning (no threading)
 
 
 class PipelineOrchestrator:
@@ -45,6 +46,9 @@ class PipelineOrchestrator:
         self.end_time: Optional[datetime] = None
         self.stage_results: Dict[str, Any] = {}
         
+        # Scan execution mode
+        self._original_max_concurrent_scans = self.config.scanning.max_concurrent_scans
+        
     def _generate_execution_id(self) -> str:
         """Generate unique execution ID."""
         return f"pipeline_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
@@ -69,6 +73,7 @@ class PipelineOrchestrator:
             Pipeline execution results
         """
         self.logger.info(f"🚀 Starting full pipeline execution: {self.execution_id}")
+        self.logger.info(f"🔧 Scan mode: {self.get_scan_mode()}")
         self.start_time = datetime.utcnow()
         
         try:
@@ -113,6 +118,43 @@ class PipelineOrchestrator:
                 'success': False,
                 'timestamp': self.end_time.isoformat() if self.end_time else None
             }
+    
+    def run_full_pipeline_sequential(
+        self,
+        recon_agents: Optional[List[str]] = None,
+        scan_agent: str = "NodeScannerAgent",
+        process_agent: str = "ProcessorAgent",
+        publish_agent: str = "PublisherAgent"
+    ) -> Dict[str, Any]:
+        """
+        Run the complete pipeline with sequential scanning (no threading).
+        
+        This is a convenience method that temporarily disables concurrent scanning
+        for this pipeline execution.
+        
+        Args:
+            recon_agents: List of reconnaissance agent names to run
+            scan_agent: Name of scan agent to use
+            process_agent: Name of process agent to use
+            publish_agent: Name of publish agent to use
+            
+        Returns:
+            Pipeline execution results
+        """
+        # Temporarily enable sequential mode
+        original_mode = self.config.scanning.max_concurrent_scans
+        self.enable_sequential_scanning()
+        
+        try:
+            return self.run_full_pipeline(
+                recon_agents=recon_agents,
+                scan_agent=scan_agent,
+                process_agent=process_agent,
+                publish_agent=publish_agent
+            )
+        finally:
+            # Restore original mode
+            self.config.scanning.max_concurrent_scans = original_mode
     
     def run_recon_stage(self, agent_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
@@ -311,6 +353,49 @@ class PipelineOrchestrator:
             Dictionary of agent categories and their available agents
         """
         return self.agent_registry.list_all_agents()
+    
+    def enable_sequential_scanning(self) -> None:
+        """
+        Enable sequential scanning mode (disable threading).
+        
+        This forces scans to run one at a time instead of concurrently.
+        Useful for debugging, rate limiting, or when resources are constrained.
+        """
+        self.logger.info("🔄 Enabling sequential scanning mode (threading disabled)")
+        self.config.scanning.max_concurrent_scans = 1
+        
+    def enable_concurrent_scanning(self, max_workers: Optional[int] = None) -> None:
+        """
+        Enable concurrent scanning mode (enable threading).
+        
+        Args:
+            max_workers: Maximum number of concurrent scans. If None, uses original config value.
+        """
+        if max_workers is None:
+            max_workers = self._original_max_concurrent_scans
+            
+        self.logger.info(f"⚡ Enabling concurrent scanning mode (max_workers={max_workers})")
+        self.config.scanning.max_concurrent_scans = max_workers
+        
+    def get_scan_mode(self) -> str:
+        """
+        Get current scanning mode.
+        
+        Returns:
+            'sequential' or 'concurrent'
+        """
+        return "sequential" if self.config.scanning.max_concurrent_scans <= 1 else "concurrent"
+        
+    def set_scan_concurrency(self, max_concurrent: int) -> None:
+        """
+        Set the maximum number of concurrent scans.
+        
+        Args:
+            max_concurrent: Maximum concurrent scans (1 = sequential, >1 = concurrent)
+        """
+        mode = "sequential" if max_concurrent <= 1 else f"concurrent (max={max_concurrent})"
+        self.logger.info(f"🔧 Setting scan concurrency: {mode}")
+        self.config.scanning.max_concurrent_scans = max_concurrent
 
 
 def create_orchestrator(config: Optional[Config] = None) -> PipelineOrchestrator:
