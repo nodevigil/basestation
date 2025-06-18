@@ -77,7 +77,8 @@ def run_single_stage(
     agent_name: Optional[str] = None,
     recon_agents: Optional[List[str]] = None,
     protocol_filter: Optional[str] = None,
-    debug: bool = False
+    debug: bool = False,
+    force_rescore: bool = False
 ) -> None:
     """
     Run a single pipeline stage.
@@ -124,7 +125,7 @@ def run_single_stage(
             
         elif stage == 'score':
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_scoring_stage(agent_name or 'ScoringAgent', force_rescore=args.force_rescore)
+            results = orchestrator.run_scoring_stage(agent_name or 'ScoringAgent', force_rescore=force_rescore)
             print(f"✅ Scoring completed: {len(results)} results scored")
             
         elif stage == 'publish':
@@ -132,6 +133,10 @@ def run_single_stage(
             success = orchestrator.run_single_stage(stage, agent_name)
             status = "Success" if success else "Failed"
             print(f"✅ Publishing completed: {status}")
+            
+        elif stage == 'report':
+            # Report stage needs access to args, so we'll handle it differently
+            print("✅ Report stage will be handled in main function")
             
         else:
             print(f"❌ Unknown stage: {stage}")
@@ -242,6 +247,10 @@ Examples:
   pgdn --stage process              # Run only processing
   pgdn --stage score                # Run only scoring
   pgdn --stage publish              # Run only publishing
+  pgdn --stage report               # Generate AI security analysis report
+  pgdn --stage report --report-input scan_result.json # Generate report from specific scan
+  pgdn --stage report --report-email # Generate with email notification
+  pgdn --stage report --auto-save-report # Auto-save with timestamp
   pgdn --scan-target 139.84.148.36 # Scan specific IP/hostname
   pgdn --scan-target 139.84.148.36 --debug # Scan target with debug
   pgdn --list-agents                # List available agents
@@ -256,7 +265,7 @@ Examples:
     
     parser.add_argument(
         '--stage',
-        choices=['recon', 'scan', 'process', 'score', 'publish'],
+        choices=['recon', 'scan', 'process', 'score', 'publish', 'report'],
         help='Run only the specified stage'
     )
     
@@ -340,6 +349,41 @@ Examples:
         '--force-rescore',
         action='store_true',
         help='Force re-scoring of results that already have scores (use with --stage score)'
+    )
+    
+    # Report stage arguments
+    parser.add_argument(
+        '--report-input',
+        help='Input file for report generation (JSON scan results)'
+    )
+    
+    parser.add_argument(
+        '--report-output',
+        help='Output file for report results (JSON format)'
+    )
+    
+    parser.add_argument(
+        '--report-format',
+        choices=['json', 'summary'],
+        default='json',
+        help='Report output format (default: json)'
+    )
+    
+    parser.add_argument(
+        '--report-email',
+        action='store_true',
+        help='Generate email notification in report'
+    )
+    
+    parser.add_argument(
+        '--recipient-email',
+        help='Recipient email address for notification'
+    )
+    
+    parser.add_argument(
+        '--auto-save-report',
+        action='store_true',
+        help='Auto-save report with timestamp filename'
     )
     
     return parser.parse_args()
@@ -494,6 +538,100 @@ def scan_target(config: Config, target: str, debug: bool = False) -> None:
         traceback.print_exc()
 
 
+def run_report_stage(config: Config, args) -> None:
+    """
+    Run the report generation stage using the report agent.
+    
+    Args:
+        config: Configuration instance
+        args: Parsed command line arguments containing report options
+    """
+    print("📊 Running report generation stage")
+    
+    try:
+        from agents.report.report_agent import ReportAgent
+        import glob
+        import json
+        import os
+        from datetime import datetime
+        
+        # Determine input file - either explicit or find latest scan result
+        input_file = args.report_input
+        if not input_file:
+            # Look for recent scan results in current directory
+            scan_files = glob.glob("scan_result_*.json")
+            if scan_files:
+                # Get the most recent file
+                input_file = max(scan_files, key=os.path.getctime)
+                print(f"📄 Using latest scan result: {input_file}")
+            else:
+                print("❌ No scan result files found. Use --report-input to specify a file")
+                sys.exit(1)
+        
+        if not os.path.exists(input_file):
+            print(f"❌ Input file not found: {input_file}")
+            sys.exit(1)
+        
+        print(f"🔍 Analyzing scan results from: {input_file}")
+        
+        # Initialize the report agent
+        report_agent = ReportAgent(config)
+        
+        # Load scan data
+        with open(input_file, 'r') as f:
+            scan_data = json.load(f)
+        
+        print("🤖 Generating security analysis report...")
+        
+        # Generate report
+        report_data = report_agent.process_item(scan_data)
+        
+        if report_data.get('error'):
+            print(f"❌ Failed to generate report: {report_data.get('message', 'Unknown error')}")
+            sys.exit(1)
+        
+        # Determine output file
+        output_file = args.report_output
+        if args.auto_save_report or not output_file:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            target_ip = report_data.get('target_info', {}).get('ip_address', 'unknown').replace('.', '_')
+            output_file = f"security_report_{target_ip}_{timestamp}.json"
+        
+        # Save report
+        if output_file:
+            saved_file = report_agent.save_report(report_data, output_file)
+            print(f"💾 Report saved to: {saved_file}")
+        
+        # Handle different output formats
+        if args.report_format == 'summary':
+            print(f"\n� Security Report Summary:")
+            summary = report_data.get('executive_summary', {})
+            print(f"   Overall Risk Level: {summary.get('overall_risk_level', 'Unknown')}")
+            print(f"   Total Vulnerabilities: {summary.get('total_vulnerabilities', 0)}")
+            print(f"   Critical Issues: {summary.get('critical_vulnerabilities', 0)}")
+            print(f"   Open Ports: {summary.get('open_ports_count', 0)}")
+            
+            findings = report_data.get('security_findings', [])
+            critical_findings = [f for f in findings if f.get('severity') == 'CRITICAL']
+            if critical_findings:
+                print(f"   Critical Findings:")
+                for finding in critical_findings[:3]:  # Show top 3
+                    print(f"     • {finding.get('title', 'Unknown')}")
+        
+        # Handle email generation if requested
+        if args.report_email:
+            print("📧 Email notification generation not yet implemented")
+            print("   This feature will be available in the external report library")
+        
+        print("✅ Report generation completed successfully!")
+        
+    except Exception as e:
+        print(f"❌ Report generation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     try:
@@ -542,6 +680,9 @@ def main():
                 orchestrator = create_orchestrator(config)
                 results = orchestrator.run_scoring_stage(args.agent or 'ScoringAgent', force_rescore=args.force_rescore)
                 print(f"✅ Scoring completed: {len(results)} results scored")
+            elif args.stage == 'report':
+                # Report stage needs special handling with args
+                run_report_stage(config, args)
             else:
                 # Run single stage
                 run_single_stage(
@@ -550,7 +691,8 @@ def main():
                     args.agent,
                     args.recon_agents,
                     args.protocol,
-                    args.debug
+                    args.debug,
+                    args.force_rescore
                 )
         else:
             # Run full pipeline
