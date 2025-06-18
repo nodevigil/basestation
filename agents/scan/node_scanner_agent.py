@@ -4,6 +4,8 @@ Node scanner agent for performing comprehensive security scans.
 
 import socket
 import time
+import hashlib
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -89,6 +91,27 @@ class NodeScannerAgent(ScanAgent):
         filter_msg = f" (filtering for {protocol_filter})" if protocol_filter else ""
         debug_msg = " [DEBUG MODE]" if debug else ""
         self.logger.info(f"🔧 Initialized with support for protocols: {self.protocol_registry.get_supported_protocols()}{filter_msg}{debug_msg}")
+    
+    def _compute_scan_hash(self, result: Dict[str, Any]) -> str:
+        """
+        Compute content hash for scan result.
+        
+        Args:
+            result: Scan result
+            
+        Returns:
+            SHA-256 hash of scan content
+        """
+        # Extract relevant scan data for hashing (same logic as ProcessorAgent)
+        hash_data = {
+            'ip_address': result.get('ip_address'),
+            'generic_scan': result.get('generic_scan', {}),
+            'protocol_scan': result.get('protocol_scan', {})
+        }
+        
+        # Create hash
+        content_json = json.dumps(hash_data, sort_keys=True)
+        return hashlib.sha256(content_json.encode()).hexdigest()
     
     def scan_nodes(self, nodes: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
@@ -365,13 +388,19 @@ class NodeScannerAgent(ScanAgent):
             result: Scan result to save
         """
         try:
+            # Compute scan hash immediately during scanning
+            scan_hash = self._compute_scan_hash(result) if not result.get('failed', False) else None
+            
+            if scan_hash:
+                self.logger.debug(f"🔒 Computed scan_hash during scanning: {scan_hash[:16]}...")
+            
             with get_db_session() as session:
                 scan_record = ValidatorScan(
                     validator_address_id=result['node_id'],
                     scan_date=datetime.utcnow(),
                     ip_address=result.get('ip_address'),
                     score=None,  # Will be computed by ProcessAgent
-                    scan_hash=None,  # Will be computed by ProcessAgent
+                    scan_hash=scan_hash,  # Computed immediately during scanning
                     scan_results=result,
                     failed=result.get('failed', False),
                     version=SCANNER_VERSION
@@ -380,7 +409,7 @@ class NodeScannerAgent(ScanAgent):
                 session.add(scan_record)
                 session.commit()
                 
-                self.logger.debug(f"✅ Saved scan result for {result['address']}")
+                self.logger.debug(f"✅ Saved scan result for {result['address']} with scan_hash")
                 
         except Exception as e:
             self.logger.error(f"Failed to save scan result for {result.get('address', 'unknown')}: {e}")

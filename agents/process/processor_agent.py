@@ -95,6 +95,7 @@ class ProcessorAgent(ProcessAgent):
                             'scan_date': scan.scan_date.isoformat(),
                             'ip_address': scan.ip_address,
                             'scan_version': scan.version,
+                            'scan_hash': scan.scan_hash,  # Include existing scan_hash
                             'raw_results': scan.scan_results
                         })
                 
@@ -118,8 +119,14 @@ class ProcessorAgent(ProcessAgent):
         deduplicated = []
         
         for result in scan_results:
-            # Create content hash
-            content_hash = self._compute_content_hash(result)
+            # Use existing scan_hash if available, otherwise compute it
+            if 'scan_hash' in result and result['scan_hash']:
+                content_hash = result['scan_hash']
+                self.logger.debug(f"🔒 Using existing scan_hash: {content_hash[:16]}...")
+            else:
+                # Fallback to computing hash if not available (for backward compatibility)
+                content_hash = self._compute_content_hash(result)
+                self.logger.debug(f"🔒 Computed scan_hash (fallback): {content_hash[:16]}...")
             
             if content_hash not in seen_hashes:
                 seen_hashes.add(content_hash)
@@ -315,7 +322,7 @@ class ProcessorAgent(ProcessAgent):
                     scan = session.query(ValidatorScan).filter_by(id=scan_id).first()
                     if scan:
                         scan.score = result.get('trust_score')
-                        scan.scan_hash = result.get('content_hash')
+                        # scan_hash is already set during scanning, no need to update
                         scan.scan_results = result  # Update with enriched data
                 
                 session.commit()
