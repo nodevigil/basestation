@@ -11,7 +11,7 @@ from collections import defaultdict
 from agents.base import ProcessAgent
 from core.database import get_db_session, ValidatorScan
 from core.config import Config
-from analysis.trust import TrustScorer
+from agents.score.scoring_agent import ScoringAgent
 
 
 class ProcessorAgent(ProcessAgent):
@@ -30,7 +30,7 @@ class ProcessorAgent(ProcessAgent):
             config: Configuration instance
         """
         super().__init__(config, "ProcessorAgent")
-        self.trust_scorer = TrustScorer()
+        self.scoring_agent = ScoringAgent(config)
     
     def process_results(self, scan_results: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
@@ -55,8 +55,8 @@ class ProcessorAgent(ProcessAgent):
         deduplicated_results = self._deduplicate_results(scan_results)
         self.logger.info(f"📋 After deduplication: {len(deduplicated_results)} unique results")
         
-        # Step 2: Compute trust scores
-        scored_results = self._compute_trust_scores(deduplicated_results)
+        # Step 2: Compute trust scores using scoring agent
+        scored_results = self.scoring_agent.process_results(deduplicated_results)
         
         # Step 3: Enrich with metadata
         enriched_results = self._enrich_results(scored_results)
@@ -156,47 +156,6 @@ class ProcessorAgent(ProcessAgent):
         content_json = json.dumps(hash_data, sort_keys=True)
         return hashlib.sha256(content_json.encode()).hexdigest()
     
-    def _compute_trust_scores(self, scan_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Compute trust scores for scan results.
-        
-        Args:
-            scan_results: List of scan results
-            
-        Returns:
-            List of results with trust scores
-        """
-        scored_results = []
-        
-        for result in scan_results:
-            try:
-                # Get generic scan data
-                raw_results = result.get('raw_results', result)
-                generic_scan = raw_results.get('generic_scan', {})
-                
-                if not generic_scan:
-                    self.logger.warning(f"No generic scan data for {result.get('ip_address', 'unknown')}")
-                    continue
-                
-                # Compute trust score
-                trust_result = self.trust_scorer.score(generic_scan)
-                
-                # Merge trust score with result
-                result.update({
-                    'trust_score': trust_result['score'],
-                    'trust_flags': trust_result['flags'],
-                    'trust_summary': trust_result['summary'],
-                    'docker_exposure': trust_result.get('docker_exposure', {'exposed': False})
-                })
-                
-                scored_results.append(result)
-                
-            except Exception as e:
-                self.logger.error(f"Failed to compute trust score for {result.get('ip_address', 'unknown')}: {e}")
-                continue
-        
-        return scored_results
-    
     def _enrich_results(self, scored_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Enrich results with additional metadata and analysis.
@@ -285,29 +244,6 @@ class ProcessorAgent(ProcessAgent):
                 break
         
         return analysis
-    
-    def _classify_risk_level(self, result: Dict[str, Any]) -> str:
-        """
-        Classify risk level based on trust score and security analysis.
-        
-        Args:
-            result: Scan result with trust score
-            
-        Returns:
-            Risk level classification
-        """
-        trust_score = result.get('trust_score', 100)
-        security_analysis = result.get('security_analysis', {})
-        
-        # Risk classification logic
-        if trust_score >= 90:
-            return 'LOW'
-        elif trust_score >= 70:
-            return 'MEDIUM'
-        elif trust_score >= 50:
-            return 'HIGH'
-        else:
-            return 'CRITICAL'
     
     def _check_compliance(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """

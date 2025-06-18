@@ -290,6 +290,34 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running publish agent {agent_name}: {e}")
             return False
     
+    def run_scoring_stage(self, agent_name: str = "ScoringAgent", force_rescore: bool = False) -> List[Dict[str, Any]]:
+        """
+        Run the scoring stage independently.
+        
+        Args:
+            agent_name: Name of scoring agent to use
+            force_rescore: Whether to re-score results that already have scores
+            
+        Returns:
+            Scored results
+        """
+        self.logger.info(f"📊 Running scoring stage: {agent_name} (force_rescore={force_rescore})")
+        try:
+            agent = self.agent_registry.create_process_agent(agent_name, self.config)
+            
+            if not agent:
+                raise Exception(f"Failed to create scoring agent: {agent_name}")
+            
+            # Run scoring (agent will load unscored results from database)
+            results = agent.execute(force_rescore=force_rescore)
+            
+            self.logger.info(f"📊 Scoring stage completed: {len(results)} results scored")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error running scoring agent {agent_name}: {e}")
+            return []
+    
     def run_single_stage(
         self,
         stage: str,
@@ -300,7 +328,7 @@ class PipelineOrchestrator:
         Run a single pipeline stage.
         
         Args:
-            stage: Stage name ('recon', 'scan', 'process', 'publish')
+            stage: Stage name ('recon', 'scan', 'process', 'score', 'publish')
             agent_name: Specific agent name to use
             **stage_args: Additional arguments for the stage
             
@@ -318,6 +346,9 @@ class PipelineOrchestrator:
         
         elif stage == 'process':
             return self.run_process_stage(agent_name or "ProcessorAgent")
+        
+        elif stage == 'score':
+            return self.run_scoring_stage(agent_name or "ScoringAgent")
         
         elif stage == 'publish':
             processed_results = stage_args.get('processed_results')

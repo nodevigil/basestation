@@ -122,6 +122,11 @@ def run_single_stage(
             results = orchestrator.run_single_stage(stage, agent_name)
             print(f"✅ Processing completed: {len(results)} results processed")
             
+        elif stage == 'score':
+            orchestrator = create_orchestrator(config)
+            results = orchestrator.run_scoring_stage(agent_name or 'ScoringAgent', force_rescore=args.force_rescore)
+            print(f"✅ Scoring completed: {len(results)} results scored")
+            
         elif stage == 'publish':
             orchestrator = create_orchestrator(config)
             success = orchestrator.run_single_stage(stage, agent_name)
@@ -235,6 +240,7 @@ Examples:
   python main.py --stage scan --protocol filecoin --debug # Scan with debug logging
   python main.py --stage scan --protocol sui  # Scan only Sui nodes
   python main.py --stage process              # Run only processing
+  python main.py --stage score                # Run only scoring
   python main.py --stage publish              # Run only publishing
   python main.py --scan-target 139.84.148.36 # Scan specific IP/hostname
   python main.py --scan-target 139.84.148.36 --debug # Scan target with debug
@@ -250,7 +256,7 @@ Examples:
     
     parser.add_argument(
         '--stage',
-        choices=['recon', 'scan', 'process', 'publish'],
+        choices=['recon', 'scan', 'process', 'score', 'publish'],
         help='Run only the specified stage'
     )
     
@@ -268,6 +274,12 @@ Examples:
         '--recon-agents',
         nargs='+',
         help='List of reconnaissance agents to run'
+    )
+    
+    parser.add_argument(
+        '--protocol',
+        choices=['filecoin', 'sui'],
+        help='Protocol filter for scanning (e.g., filecoin, sui)'
     )
     
     parser.add_argument(
@@ -324,6 +336,12 @@ Examples:
         help='Enable debug logging for scanners (creates detailed log files)'
     )
     
+    parser.add_argument(
+        '--force-rescore',
+        action='store_true',
+        help='Force re-scoring of results that already have scores (use with --stage score)'
+    )
+    
     return parser.parse_args()
 
 
@@ -341,13 +359,16 @@ def load_config(args) -> Config:
     
     config = Config()
     
-    # Determine config file: explicit > docker > default
+    # Determine config file: explicit > environment flag > default
     if args.config:
         config_file = args.config
-    elif os.getenv('DATABASE_URL') and os.path.exists('config.docker.json'):
-        # Auto-detect Docker environment
-        config_file = 'config.docker.json'
-        print("🐳 Docker environment detected, using docker configuration")
+    elif os.getenv('USE_DOCKER_CONFIG', '').lower() in ('true', '1', 'yes'):
+        # Only use Docker config if explicitly requested
+        config_file = 'config.docker.json' if os.path.exists('config.docker.json') else 'config.json'
+        if config_file == 'config.docker.json':
+            print("🐳 Docker configuration requested via USE_DOCKER_CONFIG")
+        else:
+            print("🐳 Docker config requested but config.docker.json not found, using default config")
     else:
         config_file = 'config.json'
     
@@ -517,15 +538,20 @@ def main():
             # Scan specific target
             scan_target(config, args.scan_target, args.debug)
         elif args.stage:
-            # Run single stage
-            run_single_stage(
-                config,
-                args.stage,
-                args.agent,
-                args.recon_agents,
-                args.protocol,
-                args.debug
-            )
+            if args.stage == 'score':
+                orchestrator = create_orchestrator(config)
+                results = orchestrator.run_scoring_stage(args.agent or 'ScoringAgent', force_rescore=args.force_rescore)
+                print(f"✅ Scoring completed: {len(results)} results scored")
+            else:
+                # Run single stage
+                run_single_stage(
+                    config,
+                    args.stage,
+                    args.agent,
+                    args.recon_agents,
+                    args.protocol,
+                    args.debug
+                )
         else:
             # Run full pipeline
             run_full_pipeline(config, args.recon_agents)

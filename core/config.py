@@ -10,12 +10,28 @@ from dataclasses import dataclass, field
 @dataclass
 class DatabaseConfig:
     """Database configuration settings."""
-    url: str = field(default_factory=lambda: os.getenv('DATABASE_URL', 'postgresql://simon@localhost/depin'))
+    url: str = field(default_factory=lambda: _get_default_database_url())
     echo_sql: bool = field(default_factory=lambda: os.getenv('DB_ECHO_SQL', 'false').lower() == 'true')
     pool_size: int = field(default_factory=lambda: int(os.getenv('DB_POOL_SIZE', '10')))
     max_overflow: int = field(default_factory=lambda: int(os.getenv('DB_MAX_OVERFLOW', '20')))
     pool_timeout: int = field(default_factory=lambda: int(os.getenv('DB_POOL_TIMEOUT', '30')))
     pool_recycle: int = field(default_factory=lambda: int(os.getenv('DB_POOL_RECYCLE', '3600')))
+
+
+def _get_default_database_url() -> str:
+    """
+    Get the default database URL based on environment.
+    
+    Returns:
+        Database URL string
+    """
+    # Only use DATABASE_URL if USE_DOCKER_CONFIG is explicitly set
+    if (os.getenv('USE_DOCKER_CONFIG', '').lower() in ('true', '1', 'yes') and 
+        os.getenv('DATABASE_URL')):
+        return os.getenv('DATABASE_URL')
+    
+    # Otherwise use local PostgreSQL
+    return 'postgresql://simon@localhost/depin'
 
 
 @dataclass
