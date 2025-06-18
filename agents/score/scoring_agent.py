@@ -87,7 +87,7 @@ class ScoringAgent(ProcessAgent):
         # Dynamic scorer loading with fallback
         self.trust_scorer = self._load_scorer()
     
-    def _get_scorer(self, scorer_path: str = "pgdn.scoring.default_scorer.DefaultScorer"):
+    def _get_scorer(self, scorer_path: str):
         """
         Dynamically load a scorer class from an external library.
         
@@ -124,15 +124,7 @@ class ScoringAgent(ProcessAgent):
             except Exception as e:
                 self.logger.warning(f"External scorer '{scorer_path}' not available: {e}")
         
-        # Try default external scorer path
-        try:
-            scorer = self._get_scorer()  # Uses default path
-            self.logger.info("✅ Loaded default internal scorer")
-            return scorer
-        except Exception as e:
-            self.logger.info(f"Internal scorer not found: {e}")
-        
-        # Fallback to built-in scorer
+        # When no external scorer is configured, use built-in scorer directly
         self.logger.info("📊 Using built-in DefaultTrustScorer")
         return DefaultTrustScorer()
     
