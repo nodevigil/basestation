@@ -404,6 +404,112 @@ elif score >= 50: risk = "HIGH"
 else: risk = "CRITICAL"
 ```
 
+### External Scoring Libraries
+
+The scanner supports **external scoring libraries** for advanced, proprietary scoring algorithms while maintaining full backward compatibility with the built-in scorer.
+
+#### Built-in vs External Scoring
+
+| Feature | Built-in Scorer | External Scorer |
+|---------|----------------|-----------------|
+| **Availability** | Always available | Optional, graceful fallback |
+| **Customization** | Fixed algorithm | Fully customizable |
+| **Privacy** | Open source | Private/proprietary |
+| **Advanced Features** | Basic security scoring | ML, behavioral analysis, compliance |
+| **Integration** | Zero configuration | Simple configuration |
+
+#### Quick Setup
+
+**1. Install External Scorer:**
+```bash
+# From private repository
+pip install git+https://github.com/yourorg/pgdn-scoring.git
+
+# Or local development
+pip install -e ../pgdn_scoring_lib/
+```
+
+**2. Configure in `config.json`:**
+```json
+{
+  "scoring": {
+    "scorer_path": "pgdn.scoring.default_scorer.DefaultScorer",
+    "fallback_to_builtin": true
+  }
+}
+```
+
+**3. Run with External Scorer:**
+```bash
+python main.py --stage score --config config.json
+# Output: ✅ Loaded external scorer: pgdn.scoring.default_scorer.DefaultScorer
+```
+
+#### Development Workflow
+
+```bash
+# Create external scorer library
+mkdir ../pgdn_scoring_lib
+cd ../pgdn_scoring_lib
+
+# Implement your scorer with required interface
+class YourScorer:
+    def score(self, scan_data):
+        return {
+            "score": 85,                    # Required: 0-100
+            "flags": ["issue1", "issue2"],  # Required: Security flags
+            "summary": "Custom analysis",   # Required: Human readable
+            # Optional: Your custom fields
+        }
+
+# Install in development mode
+cd ../depin
+pip install -e ../pgdn_scoring_lib/
+
+# Test immediately (no reinstall needed for changes)
+python main.py --stage score
+```
+
+#### Fallback Strategy
+
+The scanner follows a **graceful fallback hierarchy**:
+
+1. **Config-specified scorer** → `config.scoring.scorer_path`
+2. **Default external scorer** → `pgdn.scoring.default_scorer.DefaultScorer`  
+3. **Built-in scorer** → Always available, identical to original behavior
+
+This ensures **zero downtime** and **100% reliability** even if external libraries are unavailable.
+
+#### Advanced Features
+
+External scorers can implement advanced features not available in the built-in scorer:
+
+- **Machine Learning**: Behavioral analysis and anomaly detection
+- **Threat Intelligence**: Real-time threat feed integration
+- **Compliance Scoring**: SOC2, ISO27001, industry-specific standards
+- **Geolocation Risk**: IP-based geographic risk assessment
+- **Temporal Analysis**: Historical trend analysis and prediction
+
+Example enhanced scoring output:
+```json
+{
+  "score": 85,
+  "flags": ["SSH exposed", "ML: Behavioral anomaly detected"],
+  "summary": "Advanced ML Score: 85/100. ML Risk: MODERATE",
+  "pgdn_metrics": {
+    "security_grade": "B",
+    "compliance_score": 92,
+    "ml_risk_level": "MODERATE"
+  },
+  "ml_analysis": {
+    "confidence": 0.85,
+    "anomaly_score": 0.3
+  }
+}
+```
+
+> 📚 **Documentation**: See `docs/EXTERNAL_SCORER_GUIDE.md` for complete implementation guide
+
 ## 📈 Monitoring and Observability
 
 ### Execution Tracking
@@ -956,7 +1062,36 @@ python main.py --log-level INFO
 - Use configuration system for all settings
 - Write modular, testable code
 
-## 📄 License
+## � Documentation
+
+Comprehensive documentation is available in the `docs/` folder:
+
+### Getting Started
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get up and running in minutes
+- **[Docker Setup](docs/DOCKER_README.md)** - Containerized development environment
+- **[Database Setup](docs/DATABASE_CONNECTION_STANDARDIZATION.md)** - Database configuration guide
+
+### Advanced Features  
+- **[External Scorer Integration](docs/EXTERNAL_SCORER_GUIDE.md)** - Complete guide to custom scoring libraries
+- **[Scoring Agent Refactoring](docs/SCORING_REFACTORING_COMPLETE.md)** - Technical implementation details
+- **[CVE Integration](docs/CVE_UPDATER_README.md)** - Vulnerability database integration
+
+### Development
+- **Tests**: All test files are in the `tests/` folder
+- **Examples**: Configuration examples and sample implementations
+- **API Documentation**: Generated from code docstrings
+
+### Quick Reference
+
+| Task | Command | Documentation |
+|------|---------|---------------|
+| **Setup** | `./setup.sh` | [QUICKSTART.md](docs/QUICKSTART.md) |
+| **Docker** | `./docker-dev.sh` | [DOCKER_README.md](docs/DOCKER_README.md) |
+| **External Scorer** | `pip install -e ../scorer/` | [EXTERNAL_SCORER_GUIDE.md](docs/EXTERNAL_SCORER_GUIDE.md) |
+| **Full Pipeline** | `./quick.sh full` | Main README (this file) |
+| **Tests** | `python -m pytest tests/` | Test files in `tests/` folder |
+
+## �📄 License
 
 [Add your license information here]
 

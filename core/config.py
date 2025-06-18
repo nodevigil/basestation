@@ -46,6 +46,13 @@ class ScanConfig:
 
 
 @dataclass
+class ScoringConfig:
+    """Scoring configuration settings."""
+    scorer_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
+    fallback_to_builtin: bool = field(default_factory=lambda: os.getenv('SCORER_FALLBACK', 'true').lower() == 'true')
+
+
+@dataclass
 class LoggingConfig:
     """Logging configuration settings."""
     level: str = field(default_factory=lambda: os.getenv('LOG_LEVEL', 'INFO'))
@@ -69,6 +76,13 @@ class PublishConfig:
     api_endpoint: Optional[str] = field(default_factory=lambda: os.getenv('API_ENDPOINT'))
 
 
+@dataclass
+class ScoringConfig:
+    """Scoring configuration settings."""
+    scorer_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
+    fallback_to_builtin: bool = field(default_factory=lambda: os.getenv('SCORER_FALLBACK', 'true').lower() == 'true')
+
+
 class Config:
     """
     Main configuration class that aggregates all configuration settings.
@@ -86,9 +100,11 @@ class Config:
         """
         self.database = DatabaseConfig()
         self.scanning = ScanConfig()
+        self.scoring = ScoringConfig()
         self.logging = LoggingConfig()
         self.recon = ReconConfig()
         self.publish = PublishConfig()
+        self.scoring = ScoringConfig()
         
         # Apply any overrides
         if config_overrides:
@@ -111,6 +127,7 @@ class Config:
             'logging': self.logging.__dict__,
             'recon': self.recon.__dict__,
             'publish': self.publish.__dict__,
+            'scoring': self.scoring.__dict__,
         }
     
     @classmethod

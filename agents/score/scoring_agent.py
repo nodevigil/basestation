@@ -1,13 +1,69 @@
 """
 Scoring agent for computing trust scores and risk classifications.
+Supports both built-in scoring and external private scoring libraries.
 """
 
+import importlib
+import hashlib
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ProcessAgent
-from analysis.trust import TrustScorer
 from core.config import Config
+
+
+class DefaultTrustScorer:
+    """
+    Default built-in trust scorer that combines the original trust scoring logic.
+    This serves as fallback when external scorer is not available.
+    """
+    
+    def score(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Score scan data based on security analysis.
+        
+        Args:
+            scan_data: Generic scan data
+            
+        Returns:
+            Trust scoring results with score, flags, and summary
+        """
+        score = 100
+        flags = []
+
+        # Check for Docker socket exposure (critical security issue)
+        if 2375 in scan_data.get('open_ports', []):
+            score -= 30
+            flags.append("Docker socket exposed")
+            
+        # Check for SSH port open
+        if 22 in scan_data.get('open_ports', []):
+            score -= 10
+            flags.append("SSH port open")
+            
+        # Check TLS configuration
+        tls = scan_data.get("tls", {})
+        if tls.get("issuer") in (None, "Self-signed") or not tls.get("expiry"):
+            score -= 25
+            flags.append("TLS misconfigured")
+            
+        # Check for known vulnerabilities
+        for vuln in scan_data.get("vulns", {}).values():
+            score -= 15
+            flags.append(f"Known vuln: {vuln}")
+
+        summary = f"Trust Score: {score}. Flags: {', '.join(flags)}."
+
+        return {
+            "ip": scan_data.get("ip", "unknown"),
+            "score": score,
+            "flags": flags,
+            "summary": summary,
+            "timestamp": datetime.utcnow().isoformat(),
+            "hash": hashlib.sha256(json.dumps(scan_data, sort_keys=True).encode()).hexdigest(),
+            "docker_exposure": scan_data.get("docker_exposure", {"exposed": False})
+        }
 
 
 class ScoringAgent(ProcessAgent):
@@ -20,15 +76,66 @@ class ScoringAgent(ProcessAgent):
     
     def __init__(self, config: Optional[Config] = None, force_rescore: bool = False):
         """
-        Initialize scoring agent.
+        Initialize scoring agent with dynamic scorer loading.
         
         Args:
             config: Configuration instance
             force_rescore: Whether to re-score results that already have scores
         """
         super().__init__(config, "ScoringAgent")
-        self.trust_scorer = TrustScorer()
         self.force_rescore = force_rescore
+        
+        # Dynamic scorer loading with fallback
+        self.trust_scorer = self._load_scorer()
+    
+    def _get_scorer(self, scorer_path: str = "pgdn.scoring.default_scorer.DefaultScorer"):
+        """
+        Dynamically load a scorer class from an external library.
+        
+        Args:
+            scorer_path: Dot-separated path to scorer class (module.ClassName)
+            
+        Returns:
+            Scorer instance
+        """
+        try:
+            mod_name, class_name = scorer_path.rsplit('.', 1)
+            mod = importlib.import_module(mod_name)
+            ScorerClass = getattr(mod, class_name)
+            return ScorerClass()
+        except Exception as e:
+            self.logger.debug(f"Failed to load external scorer '{scorer_path}': {e}")
+            raise
+    
+    def _load_scorer(self):
+        """
+        Load scorer with fallback to built-in DefaultTrustScorer.
+        
+        Returns:
+            Scorer instance (external or default)
+        """
+        # Try to load external scorer first from config
+        scorer_path = getattr(self.config.scoring, 'scorer_path', None) if hasattr(self.config, 'scoring') else None
+        
+        if scorer_path:
+            try:
+                scorer = self._get_scorer(scorer_path)
+                self.logger.info(f"✅ Loaded external scorer: {scorer_path}")
+                return scorer
+            except Exception as e:
+                self.logger.warning(f"External scorer '{scorer_path}' not available: {e}")
+        
+        # Try default external scorer path
+        try:
+            scorer = self._get_scorer()  # Uses default path
+            self.logger.info("✅ Loaded default external scorer")
+            return scorer
+        except Exception as e:
+            self.logger.info(f"External scorer not found: {e}")
+        
+        # Fallback to built-in scorer
+        self.logger.info("📊 Using built-in DefaultTrustScorer")
+        return DefaultTrustScorer()
     
     def process_results(self, scan_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -87,8 +194,18 @@ class ScoringAgent(ProcessAgent):
                     self.logger.warning(f"No generic scan data for {result.get('ip_address', 'unknown')}")
                     continue
                 
-                # Compute trust score
-                trust_result = self.trust_scorer.score(generic_scan)
+                # Compute trust score using either external or built-in scorer
+                if self.trust_scorer:
+                    trust_result = self.trust_scorer.score(generic_scan)
+                else:
+                    # This should never happen due to fallback, but just in case
+                    self.logger.warning("No scorer available, using minimal fallback")
+                    trust_result = {
+                        "score": 50,  # Neutral score
+                        "flags": ["No scorer available"],
+                        "summary": "No scorer available for evaluation",
+                        "docker_exposure": {"exposed": False}
+                    }
                 
                 # Classify risk level
                 risk_level = self._classify_risk_level(trust_result['score'])
