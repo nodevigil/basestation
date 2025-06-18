@@ -4,6 +4,7 @@ Database management and models for the DePIN infrastructure scanner.
 
 import os
 from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 from datetime import datetime
@@ -83,6 +84,7 @@ class CVERecord(Base):
     __tablename__ = 'cve_records'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
     cve_id = Column(String(20), unique=True, nullable=False)  # e.g., CVE-2019-20372
     published_date = Column(DateTime, nullable=True)
     last_modified = Column(DateTime, nullable=True)
@@ -111,6 +113,7 @@ class CVERecord(Base):
         """Convert to dictionary representation."""
         return {
             'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
             'cve_id': self.cve_id,
             'published_date': self.published_date.isoformat() if self.published_date else None,
             'last_modified': self.last_modified.isoformat() if self.last_modified else None,
@@ -130,6 +133,7 @@ class CVEUpdateLog(Base):
     __tablename__ = 'cve_update_logs'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
     update_date = Column(DateTime, default=datetime.utcnow, nullable=False)
     total_cves_processed = Column(Integer, default=0, nullable=False)
     new_cves_added = Column(Integer, default=0, nullable=False)
@@ -146,6 +150,7 @@ class CVEUpdateLog(Base):
         """Convert to dictionary representation."""
         return {
             'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
             'update_date': self.update_date.isoformat() if self.update_date else None,
             'total_cves_processed': self.total_cves_processed,
             'new_cves_added': self.new_cves_added,

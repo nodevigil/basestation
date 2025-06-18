@@ -304,12 +304,32 @@ class CVEUpdater:
         """Get CVE database statistics.
         
         Returns:
-            Dictionary with database statistics
+            Dictionary with database statistics including UUID migration status
         """
         stats = {}
         
         try:
             stats["total_cves"] = self.cve_repo.get_cve_count()
+            
+            # Check UUID migration status
+            with self.cve_repo.db_manager.get_session() as session:
+                from sqlalchemy import text
+                
+                # Count CVEs with UUIDs
+                cves_with_uuid = session.execute(
+                    text("SELECT COUNT(*) FROM cve_records WHERE uuid IS NOT NULL")
+                ).scalar()
+                
+                # Count CVEs without UUIDs
+                cves_without_uuid = session.execute(
+                    text("SELECT COUNT(*) FROM cve_records WHERE uuid IS NULL")
+                ).scalar()
+                
+                stats["uuid_migration_status"] = {
+                    "cves_with_uuid": cves_with_uuid,
+                    "cves_without_uuid": cves_without_uuid,
+                    "migration_complete": cves_without_uuid == 0
+                }
             
             last_update = self.cve_repo.get_last_update()
             if last_update:
@@ -397,15 +417,18 @@ def search_cves_for_banner(banner: str) -> List[Dict[str, Any]]:
         banner: Service banner string
         
     Returns:
-        List of matching CVE dictionaries (without affected_products for scan results)
+        List of matching CVE dictionaries (with UUIDs instead of integer IDs for scan results)
     """
     try:
         with CVEUpdater() as updater:
             cve_records = updater.cve_repo.get_matching_cves_for_banner(banner)
-            # Convert to dict but exclude affected_products from scan results
+            # Convert to dict but use UUID instead of integer ID for scan results
             result = []
             for cve in cve_records:
                 cve_dict = cve.to_dict()
+                # Replace integer id with UUID for scan results
+                if 'id' in cve_dict:
+                    del cve_dict['id']
                 # Remove affected_products from scan results to keep them cleaner
                 if 'affected_products' in cve_dict:
                     del cve_dict['affected_products']

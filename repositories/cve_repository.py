@@ -137,6 +137,18 @@ class CVERepository:
         with self.db_manager.get_session() as session:
             return session.query(CVERecord).filter(CVERecord.cve_id == cve_id).first()
     
+    def get_cve_by_uuid(self, uuid: str) -> Optional[CVERecord]:
+        """Get CVE record by UUID.
+        
+        Args:
+            uuid: CVE UUID identifier
+            
+        Returns:
+            CVERecord instance or None
+        """
+        with self.db_manager.get_session() as session:
+            return session.query(CVERecord).filter(CVERecord.uuid == uuid).first()
+    
     def search_cves_by_product(self, product_name: str, limit: int = 100) -> List[CVERecord]:
         """Search CVEs affecting a specific product.
         

@@ -14,6 +14,8 @@ The CVE Database Updater automatically fetches the latest Common Vulnerabilities
 ## Database Schema
 
 ### CVE Records Table (`cve_records`)
+- `id`: Internal integer primary key (for database integrity)
+- `uuid`: External UUID identifier for API references and scan results
 - `cve_id`: Unique CVE identifier (e.g., CVE-2019-20372)  
 - `published_date`: Original publication date
 - `last_modified`: Last modification date from NVD
@@ -24,11 +26,15 @@ The CVE Database Updater automatically fetches the latest Common Vulnerabilities
 - `raw_data`: Complete NVD API response data
 
 ### Update Logs Table (`cve_update_logs`)
+- `id`: Internal integer primary key
+- `uuid`: External UUID identifier for API references
 - `update_date`: When the update was performed  
 - `total_cves_processed`: Number of CVEs processed
 - `new_cves_added`: New CVEs added to database
 - `status`: Update status (SUCCESS, FAILED, PARTIAL)
 - `processing_time_seconds`: Time taken for update
+
+**Note**: All CVE scan results now use UUIDs instead of integer IDs for better external referencing and to avoid exposing internal database structure.
 
 ## Usage
 
@@ -137,3 +143,25 @@ If an update corrupts the scanner file, restore from the automatic backup:
 ```bash
 cp scanning/scanner.py.backup scanning/scanner.py
 ```
+
+## UUID Migration
+
+The CVE database now uses UUIDs for external references instead of exposing internal integer IDs. This provides better security by not exposing internal database structure and allows for easier distributed system integration.
+
+### Migration Status
+
+Check the UUID migration status:
+```bash
+python -m utils.cve_updater --stats
+```
+
+The statistics will show:
+- `uuid_migration_status.cves_with_uuid`: Number of CVEs with UUIDs
+- `uuid_migration_status.cves_without_uuid`: Number of CVEs without UUIDs  
+- `uuid_migration_status.migration_complete`: Whether migration is complete
+
+### Automatic UUID Generation
+
+- New CVE records automatically get UUIDs via PostgreSQL triggers
+- Existing records were migrated during the schema upgrade
+- Scan results now reference CVEs by UUID instead of integer ID
