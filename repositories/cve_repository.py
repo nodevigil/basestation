@@ -148,12 +148,9 @@ class CVERepository:
             List of CVERecord instances
         """
         with self.db_manager.get_session() as session:
-            # Search in description and affected_products JSON
+            # Search in description only for now (JSON search is more complex)
             return session.query(CVERecord).filter(
-                or_(
-                    CVERecord.description.ilike(f'%{product_name}%'),
-                    CVERecord.affected_products.astext.ilike(f'%{product_name}%')
-                )
+                CVERecord.description.ilike(f'%{product_name}%')
             ).order_by(desc(CVERecord.published_date)).limit(limit).all()
     
     def get_recent_cves(self, days: int = 30, limit: int = 100) -> List[CVERecord]:
@@ -293,10 +290,7 @@ class CVERepository:
         with self.db_manager.get_session() as session:
             for hint in software_hints:
                 cves = session.query(CVERecord).filter(
-                    or_(
-                        CVERecord.description.ilike(f'%{hint}%'),
-                        CVERecord.affected_products.astext.ilike(f'%{hint}%')
-                    )
+                    CVERecord.description.ilike(f'%{hint}%')
                 ).limit(10).all()
                 matching_cves.extend(cves)
         

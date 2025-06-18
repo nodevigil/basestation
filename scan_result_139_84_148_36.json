@@ -1,0 +1,997 @@
+{
+  "node_id": 0,
+  "address": "139.84.148.36",
+  "ip_address": "139.84.148.36",
+  "scan_date": "2025-06-18T08:14:18.387123",
+  "generic_scan": {
+    "ip": "139.84.148.36",
+    "open_ports": [
+      22,
+      80,
+      443,
+      2375,
+      3306
+    ],
+    "banners": {
+      "22": "SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.13"
+    },
+    "vulns": {
+      "22": [
+        {
+          "id": 1230,
+          "cve_id": "CVE-2023-48795",
+          "published_date": "2023-12-18T16:15:10.897000",
+          "last_modified": "2025-05-23T02:24:58.787000",
+          "source": "NVD",
+          "description": "The SSH transport protocol with certain OpenSSH extensions, found in OpenSSH before 9.6 and other products, allows remote attackers to bypass integrity checks such that some packets are omitted (from the extension negotiation message), and a client and server may consequently end up with a connection for which some security features have been downgraded or disabled, aka a Terrapin attack. This occurs because the SSH Binary Packet Protocol (BPP), implemented by these extensions, mishandles the handshake phase and mishandles use of sequence numbers. For example, there is an effective attack against SSH's use of ChaCha20-Poly1305 (and CBC with Encrypt-then-MAC). The bypass occurs in chacha20-poly1305@openssh.com and (if CBC is used) the -etm@openssh.com MAC algorithms. This also affects Maverick Synergy Java SSH API before 3.1.0-SNAPSHOT, Dropbear through 2022.83, Ssh before 5.1.1 in Erlang/OTP, PuTTY before 0.80, AsyncSSH before 2.14.2, golang.org/x/crypto before 0.17.0, libssh before 0.10.6, libssh2 through 1.11.0, Thorn Tech SFTP Gateway before 3.4.6, Tera Term before 5.1, Paramiko before 3.4.0, jsch before 0.2.15, SFTPGo before 2.5.6, Netgate pfSense Plus through 23.09.1, Netgate pfSense CE through 2.7.2, HPN-SSH through 18.2.0, ProFTPD before 1.3.8b (and before 1.3.9rc2), ORYX CycloneSSH before 2.3.4, NetSarang XShell 7 before Build 0144, CrushFTP before 10.6.0, ConnectBot SSH library before 2.2.22, Apache MINA sshd through 2.11.0, sshj through 0.37.0, TinySSH through 20230101, trilead-ssh2 6401, LANCOM LCOS and LANconfig, FileZilla before 3.66.4, Nova before 11.8, PKIX-SSH before 14.4, SecureCRT before 9.4.3, Transmit5 before 5.10.4, Win32-OpenSSH before 9.5.0.0p1-Beta, WinSCP before 6.2.2, Bitvise SSH Server before 9.32, Bitvise SSH Client before 9.33, KiTTY through 0.76.1.13, the net-ssh gem 7.2.0 for Ruby, the mscdex ssh2 module before 1.15.0 for Node.js, the thrussh library before 0.35.1 for Rust, and the Russh crate before 0.40.2 for Rust.",
+          "severity": "MEDIUM",
+          "cvss_score": "5.9",
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:N",
+          "affected_products": [
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "9.6",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.80",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "3.66.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "5.10.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "11.8",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "14.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "6.2.2",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "9.33",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "9.32",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "3.66.4"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "9.4.3",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.10.6",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "1.11.0"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "1.3.8b"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "12.4"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.35.1",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "5.1"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "2.3.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "10.6.0"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "build__0144",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "3.4.0",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.17.0",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.40.2",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "2.5.6",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "22.3.4.27",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "23.0",
+              "versionEndExcluding": "23.3.4.20",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "24.0",
+              "versionEndExcluding": "24.3.4.15",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "25.0",
+              "versionEndExcluding": "25.3.2.8",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "26.0",
+              "versionEndExcluding": "26.2.1",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "0.2.15",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "1.11.1",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "2.14.2",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "2022.83",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "3.1.0-snapshot",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "4.9.1.5",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "4.10",
+              "versionEndExcluding": "4.11.1.7",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "4.12",
+              "versionEndExcluding": "4.13.2.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "4.14",
+              "versionEndExcluding": "4.15.3.1",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "5.0",
+              "versionEndExcluding": "5.1.1",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "3.4.6",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "23.09.1"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "2.7.2"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "10.6.0",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": "2.2.22",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "2.11.0"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "0.37.0"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "20230101"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "0.76.1.13"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "14.0",
+              "versionEndExcluding": "14.4",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            }
+          ],
+          "created_at": "2025-06-17T20:24:34.924164",
+          "updated_at": "2025-06-17T20:24:49.340165"
+        },
+        {
+          "id": 3459,
+          "cve_id": "CVE-2025-26465",
+          "published_date": "2025-02-18T19:15:29.230000",
+          "last_modified": "2025-06-02T15:15:33.437000",
+          "source": "NVD",
+          "description": "A vulnerability was found in OpenSSH when the VerifyHostKeyDNS option is enabled. A machine-in-the-middle attack can be performed by a malicious machine impersonating a legit server. This issue occurs due to how OpenSSH mishandles error codes in specific conditions when verifying the host key. For an attack to be considered successful, the attacker needs to manage to exhaust the client's memory resource first, turning the attack complexity high.",
+          "severity": "MEDIUM",
+          "cvss_score": "6.8",
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N",
+          "affected_products": [
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "6.9",
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": "9.8"
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            }
+          ],
+          "created_at": "2025-06-17T20:24:34.925910",
+          "updated_at": "2025-06-17T20:24:49.759112"
+        },
+        {
+          "id": 3508,
+          "cve_id": "CVE-2025-26466",
+          "published_date": "2025-02-28T22:15:40.080000",
+          "last_modified": "2025-05-27T16:15:31.100000",
+          "source": "NVD",
+          "description": "A flaw was found in the OpenSSH package. For each ping packet the SSH server receives, a pong packet is allocated in a memory buffer and stored in a queue of packages. It is only freed when the server/client key exchange has finished. A malicious client may keep sending such packages, leading to an uncontrolled increase in memory consumption on the server side. Consequently, the server may become unavailable, resulting in a denial of service attack.",
+          "severity": "MEDIUM",
+          "cvss_score": "5.9",
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "affected_products": [
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            }
+          ],
+          "created_at": "2025-06-17T20:24:34.925951",
+          "updated_at": "2025-06-17T20:24:49.766351"
+        },
+        {
+          "id": 3738,
+          "cve_id": "CVE-2025-32728",
+          "published_date": "2025-04-10T02:15:30.873000",
+          "last_modified": "2025-05-22T16:51:54.890000",
+          "source": "NVD",
+          "description": "In sshd in OpenSSH before 10.0, the DisableForwarding directive does not adhere to the documentation stating that it disables X11 and agent forwarding.",
+          "severity": "MEDIUM",
+          "cvss_score": "4.3",
+          "cvss_vector": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:C/C:N/I:L/A:N",
+          "affected_products": [
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": "7.4",
+              "versionEndExcluding": "10.0",
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            },
+            {
+              "cpe23Uri": "",
+              "versionStartIncluding": null,
+              "versionEndExcluding": null,
+              "versionStartExcluding": null,
+              "versionEndIncluding": null
+            }
+          ],
+          "created_at": "2025-06-17T20:24:34.926119",
+          "updated_at": "2025-06-17T20:24:49.803751"
+        },
+        {
+          "id": 5297,
+          "cve_id": "CVE-2025-48416",
+          "published_date": "2025-05-21T13:16:02.947000",
+          "last_modified": "2025-05-30T17:15:29.400000",
+          "source": "NVD",
+          "description": "An OpenSSH daemon listens on TCP port 22. There is a hard-coded entry in the \"/etc/shadow\" file in the firmware image for the \"root\" user. However, in the default SSH configuration the \"PermitRootLogin\" is disabled, preventing the root user from logging in via SSH. This configuration can be bypassed/changed by an attacker through multiple paths though.",
+          "severity": "HIGH",
+          "cvss_score": "8.1",
+          "cvss_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+          "affected_products": [],
+          "created_at": "2025-06-17T20:24:34.927293",
+          "updated_at": "2025-06-17T20:24:50.055464"
+        }
+      ]
+    },
+    "tls": {},
+    "http_headers": {},
+    "docker_exposure": {
+      "exposed": false
+    },
+    "nmap": {
+      "ip": "139.84.148.36",
+      "scan_time": "0.30",
+      "ports": [
+        {
+          "port": 22,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "ssh",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 80,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "http",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 443,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "https",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 2375,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "docker",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 3306,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "mysql",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 8080,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "http-proxy",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 9000,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "cslistener",
+          "product": "",
+          "version": ""
+        },
+        {
+          "port": 9184,
+          "protocol": "tcp",
+          "state": "open",
+          "service": "unknown",
+          "product": "",
+          "version": ""
+        }
+      ],
+      "host_state": "up"
+    },
+    "whatweb": {
+      "http://139.84.148.36:8080": {
+        "target": "http://139.84.148.36:8080",
+        "http_status": 200,
+        "request_config": {
+          "headers": {
+            "User-Agent": "WhatWeb/0.5.5"
+          }
+        },
+        "plugins": {
+          "Country": {
+            "string": [
+              "UNITED STATES"
+            ],
+            "module": [
+              "US"
+            ]
+          },
+          "IP": {
+            "string": [
+              "139.84.148.36"
+            ]
+          },
+          "UncommonHeaders": {
+            "string": [
+              "grpc-status,grpc-path-req"
+            ]
+          }
+        }
+      }
+    },
+    "ssl_test": {
+      "error": "Command '['openssl', 's_client', '-connect', '139.84.148.36:443', '-tls1_2']' timed out after 10 seconds"
+    }
+  },
+  "protocol_scan": null,
+  "web_probes": {
+    "139.84.148.36:80": {
+      "akamai": {
+        "error": "HTTPConnectionPool(host='139.84.148.36', port=80): Read timed out. (read timeout=5)"
+      },
+      "cloudflare": {
+        "error": "HTTPConnectionPool(host='139.84.148.36', port=80): Read timed out. (read timeout=5)"
+      },
+      "sucuri": {
+        "error": "HTTPConnectionPool(host='139.84.148.36', port=80): Read timed out. (read timeout=5)"
+      }
+    },
+    "139.84.148.36:443": {
+      "akamai": {
+        "error": "HTTPSConnectionPool(host='139.84.148.36', port=443): Read timed out. (read timeout=5)"
+      },
+      "cloudflare": {
+        "error": "HTTPSConnectionPool(host='139.84.148.36', port=443): Read timed out. (read timeout=5)"
+      },
+      "sucuri": {
+        "error": "HTTPSConnectionPool(host='139.84.148.36', port=443): Read timed out. (read timeout=5)"
+      }
+    }
+  },
+  "source": "manual_scan",
+  "failed": false
+}
