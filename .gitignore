@@ -239,4 +239,5 @@ docker-compose.override.yml
 alembic/versions/*.bak
 
 sites.md
-config.json 
+config.json
+scan_result_*.json
