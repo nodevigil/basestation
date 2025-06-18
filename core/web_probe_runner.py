@@ -14,9 +14,8 @@ def run_web_probes(address: str, port: int = 80, timeout: int = 5) -> dict:
             module = importlib.import_module(f"web_probes.{name}")
             if hasattr(module, "probe"):
                 probe_result = module.probe(address, port, timeout=timeout)
-                if probe_result:
-                    result[name] = probe_result
+                result[name] = probe_result if probe_result else {"detected": False}
         except Exception as e:
-            result[name] = {"error": str(e)}
+            result[name] = {"detected": False}
     return result
 

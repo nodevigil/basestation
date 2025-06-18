@@ -23,6 +23,6 @@ def probe(address: str, port: int = 80, timeout: int = 5) -> dict:
                 "status_code": resp.status_code,
             }
     except Exception as e:
-        return {"error": str(e)}
-    return None
+        return {"detected": False}
+    return {"detected": False}
 
