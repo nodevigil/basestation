@@ -12,6 +12,9 @@ from typing import Optional, Generator
 from contextlib import contextmanager
 from core.config import DatabaseConfig
 
+# Current scanner version - update this when scanner logic changes
+SCANNER_VERSION = "v0.1"
+
 Base = declarative_base()
 
 
@@ -57,6 +60,7 @@ class ValidatorScan(Base):
     scan_results = Column(JSON, nullable=True)  # JSON field to store scan results
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     failed = Column(Boolean, default=False, nullable=False)
+    version = Column(String(20), nullable=False)  # Scanner version - must be set explicitly
     
     # Relationship back to validator address
     validator_address = relationship("ValidatorAddress", back_populates="scans")
@@ -76,6 +80,7 @@ class ValidatorScan(Base):
             'scan_results': self.scan_results,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'failed': self.failed,
+            'version': self.version,
         }
 
 

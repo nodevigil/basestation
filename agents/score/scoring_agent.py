@@ -12,7 +12,6 @@ from datetime import datetime
 from agents.base import ProcessAgent
 from core.config import Config
 
-
 class DefaultTrustScorer:
     """
     Default built-in trust scorer that combines the original trust scoring logic.
@@ -128,10 +127,10 @@ class ScoringAgent(ProcessAgent):
         # Try default external scorer path
         try:
             scorer = self._get_scorer()  # Uses default path
-            self.logger.info("✅ Loaded default external scorer")
+            self.logger.info("✅ Loaded default internal scorer")
             return scorer
         except Exception as e:
-            self.logger.info(f"External scorer not found: {e}")
+            self.logger.info(f"Internal scorer not found: {e}")
         
         # Fallback to built-in scorer
         self.logger.info("📊 Using built-in DefaultTrustScorer")
@@ -343,6 +342,7 @@ class ScoringAgent(ProcessAgent):
                             'validator_id': scan.validator_address_id,
                             'scan_date': scan.scan_date.isoformat(),
                             'ip_address': scan.ip_address,
+                            'scan_version': scan.version,
                             'raw_results': scan.scan_results
                         })
                 

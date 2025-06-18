@@ -4,6 +4,7 @@ Service for handling scan result saving and management
 
 from repositories.scan_repository import ScanRepository
 from storage.history import HistoryStore
+from core.database import SCANNER_VERSION
 import logging
 
 
@@ -55,7 +56,8 @@ class ScanService:
                                 "generic_scan": result["generic_scan"],
                                 "sui_specific_scan": result["sui_specific_scan"]
                             },
-                            failed=failed
+                            failed=failed,
+                            version=SCANNER_VERSION
                         )
                         logging.info(
                             f"Saved scan results for validator id {validator_id} "
@@ -83,6 +85,7 @@ class ScanService:
                     "scan_date": latest_scan.scan_date,
                     "ip_address": latest_scan.ip_address,
                     "score": latest_scan.score,
+                    "version": latest_scan.version,
                     "flags": latest_scan.scan_results.get("flags", []) if latest_scan.scan_results else []
                 }
             }
@@ -103,6 +106,7 @@ class ScanService:
                     "scan_date": latest_scan.scan_date,
                     "validator_id": latest_scan.validator_address_id,
                     "score": latest_scan.score,
+                    "version": latest_scan.version,
                     "flags": latest_scan.scan_results.get("flags", []) if latest_scan.scan_results else []
                 }
             }
@@ -120,6 +124,7 @@ class ScanService:
                     "ip_address": scan.ip_address,
                     "score": scan.score,
                     "scan_date": scan.scan_date,
+                    "version": scan.version,
                     "flags": scan.scan_results.get("flags", []) if scan.scan_results else []
                 })
             

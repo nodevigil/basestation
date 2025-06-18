@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents.base import ScanAgent
-from core.database import get_db_session, ValidatorAddress, ValidatorScan
+from core.database import get_db_session, ValidatorAddress, ValidatorScan, SCANNER_VERSION
 from core.config import Config
 from core.web_probe_runner import run_web_probes
 from scanning.scanner import Scanner
@@ -373,7 +373,8 @@ class NodeScannerAgent(ScanAgent):
                     score=None,  # Will be computed by ProcessAgent
                     scan_hash=None,  # Will be computed by ProcessAgent
                     scan_results=result,
-                    failed=result.get('failed', False)
+                    failed=result.get('failed', False),
+                    version=SCANNER_VERSION
                 )
                 
                 session.add(scan_record)

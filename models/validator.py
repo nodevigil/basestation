@@ -43,6 +43,7 @@ class ValidatorScan(Base):
     scan_results = Column(JSON, nullable=True)  # JSON field to store scan results
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     failed = Column(Boolean, default=False, nullable=False)  # New column to mark failed scans
+    version = Column(String(20), nullable=False)  # Scanner version - must be set explicitly
     
     # Relationship back to validator address
     validator_address = relationship("ValidatorAddress", back_populates="scans")
@@ -61,4 +62,5 @@ class ValidatorScan(Base):
             'scan_results': self.scan_results,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'failed': self.failed,
+            'version': self.version,
         }

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from models.validator import ValidatorScan, ValidatorAddress
 from database import SessionLocal
+from core.database import SCANNER_VERSION
 from typing import List, Optional
 from datetime import datetime
 
@@ -20,7 +21,7 @@ class ScanRepository:
             self.db.close()
     
     def add_scan(self, validator_address_id: int, ip_address: str, score: int, 
-                 scan_hash: str, scan_results: dict, failed: bool = False) -> ValidatorScan:
+                 scan_hash: str, scan_results: dict, failed: bool = False, version: str = SCANNER_VERSION) -> ValidatorScan:
         """Add a new scan result for a validator"""
         try:
             # Ensure the validator exists by id
@@ -37,7 +38,8 @@ class ScanRepository:
                 scan_hash=scan_hash,
                 scan_results=scan_results,
                 created_at=datetime.utcnow(),
-                failed=failed
+                failed=failed,
+                version=version
             )
             self.db.add(scan)
             self.db.commit()

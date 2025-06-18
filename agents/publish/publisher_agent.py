@@ -1,5 +1,18 @@
 """
-Publisher agent for outputting final results to various destinations.
+Publisher agent for outputting final results to v            for result in results:
+                print(f"\n🏠 Node: {result.get('ip_address', 'Unknown')}")
+                print(f"   Trust Score: {result.get('trust_score', 'N/A')}")
+                print(f"   Risk Level: {result.get('risk_level', 'Unknown')}")
+                print(f"   Scanner Version: {result.get('scan_version', 'Unknown')}")
+                
+                flags = result.get('trust_flags', [])
+                if flags:
+                    print(f"   🚩 Flags: {', '.join(flags)}")
+                
+                compliance = result.get('compliance', {})
+                recommendations = compliance.get('recommendations', [])
+                if recommendations:
+                    print(f"   💡 Recommendations: {', '.join(recommendations)}")ations.
 """
 
 import json
@@ -9,6 +22,7 @@ from abc import ABC, abstractmethod
 
 from agents.base import PublishAgent
 from core.config import Config
+from core.database import SCANNER_VERSION
 from storage.history import HistoryStore
 
 
@@ -118,6 +132,7 @@ class JSONFilePublisher(BasePublisher):
             output_data = {
                 'timestamp': datetime.utcnow().isoformat(),
                 'total_results': len(results),
+                'scanner_version': SCANNER_VERSION,
                 'results': results
             }
             

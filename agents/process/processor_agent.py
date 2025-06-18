@@ -94,6 +94,7 @@ class ProcessorAgent(ProcessAgent):
                             'validator_id': scan.validator_address_id,
                             'scan_date': scan.scan_date.isoformat(),
                             'ip_address': scan.ip_address,
+                            'scan_version': scan.version,
                             'raw_results': scan.scan_results
                         })
                 
@@ -374,7 +375,16 @@ class ProcessorAgent(ProcessAgent):
                     ValidatorScan.score.isnot(None)
                 ).all()
                 
-                return [scan.scan_results for scan in processed_scans if scan.scan_results]
+                results = []
+                for scan in processed_scans:
+                    if scan.scan_results:
+                        # Ensure the version is included in the results
+                        result = scan.scan_results.copy() if isinstance(scan.scan_results, dict) else scan.scan_results
+                        if isinstance(result, dict):
+                            result['scan_version'] = scan.version
+                        results.append(result)
+                
+                return results
                 
         except Exception as e:
             self.logger.error(f"Failed to get processed results: {e}")
