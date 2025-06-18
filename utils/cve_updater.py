@@ -148,25 +148,6 @@ class CVEUpdater:
                         cvss_vector = cvss_data["vectorString"]
                     break
             
-            # Affected products/configurations
-            affected_products = []
-            configurations = cve.get("configurations", [])
-            
-            for config in configurations:
-                nodes = config.get("nodes", [])
-                for node in nodes:
-                    cpe_matches = node.get("cpeMatch", [])
-                    for cpe_match in cpe_matches:
-                        if cpe_match.get("vulnerable", False):
-                            product_info = {
-                                "cpe23Uri": cpe_match.get("cpe23Uri", ""),
-                                "versionStartIncluding": cpe_match.get("versionStartIncluding"),
-                                "versionEndExcluding": cpe_match.get("versionEndExcluding"),
-                                "versionStartExcluding": cpe_match.get("versionStartExcluding"),
-                                "versionEndIncluding": cpe_match.get("versionEndIncluding")
-                            }
-                            affected_products.append(product_info)
-            
             return {
                 "cve_id": cve_id,
                 "published_date": published_date,
@@ -176,7 +157,6 @@ class CVEUpdater:
                 "severity": severity,
                 "cvss_score": cvss_score,
                 "cvss_vector": cvss_vector,
-                "affected_products": affected_products,
                 "raw_data": vulnerability  # Store complete raw data
             }
             
@@ -417,12 +397,20 @@ def search_cves_for_banner(banner: str) -> List[Dict[str, Any]]:
         banner: Service banner string
         
     Returns:
-        List of matching CVE dictionaries
+        List of matching CVE dictionaries (without affected_products for scan results)
     """
     try:
         with CVEUpdater() as updater:
             cve_records = updater.cve_repo.get_matching_cves_for_banner(banner)
-            return [cve.to_dict() for cve in cve_records]
+            # Convert to dict but exclude affected_products from scan results
+            result = []
+            for cve in cve_records:
+                cve_dict = cve.to_dict()
+                # Remove affected_products from scan results to keep them cleaner
+                if 'affected_products' in cve_dict:
+                    del cve_dict['affected_products']
+                result.append(cve_dict)
+            return result
     except Exception as e:
         logger.error(f"Error searching CVEs for banner: {e}")
         return []

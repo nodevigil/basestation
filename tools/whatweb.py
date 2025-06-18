@@ -10,7 +10,7 @@ def whatweb_scan(ip, port=80, scheme="http"):
 
     try:
         result = subprocess.run(
-            ["whatweb", "--log-json=-", url],
+            ["whatweb", "--log-json=-", "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", url],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=15
