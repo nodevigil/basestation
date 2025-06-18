@@ -18,6 +18,36 @@ class DefaultTrustScorer:
     This serves as fallback when external scorer is not available.
     """
     
+    def __init__(self, service_ports=None, weights=None):
+        """
+        Initialize the default trust scorer.
+        
+        Args:
+            service_ports: Dict of service-specific allowed ports
+            weights: Dict of penalty weights for different scoring factors
+        """
+        self.service_ports = service_ports or {'general': {'allowed_ports': [22, 80, 443, 8080]}}
+        self.weights = weights or {
+            'port_penalty': 10,
+            'vuln_penalty': 15,
+            'tls_penalty': 25,
+            'docker_penalty': 30
+        }
+    
+    def _get_allowed_ports_for_service(self, service_type=None):
+        """
+        Get allowed ports for a specific service type.
+        
+        Args:
+            service_type: Type of service (sui, filecoin, ethereum, etc.)
+            
+        Returns:
+            List of allowed ports for the service
+        """
+        if service_type and service_type in self.service_ports:
+            return self.service_ports[service_type].get('allowed_ports', [])
+        return self.service_ports.get('general', {}).get('allowed_ports', [22, 80, 443, 8080])
+    
     def score(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Score scan data based on security analysis.
@@ -30,29 +60,38 @@ class DefaultTrustScorer:
         """
         score = 100
         flags = []
+        
+        # Detect service type based on open ports or other indicators
+        service_type = self._detect_service_type(scan_data)
+        allowed_ports = self._get_allowed_ports_for_service(service_type)
 
         # Check for Docker socket exposure (critical security issue)
         if 2375 in scan_data.get('open_ports', []):
-            score -= 30
+            score -= self.weights.get('docker_penalty', 30)
             flags.append("Docker socket exposed")
             
-        # Check for SSH port open
-        if 22 in scan_data.get('open_ports', []):
-            score -= 10
-            flags.append("SSH port open")
+        # Check for unexpected open ports (not in allowed list)
+        open_ports = scan_data.get('open_ports', [])
+        unexpected_ports = [port for port in open_ports if port not in allowed_ports and port != 2375]
+        if unexpected_ports:
+            penalty = self.weights.get('port_penalty', 10) * len(unexpected_ports)
+            score -= penalty
+            flags.append(f"Unexpected ports open: {unexpected_ports}")
             
         # Check TLS configuration
         tls = scan_data.get("tls", {})
         if tls.get("issuer") in (None, "Self-signed") or not tls.get("expiry"):
-            score -= 25
+            score -= self.weights.get('tls_penalty', 25)
             flags.append("TLS misconfigured")
             
         # Check for known vulnerabilities
-        for vuln in scan_data.get("vulns", {}).values():
-            score -= 15
-            flags.append(f"Known vuln: {vuln}")
+        vuln_count = len(scan_data.get("vulns", {}))
+        if vuln_count > 0:
+            penalty = self.weights.get('vuln_penalty', 15) * vuln_count
+            score -= penalty
+            flags.append(f"Known vulnerabilities: {vuln_count}")
 
-        summary = f"Trust Score: {score}. Flags: {', '.join(flags)}."
+        summary = f"Trust Score: {score}. Service: {service_type or 'general'}. Flags: {', '.join(flags)}."
 
         return {
             "ip": scan_data.get("ip", "unknown"),
@@ -63,6 +102,37 @@ class DefaultTrustScorer:
             "hash": hashlib.sha256(json.dumps(scan_data, sort_keys=True).encode()).hexdigest(),
             "docker_exposure": scan_data.get("docker_exposure", {"exposed": False})
         }
+    
+    def _detect_service_type(self, scan_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Detect the service type based on open ports and other indicators.
+        
+        Args:
+            scan_data: Scan data containing port information
+            
+        Returns:
+            Service type string or None if not detected
+        """
+        open_ports = set(scan_data.get('open_ports', []))
+        
+        # Check for Sui blockchain (common ports: 9000, 9184)
+        if 9000 in open_ports or 9184 in open_ports:
+            return 'sui'
+            
+        # Check for Filecoin (common ports: 1347, 3453)
+        if 1347 in open_ports or 3453 in open_ports:
+            return 'filecoin'
+            
+        # Check for Ethereum (common port: 30303)
+        if 30303 in open_ports:
+            return 'ethereum'
+            
+        # Check for Tendermint (common ports: 26656, 26657)
+        if 26656 in open_ports or 26657 in open_ports:
+            return 'tendermint'
+            
+        # Default to general if no specific service detected
+        return 'general'
 
 
 class ScoringAgent(ProcessAgent):
@@ -101,7 +171,26 @@ class ScoringAgent(ProcessAgent):
             mod_name, class_name = scorer_path.rsplit('.', 1)
             mod = importlib.import_module(mod_name)
             ScorerClass = getattr(mod, class_name)
-            return ScorerClass()
+            
+            # Pass configuration to external scorer
+            service_ports = getattr(self.config.scoring, 'service_ports', {})
+            weights = getattr(self.config.scoring, 'weights', {})
+            
+            # Flatten service ports to a simple list for backwards compatibility
+            ok_ports = []
+            for service_config in service_ports.values():
+                ok_ports.extend(service_config.get('allowed_ports', []))
+            # Remove duplicates while preserving order
+            ok_ports = list(dict.fromkeys(ok_ports))
+            
+            # Try to initialize with configuration parameters
+            try:
+                return ScorerClass(ok_ports=ok_ports, weights=weights)
+            except TypeError:
+                # Fallback if external scorer doesn't accept these parameters
+                self.logger.warning(f"External scorer '{scorer_path}' doesn't accept configuration parameters")
+                return ScorerClass()
+                
         except Exception as e:
             self.logger.debug(f"Failed to load external scorer '{scorer_path}': {e}")
             raise
@@ -126,7 +215,12 @@ class ScoringAgent(ProcessAgent):
         
         # When no external scorer is configured, use built-in scorer directly
         self.logger.info("📊 Using built-in DefaultTrustScorer")
-        return DefaultTrustScorer()
+        
+        # Pass configuration to built-in scorer
+        service_ports = getattr(self.config.scoring, 'service_ports', {})
+        weights = getattr(self.config.scoring, 'weights', {})
+        
+        return DefaultTrustScorer(service_ports=service_ports, weights=weights)
     
     def process_results(self, scan_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

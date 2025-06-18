@@ -3,7 +3,7 @@ Configuration management for the DePIN infrastructure scanner.
 """
 
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 
 
@@ -50,6 +50,15 @@ class ScoringConfig:
     """Scoring configuration settings."""
     scorer_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
     fallback_to_builtin: bool = field(default_factory=lambda: os.getenv('SCORER_FALLBACK', 'true').lower() == 'true')
+    service_ports: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'general': {'allowed_ports': [22, 80, 443, 8080]}
+    })
+    weights: Dict[str, int] = field(default_factory=lambda: {
+        'port_penalty': 10,
+        'vuln_penalty': 15,
+        'tls_penalty': 25,
+        'docker_penalty': 30
+    })
 
 
 @dataclass
@@ -74,13 +83,6 @@ class PublishConfig:
     enabled_publishers: list = field(default_factory=lambda: os.getenv('ENABLED_PUBLISHERS', 'database,console').split(','))
     blockchain_endpoint: Optional[str] = field(default_factory=lambda: os.getenv('BLOCKCHAIN_ENDPOINT'))
     api_endpoint: Optional[str] = field(default_factory=lambda: os.getenv('API_ENDPOINT'))
-
-
-@dataclass
-class ScoringConfig:
-    """Scoring configuration settings."""
-    scorer_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
-    fallback_to_builtin: bool = field(default_factory=lambda: os.getenv('SCORER_FALLBACK', 'true').lower() == 'true')
 
 
 class Config:
