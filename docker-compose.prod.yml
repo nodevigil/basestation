@@ -54,7 +54,7 @@ services:
       - NET_ADMIN
     restart: unless-stopped
     # Run the application instead of bash
-    command: python main.py
+    command: pgdn
 
   # Optional: Web dashboard (if implemented)
   # web:

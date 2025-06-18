@@ -11,11 +11,11 @@ cd depin
 ./setup.sh
 ```
 
-**Already set up?** Use quick commands:
+**Already set up?** Use the console command:
 ```bash
-source myenv/bin/activate
-./quick.sh full        # Run complete pipeline
-./quick.sh help        # See all commands
+source myenv/bin/activate  # Activate virtual environment
+pgdn                       # Run complete pipeline
+pgdn --help               # See all options
 ```
 
 ## 🏗️ Architecture Overview
@@ -55,7 +55,7 @@ The scanner is built around a four-stage pipeline with specialized agents:
 ## 📁 Project Structure
 
 ```
-basestation/
+depin/
 ├── agents/                     # All agent implementations
 │   ├── recon/                  # Protocol-specific discovery agents
 │   │   ├── sui_agent.py        # Sui network reconnaissance
@@ -74,16 +74,37 @@ basestation/
 ├── utils/                      # Utilities and orchestration
 │   ├── agent_registry.py       # Dynamic agent discovery
 │   └── pipeline.py             # Pipeline orchestration
-├── main_new.py                 # New main entry point
-├── migrate_architecture.py     # Migration helper script
-└── [legacy files...]          # Original architecture files
+├── cli.py                      # Command-line interface
+├── setup.py                    # Package setup (for pgdn console script)
+├── pgdn_entry.py               # Console script entry point
+├── requirements.txt            # Python dependencies
+├── config.example.json         # Example configuration
+└── [additional files...]       # Database, Docker, documentation, etc.
 ```
 
-## 🚀 Quick Start
+## 🚀 Installation & Setup
 
-### 1. Installation
+### Option 1: Console Script Installation (Recommended)
 
-#### Quick Setup (Recommended)
+This method installs `pgdn` as a console command that you can run from anywhere:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd depin
+
+# Create and activate virtual environment
+python3 -m venv myenv
+source myenv/bin/activate  # On Windows: myenv\Scripts\activate
+
+# Install the package in development mode (creates pgdn command)
+pip install -e .
+
+# Verify installation
+pgdn --help
+```
+
+### Option 2: Quick Setup Script
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -95,7 +116,7 @@ cd depin
 # Follow the prompts to complete setup
 ```
 
-#### Manual Setup
+### Option 3: Manual Setup
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -154,9 +175,35 @@ alembic upgrade head
 ```
 
 ### 2. Verify Installation
+
+#### Using pgdn command (if installed via pip)
 ```bash
 # Test the setup
-python main.py --list-agents
+pgdn --list-agents
+
+# Expected output:
+# 📋 Available Agents:
+# ========================================
+# 
+# RECON AGENTS:
+#   • SuiReconAgent
+#   • FilecoinReconAgent
+# 
+# SCAN AGENTS:
+#   • NodeScannerAgent
+# 
+# PROCESS AGENTS:
+#   • ProcessorAgent
+#   • ScoringAgent
+# 
+# PUBLISH AGENTS:
+#   • PublisherAgent
+```
+
+#### Using python command (alternative method)
+```bash
+# Test the setup
+pgdn --list-agents
 
 # Expected output:
 # 🤖 Available Agents:
@@ -172,51 +219,64 @@ python main.py --list-agents
 
 ### 3. Basic Usage
 
-#### Quick Commands (Recommended)
-```bash
-# Activate virtual environment first
-source myenv/bin/activate
+#### Using pgdn Command (Recommended)
 
-# Quick help
-./quick.sh help
+If you installed using `pip install -e .`, you can use the `pgdn` command:
 
-# Run complete pipeline
-./quick.sh full
-
-# Run individual stages
-./quick.sh recon    # Node discovery
-./quick.sh scan     # Security scanning  
-./quick.sh process  # Data analysis
-./quick.sh publish  # Output results
-
-# Development & debugging
-./quick.sh debug    # Debug mode
-./quick.sh agents   # List agents
-./quick.sh status   # System status
-```
-
-#### Direct Python Commands
 ```bash
 # Run all stages with default settings
-python main.py
+pgdn
 
 # Run with debug logging
-python main.py --log-level DEBUG
+pgdn --log-level DEBUG
 
 # Run with custom configuration
-python main.py --config config.json
+pgdn --config config.json
 
 # Run individual stages
-python main.py --stage recon
-python main.py --stage scan
-python main.py --stage process
-python main.py --stage publish
+pgdn --stage recon
+pgdn --stage scan
+pgdn --stage process
+pgdn --stage publish
+
+# Run with protocol filtering
+pgdn --stage scan --protocol filecoin
+pgdn --stage scan --protocol sui
 
 # Run specific recon agent
-python main.py --stage recon --recon-agents SuiReconAgent
+pgdn --stage recon --recon-agents SuiReconAgent
+
+# Scan specific target
+pgdn --scan-target 139.84.148.36
 
 # List available agents
-python main.py --list-agents
+pgdn --list-agents
+
+# Update CVE database
+pgdn --update-cves
+pgdn --update-cves --initial-cves  # Initial population
+```
+
+#### Alternative: Using Python Directly
+```bash
+# If you prefer to run without installing the package
+python cli.py                    # Run complete pipeline
+python cli.py --help            # See all options
+python cli.py --stage scan      # Run specific stage
+python cli.py --log-level DEBUG # Run with debug logging
+python cli.py --config config.json # Run with custom configuration
+
+# Run individual stages
+python cli.py --stage recon
+python cli.py --stage scan
+python cli.py --stage process
+python cli.py --stage publish
+
+# Run specific recon agent
+python cli.py --stage recon --recon-agents SuiReconAgent
+
+# List available agents
+python cli.py --list-agents
 ```
 
 ### 4. Configuration Options
@@ -265,6 +325,12 @@ Edit `config.json` to customize settings:
 
 ## 🔧 Key Features
 
+### Console Script Integration
+- **Easy Installation**: Install as a Python package with `pip install -e .`
+- **Global Command**: Use `pgdn` command from anywhere in your terminal
+- **Familiar Interface**: Same arguments as `python cli.py` but more convenient
+- **Development Mode**: Changes to code are immediately reflected
+
 ### Modular Agent System
 - **Pluggable**: Drop new agents into respective folders
 - **Protocol Agnostic**: Each protocol gets its own recon agent
@@ -310,7 +376,7 @@ class EthereumReconAgent(ReconAgent):
 
 The agent will be automatically discovered and available via:
 ```bash
-python main.py --stage recon --recon-agents EthereumReconAgent
+pgdn --stage recon --recon-agents EthereumReconAgent
 ```
 
 ### 2. Custom Scanner Agent
@@ -441,7 +507,7 @@ pip install -e ../pgdn_scoring_lib/
 
 **3. Run with External Scorer:**
 ```bash
-python main.py --stage score --config config.json
+pgdn --stage score --config config.json
 # Output: ✅ Loaded external scorer: pgdn.scoring.default_scorer.DefaultScorer
 ```
 
@@ -467,7 +533,7 @@ cd ../depin
 pip install -e ../pgdn_scoring_lib/
 
 # Test immediately (no reinstall needed for changes)
-python main.py --stage score
+pgdn --stage score
 ```
 
 #### Fallback Strategy
@@ -588,10 +654,10 @@ python -v test_sui_scanner.py
 ```bash
 # 1. Make code changes
 # 2. Test individual components
-python main.py --stage recon --log-level DEBUG
+pgdn --stage recon --log-level DEBUG
 
 # 3. Run full pipeline test
-python main.py --log-level DEBUG
+pgdn --log-level DEBUG
 
 # 4. Check database results
 psql -d depin -c "SELECT COUNT(*) FROM validator_addresses;"
@@ -654,7 +720,7 @@ ls -la agents/scan/
 #### Debug Mode
 ```bash
 # Run with maximum verbosity
-python main.py --log-level DEBUG
+pgdn --log-level DEBUG
 
 # Monitor database activity
 tail -f /usr/local/var/log/postgresql/*.log
@@ -702,10 +768,10 @@ cp config.example.json config.production.json
 crontab -e
 
 # Add scheduled runs (daily at 2 AM)
-0 2 * * * cd /path/to/depin && source myenv/bin/activate && python main.py --config config.production.json >> /var/log/depin.log 2>&1
+0 2 * * * cd /path/to/depin && source myenv/bin/activate && pgdn --config config.production.json >> /var/log/depin.log 2>&1
 
 # Run recon every 6 hours
-0 */6 * * * cd /path/to/depin && source myenv/bin/activate && python main.py --stage recon --config config.production.json >> /var/log/depin-recon.log 2>&1
+0 */6 * * * cd /path/to/depin && source myenv/bin/activate && pgdn --stage recon --config config.production.json >> /var/log/depin-recon.log 2>&1
 ```
 
 ### Process Management with systemd
@@ -720,7 +786,7 @@ Type=oneshot
 User=depin
 WorkingDirectory=/opt/depin
 Environment=PATH=/opt/depin/myenv/bin
-ExecStart=/opt/depin/myenv/bin/python main.py --config config.production.json
+ExecStart=/opt/depin/myenv/bin/pgdn --config config.production.json
 StandardOutput=journal
 StandardError=journal
 
@@ -759,7 +825,7 @@ RUN useradd -m -u 1000 depin && chown -R depin:depin /app
 USER depin
 
 # Default command
-CMD ["python", "main.py"]
+CMD ["pgdn"]
 ```
 
 ```yaml
@@ -797,7 +863,7 @@ Deploy with Docker:
 docker-compose up -d
 
 # Run specific stages
-docker-compose exec scanner python main.py --stage recon
+docker-compose exec scanner pgdn --stage recon
 
 # View logs
 docker-compose logs -f scanner
@@ -895,7 +961,7 @@ cp config.example.json config.json
 alembic upgrade head
 
 # Run first scan
-python main.py --log-level INFO
+pgdn --log-level INFO
 
 # Expected output:
 # 🚀 DePIN Infrastructure Scanner - Agentic Architecture
@@ -914,13 +980,13 @@ python main.py --log-level INFO
 ### Example 2: Daily Monitoring Workflow
 ```bash
 # Morning routine: Check overnight discoveries
-python main.py --stage recon --log-level INFO
+pgdn --stage recon --log-level INFO
 
 # Afternoon: Run security scans
-python main.py --stage scan --log-level INFO
+pgdn --stage scan --log-level INFO
 
 # Evening: Process and review results
-python main.py --stage process --stage publish --log-level INFO
+pgdn --stage process --stage publish --log-level INFO
 
 # Check results in database
 psql -d depin -c "
@@ -945,7 +1011,7 @@ LIMIT 10;
 ### Example 3: Investigating Security Issues
 ```bash
 # Find nodes with critical security issues
-python main.py --stage scan --log-level DEBUG
+pgdn --stage scan --log-level DEBUG
 
 # Query for high-risk nodes
 psql -d depin -c "
@@ -990,28 +1056,28 @@ class MyProtocolReconAgent(ReconAgent):
 EOF
 
 # 2. Test the new agent
-python main.py --stage recon --recon-agents MyProtocolReconAgent --log-level DEBUG
+pgdn --stage recon --recon-agents MyProtocolReconAgent --log-level DEBUG
 
 # 3. Run full pipeline with new protocol
-python main.py --log-level INFO
+pgdn --log-level INFO
 ```
 
 ## 🔍 Common Workflows
 
 ### Daily Operations
-1. **Morning Discovery**: `python main.py --stage recon`
-2. **Scan Security**: `python main.py --stage scan`
-3. **Process Results**: `python main.py --stage process`
+1. **Morning Discovery**: `pgdn --stage recon`
+2. **Scan Security**: `pgdn --stage scan`
+3. **Process Results**: `pgdn --stage process`
 4. **Review Reports**: Check database or output files
 
 ### Weekly Analysis
-1. **Full Pipeline**: `python main.py --log-level INFO`
+1. **Full Pipeline**: `pgdn --log-level INFO`
 2. **Trend Analysis**: Query database for weekly patterns
 3. **Risk Assessment**: Review high-risk nodes
 4. **Performance Tuning**: Adjust configuration based on results
 
 ### Incident Response
-1. **Emergency Scan**: `python main.py --stage scan --log-level DEBUG`
+1. **Emergency Scan**: `pgdn --stage scan --log-level DEBUG`
 2. **Risk Assessment**: Query critical vulnerabilities
 3. **Generate Reports**: Export results for stakeholders
 4. **Follow-up**: Schedule re-scans for remediated issues
@@ -1046,13 +1112,13 @@ python main.py --log-level INFO
 2. Inherit from `ReconAgent` base class
 3. Implement `discover_nodes()` method
 4. Add any protocol-specific configuration to `core/config.py`
-5. Test with `python main.py --stage recon --recon-agents YourProtocolAgent`
+5. Test with `pgdn --stage recon --recon-agents YourProtocolAgent`
 
 ### Adding New Scanners
 1. Create scanner in `agents/scan/your_scanner_agent.py`  
 2. Inherit from `ScanAgent` base class
 3. Implement `scan_nodes()` method
-4. Test with `python main.py --stage scan --agent YourScannerAgent`
+4. Test with `pgdn --stage scan --agent YourScannerAgent`
 
 ### Architecture Guidelines
 - Use strong typing with Python type hints
@@ -1088,12 +1154,20 @@ Comprehensive documentation is available in the `docs/` folder:
 | **Setup** | `./setup.sh` | [QUICKSTART.md](docs/QUICKSTART.md) |
 | **Docker** | `./docker-dev.sh` | [DOCKER_README.md](docs/DOCKER_README.md) |
 | **External Scorer** | `pip install -e ../scorer/` | [EXTERNAL_SCORER_GUIDE.md](docs/EXTERNAL_SCORER_GUIDE.md) |
-| **Full Pipeline** | `./quick.sh full` | Main README (this file) |
+| **Full Pipeline** | `pgdn` | Main README (this file) |
 | **Tests** | `python -m pytest tests/` | Test files in `tests/` folder |
 
 ## �📄 License
 
 [Add your license information here]
+
+## 📦 Package Structure
+
+### Console Script Files
+- **`setup.py`**: Package definition and console script entry point configuration
+- **`pgdn_entry.py`**: Console script entry point that imports and calls the CLI
+
+When you run `pip install -e .`, these files work together to create the `pgdn` command that's available system-wide in your virtual environment.
 
 ## 🤝 Support
 

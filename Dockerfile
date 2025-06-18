@@ -44,4 +44,4 @@ USER appuser
 ENV PYTHONPATH=/app
 
 # Default command
-CMD ["python", "main.py", "--help"]
+CMD ["pgdn", "--help"]

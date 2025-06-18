@@ -1,5 +1,5 @@
 """
-New main.py - DePIN Infrastructure Scanner with Agentic Architecture
+DePIN Infrastructure Scanner - Command Line Interface
 """
 
 import argparse
@@ -160,13 +160,13 @@ def list_agents() -> None:
     
     print("\nUsage examples:")
     print("  # Run full pipeline")
-    print("  python main.py")
+    print("  pgdn")
     print("  ")
     print("  # Run only reconnaissance stage")
-    print("  python main.py --stage recon")
+    print("  pgdn --stage recon")
     print("  ")
     print("  # Run specific recon agent")
-    print("  python main.py --stage recon --recon-agents SuiReconAgent")
+    print("  pgdn --stage recon --recon-agents SuiReconAgent")
 
 
 def update_cve_database(replace_existing: bool = False, offline: bool = False, 
@@ -233,24 +233,24 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                              # Run full pipeline
-  python main.py --stage recon                # Run only reconnaissance
-  python main.py --stage scan                 # Run only scanning
-  python main.py --stage scan --protocol filecoin # Scan only Filecoin nodes
-  python main.py --stage scan --protocol filecoin --debug # Scan with debug logging
-  python main.py --stage scan --protocol sui  # Scan only Sui nodes
-  python main.py --stage process              # Run only processing
-  python main.py --stage score                # Run only scoring
-  python main.py --stage publish              # Run only publishing
-  python main.py --scan-target 139.84.148.36 # Scan specific IP/hostname
-  python main.py --scan-target 139.84.148.36 --debug # Scan target with debug
-  python main.py --list-agents                # List available agents
-  python main.py --recon-agents SuiReconAgent # Run specific recon agent
-  python main.py --update-cves                # Update CVE database with latest data
-  python main.py --update-cves --replace-cves # Force update of CVE database
-  python main.py --update-cves --initial-cves # Initial CVE database population
-  python main.py --start-cve-scheduler        # Start daily CVE update scheduler
-  python main.py --update-cves --offline-cves # Use offline CVE data (no API calls)
+  pgdn                              # Run full pipeline
+  pgdn --stage recon                # Run only reconnaissance
+  pgdn --stage scan                 # Run only scanning
+  pgdn --stage scan --protocol filecoin # Scan only Filecoin nodes
+  pgdn --stage scan --protocol filecoin --debug # Scan with debug logging
+  pgdn --stage scan --protocol sui  # Scan only Sui nodes
+  pgdn --stage process              # Run only processing
+  pgdn --stage score                # Run only scoring
+  pgdn --stage publish              # Run only publishing
+  pgdn --scan-target 139.84.148.36 # Scan specific IP/hostname
+  pgdn --scan-target 139.84.148.36 --debug # Scan target with debug
+  pgdn --list-agents                # List available agents
+  pgdn --recon-agents SuiReconAgent # Run specific recon agent
+  pgdn --update-cves                # Update CVE database with latest data
+  pgdn --update-cves --replace-cves # Force update of CVE database
+  pgdn --update-cves --initial-cves # Initial CVE database population
+  pgdn --start-cve-scheduler        # Start daily CVE update scheduler
+  pgdn --update-cves --offline-cves # Use offline CVE data (no API calls)
         """
     )
     

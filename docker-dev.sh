@@ -35,12 +35,12 @@ case "$1" in
             exit 1
         fi
         echo "🔍 Scanning $2..."
-        docker-compose run --rm app python main.py scan "$2"
+        docker-compose run --rm app pgdn --scan-target "$2"
         ;;
     "recon")
         protocol=${2:-sui}
         echo "🔍 Running reconnaissance for $protocol..."
-        docker-compose run --rm app python main.py recon "$protocol"
+        docker-compose run --rm app pgdn --stage recon --protocol "$protocol"
         ;;
     "reset")
         echo "🧹 Resetting everything (removes volumes)..."
@@ -77,7 +77,7 @@ case "$1" in
         echo "  $0 build"
         echo "  $0 scan 1.1.1.1"
         echo "  $0 recon sui"
-        echo "  $0 run python main.py --help"
+        echo "  $0 run pgdn --help"
         echo "  $0 logs postgres"
         echo "  $0 test"
         ;;

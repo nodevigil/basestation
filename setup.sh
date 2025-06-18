@@ -93,7 +93,7 @@ fi
 
 # Test installation
 echo "Testing installation..."
-if python main.py --list-agents > /dev/null 2>&1; then
+if pgdn --list-agents > /dev/null 2>&1; then
     print_status "Installation successful!"
 else
     print_error "Installation test failed. Please check the logs above."
@@ -106,7 +106,7 @@ echo ""
 echo "Next steps:"
 echo "1. Edit config.json with your database settings"
 echo "2. Run: source myenv/bin/activate"
-echo "3. Run: python main.py --list-agents"
-echo "4. Run: python main.py --log-level INFO"
+echo "3. Run: pgdn --list-agents"
+echo "4. Run: pgdn --log-level INFO"
 echo ""
 echo "For help, see README_new.md"
