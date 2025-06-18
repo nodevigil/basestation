@@ -180,7 +180,8 @@ class NodeScannerAgent(ScanAgent):
                 nodes = []
                 for validator in validators_needing_scan:
                     nodes.append({
-                        'id': validator.id,
+                        'id': validator.id,  # Keep integer ID for database operations
+                        'uuid': str(validator.uuid),  # Add UUID for scan results
                         'address': validator.address,
                         'name': validator.name,
                         'source': validator.source
@@ -275,6 +276,7 @@ class NodeScannerAgent(ScanAgent):
             Scan result dictionary, or None if scan failed
         """
         address = node['address']
+        scan_start_time = datetime.utcnow()  # Record scan start time
         
         try:
             # Resolve hostname to IP
@@ -322,12 +324,15 @@ class NodeScannerAgent(ScanAgent):
                         self.logger.warning(f"Web probe failed for {address}:{port}: {e}")
                         web_probe_results[f"{address}:{port}"] = {"error": str(e)}
             
+            scan_end_time = datetime.utcnow()  # Record scan end time
+            
             # Combine results
             scan_result = {
-                'node_id': node['id'],
+                'node_id': node['uuid'],  # Use UUID instead of integer ID
                 'address': address,
                 'ip_address': ip_address,
-                'scan_date': datetime.utcnow().isoformat(),
+                'scan_start': int(scan_start_time.timestamp()),  # Unix timestamp
+                'scan_end': int(scan_end_time.timestamp()),     # Unix timestamp
                 'generic_scan': generic_result,
                 'protocol_scan': protocol_result,
                 'web_probes': web_probe_results if web_probe_results else None,
@@ -368,11 +373,13 @@ class NodeScannerAgent(ScanAgent):
         Returns:
             Failed scan result dictionary
         """
+        scan_time = datetime.utcnow()
         return {
-            'node_id': node['id'],
+            'node_id': node['uuid'],  # Use UUID instead of integer ID
             'address': node['address'],
             'ip_address': None,
-            'scan_date': datetime.utcnow().isoformat(),
+            'scan_start': int(scan_time.timestamp()),  # Unix timestamp
+            'scan_end': int(scan_time.timestamp()),    # Same time for failed scans
             'generic_scan': None,
             'protocol_scan': None,
             'source': node['source'],
@@ -395,13 +402,21 @@ class NodeScannerAgent(ScanAgent):
                 self.logger.debug(f"🔒 Computed scan_hash during scanning: {scan_hash[:16]}...")
             
             with get_db_session() as session:
+                # Convert UUID to integer ID for database foreign key
+                # The node_id in result is now a UUID string, but we need the integer ID
+                node_uuid = result['node_id']
+                validator = session.query(ValidatorAddress).filter(ValidatorAddress.uuid == node_uuid).first()
+                
+                if not validator:
+                    raise ValueError(f"Validator with UUID {node_uuid} not found")
+                
                 scan_record = ValidatorScan(
-                    validator_address_id=result['node_id'],
+                    validator_address_id=validator.id,  # Use integer ID for foreign key
                     scan_date=datetime.utcnow(),
                     ip_address=result.get('ip_address'),
                     score=None,  # Will be computed by ProcessAgent
                     scan_hash=scan_hash,  # Computed immediately during scanning
-                    scan_results=result,
+                    scan_results=result,  # This contains the UUID in node_id
                     failed=result.get('failed', False),
                     version=SCANNER_VERSION
                 )

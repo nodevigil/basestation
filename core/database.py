@@ -23,6 +23,7 @@ class ValidatorAddress(Base):
     __tablename__ = 'validator_addresses'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
     address = Column(String(255), unique=True, nullable=False)
     name = Column(String(255), nullable=True)
     source = Column(String(100), nullable=False)  # e.g., 'sui', 'filecoin', 'manual'
@@ -39,6 +40,7 @@ class ValidatorAddress(Base):
         """Convert to dictionary representation."""
         return {
             'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
             'address': self.address,
             'name': self.name,
             'source': self.source,

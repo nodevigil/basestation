@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Boolean, Integer, ForeignKey, JSON, create_engine
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -9,6 +10,7 @@ class ValidatorAddress(Base):
     __tablename__ = 'validator_addresses'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
     address = Column(String(255), unique=True, nullable=False)
     name = Column(String(255), nullable=True)
     source = Column(String(100), nullable=False)  # e.g., 'sui', 'ethereum', 'manual'
@@ -23,6 +25,8 @@ class ValidatorAddress(Base):
 
     def to_dict(self):
         return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
             'address': self.address,
             'name': self.name,
             'source': self.source,

@@ -132,7 +132,6 @@ class FilecoinSpecificScanner:
         results = {
             'scan_type': 'filecoin_specific',
             'target_ip': ip_address,
-            'scan_timestamp': scan_start_time.isoformat(),
             'lotus_api_exposed': False,
             'storage_api_exposed': False,
             'market_api_exposed': False,
