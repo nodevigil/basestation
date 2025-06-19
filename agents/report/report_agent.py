@@ -1048,3 +1048,168 @@ class ReportAgent(ProcessAgent):
                 self.logger.error(f"Failed to send email report: {e}")
         else:
             self.logger.warning("Email notification not available - no external report library configured")
+    
+    def execute(self, scan_id: Optional[int] = None, force_report: bool = False) -> List[Dict[str, Any]]:
+        """
+        Execute the report agent by loading scan results and generating reports.
+        
+        Args:
+            scan_id: Optional specific scan ID to generate report for
+            force_report: Whether to force report generation even if already processed
+            
+        Returns:
+            List of generated reports
+        """
+        self.logger.info(f"🚀 Starting ReportAgent execution (scan_id={scan_id}, force_report={force_report})")
+        
+        # Load scan results from database
+        scan_results = self._get_scans_for_reporting(scan_id=scan_id, force_report=force_report)
+        
+        if not scan_results:
+            self.logger.info("📊 No scans to generate reports for")
+            return []
+        
+        # Generate reports for each scan
+        reports = []
+        for scan_result in scan_results:
+            try:
+                # Generate the report
+                report_data = self.process_item(scan_result)
+                
+                if not report_data.get('error'):
+                    # Save the report to database
+                    saved_report = self._save_report_to_database(report_data, scan_result['scan_id'])
+                    if saved_report:
+                        reports.append(saved_report)
+                        self.logger.info(f"✅ Report generated and saved for scan {scan_result['scan_id']}")
+                    else:
+                        self.logger.warning(f"⚠️ Report generated but not saved for scan {scan_result['scan_id']}")
+                        reports.append(report_data)
+                else:
+                    self.logger.error(f"❌ Report generation failed for scan {scan_result['scan_id']}: {report_data.get('message')}")
+                    
+            except Exception as e:
+                self.logger.error(f"❌ Error generating report for scan {scan_result['scan_id']}: {e}")
+        
+        self.logger.info(f"✅ Report generation completed: {len(reports)} reports generated")
+        return reports
+    
+    def _get_scans_for_reporting(self, scan_id: Optional[int] = None, force_report: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get scan results for report generation from the database.
+        
+        Args:
+            scan_id: Optional specific scan ID to generate report for  
+            force_report: Whether to force report generation even if already processed
+            
+        Returns:
+            List of scan results to generate reports for
+        """
+        try:
+            from core.database import get_db_session, ValidatorScan, ValidatorScanReport
+            
+            with get_db_session() as session:
+                # Base query for successful scans
+                query = session.query(ValidatorScan).filter(ValidatorScan.failed == False)
+                
+                if scan_id:
+                    # Generate report for specific scan
+                    query = query.filter(ValidatorScan.id == scan_id)
+                    
+                    # Check if report already exists for this scan (unless force_report)
+                    if not force_report:
+                        existing_report = session.query(ValidatorScanReport).filter(
+                            ValidatorScanReport.scan_id == scan_id
+                        ).first()
+                        if existing_report:
+                            self.logger.info(f"📊 Report already exists for scan {scan_id} (use --force-report to regenerate)")
+                            return []
+                else:
+                    # Generate reports for scans without reports (unless force_report)
+                    if not force_report:
+                        # Get scans that don't have reports yet
+                        scan_ids_with_reports = session.query(ValidatorScanReport.scan_id).distinct()
+                        query = query.filter(~ValidatorScan.id.in_(scan_ids_with_reports))
+                
+                scans = query.order_by(ValidatorScan.scan_date.desc()).all()
+                
+                results = []
+                for scan in scans:
+                    if scan.scan_results:
+                        # Prepare scan data in the format expected by the report generator
+                        results.append({
+                            'scan_id': scan.id,
+                            'validator_id': scan.validator_address_id,
+                            'scan_date': scan.scan_date.isoformat(),
+                            'ip_address': scan.ip_address,
+                            'scan_version': scan.version,
+                            'scan_hash': scan.scan_hash,
+                            'raw_results': scan.scan_results,
+                            # Include the raw scan data for report generation
+                            **scan.scan_results
+                        })
+                
+                self.logger.info(f"📊 Found {len(results)} scans for report generation (scan_id={scan_id}, force_report={force_report})")
+                return results
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error loading scans for reporting: {e}")
+            return []
+    
+    def _save_report_to_database(self, report_data: Dict[str, Any], scan_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Save generated report to the database.
+        
+        Args:
+            report_data: Generated report data
+            scan_id: ID of the scan this report is for
+            
+        Returns:
+            Saved report data with database info, or None if failed
+        """
+        try:
+            from core.database import get_db_session, ValidatorScanReport
+            import uuid as uuid_lib
+            
+            # Extract key metrics from the report
+            summary = report_data.get('executive_summary', {})
+            overall_risk_level = summary.get('overall_risk_level', 'UNKNOWN')
+            total_vulnerabilities = summary.get('total_vulnerabilities', 0)
+            critical_vulnerabilities = summary.get('critical_vulnerabilities', 0)
+            
+            # Generate a brief summary
+            findings = report_data.get('security_findings', [])
+            critical_findings = [f for f in findings if f.get('severity') == 'CRITICAL']
+            summary_text = f"Risk: {overall_risk_level}, Vulns: {total_vulnerabilities}"
+            if critical_findings:
+                summary_text += f", Critical: {len(critical_findings)}"
+            
+            with get_db_session() as session:
+                # Create the report record
+                report_record = ValidatorScanReport(
+                    uuid=uuid_lib.uuid4(),
+                    scan_id=scan_id,
+                    report_date=datetime.utcnow(),
+                    report_type='security_analysis',
+                    report_format='json',
+                    overall_risk_level=overall_risk_level,
+                    total_vulnerabilities=total_vulnerabilities,
+                    critical_vulnerabilities=critical_vulnerabilities,
+                    report_data=report_data,
+                    report_summary=summary_text[:1000],  # Truncate to fit field
+                    processed=True,
+                    created_at=datetime.utcnow()
+                )
+                
+                session.add(report_record)
+                session.commit()
+                session.refresh(report_record)
+                
+                self.logger.info(f"💾 Report saved to database with ID {report_record.id}")
+                
+                # Return the saved report data
+                return report_record.to_dict()
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error saving report to database: {e}")
+            return None

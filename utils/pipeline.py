@@ -324,7 +324,7 @@ class PipelineOrchestrator:
         
         Args:
             agent_name: Name of report agent to use
-            report_options: Report generation options (input_file, output_file, format, etc.)
+            report_options: Report generation options (input_file, output_file, format, scan_id, force_report, etc.)
             
         Returns:
             Report generation results
@@ -336,8 +336,20 @@ class PipelineOrchestrator:
             if not agent:
                 raise Exception(f"Failed to create report agent: {agent_name}")
             
+            # Check if we have scan_id or force_report options for database-driven reporting
+            scan_id = report_options.get('scan_id') if report_options else None
+            force_report = report_options.get('force_report', False) if report_options else False
+            
             # Generate report using the agent with provided options
-            if hasattr(agent, 'generate_and_output_report') and report_options:
+            if scan_id is not None or force_report or not report_options or not report_options.get('input_file'):
+                # Use the database-driven execute method
+                if hasattr(agent, 'execute'):
+                    results = agent.execute(scan_id=scan_id, force_report=force_report)
+                else:
+                    # Fallback to standard execute method
+                    results = agent.execute()
+            elif hasattr(agent, 'generate_and_output_report') and report_options:
+                # Use file-based report generation
                 results = agent.generate_and_output_report(report_options)
             else:
                 # Fallback to standard execute method

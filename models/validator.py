@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
+import uuid
 
 Base = declarative_base()
 
@@ -67,4 +68,47 @@ class ValidatorScan(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'failed': self.failed,
             'version': self.version,
+        }
+
+
+class ValidatorScanReport(Base):
+    """Model for storing generated security reports."""
+    __tablename__ = 'validator_scan_reports'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
+    scan_id = Column(Integer, ForeignKey('validator_scans.id'), nullable=False)
+    report_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    report_type = Column(String(50), default='security_analysis', nullable=False)
+    report_format = Column(String(20), default='json', nullable=False)  # json, html, pdf, etc.
+    overall_risk_level = Column(String(20), nullable=True)  # CRITICAL, HIGH, MEDIUM, LOW
+    total_vulnerabilities = Column(Integer, default=0, nullable=False)
+    critical_vulnerabilities = Column(Integer, default=0, nullable=False)
+    report_data = Column(JSON, nullable=False)  # Full report JSON
+    report_summary = Column(String(1000), nullable=True)  # Brief text summary
+    processed = Column(Boolean, default=True, nullable=False)  # Mark as processed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship back to scan
+    scan = relationship("ValidatorScan", backref="reports")
+    
+    def __repr__(self):
+        return f"<ValidatorScanReport(id={self.id}, scan_id={self.scan_id}, risk_level='{self.overall_risk_level}', report_date='{self.report_date}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'scan_id': self.scan_id,
+            'report_date': self.report_date.isoformat() if self.report_date else None,
+            'report_type': self.report_type,
+            'report_format': self.report_format,
+            'overall_risk_level': self.overall_risk_level,
+            'total_vulnerabilities': self.total_vulnerabilities,
+            'critical_vulnerabilities': self.critical_vulnerabilities,
+            'report_data': self.report_data,
+            'report_summary': self.report_summary,
+            'processed': self.processed,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }

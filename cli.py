@@ -253,7 +253,9 @@ Examples:
   pgdn --stage process              # Run only processing
   pgdn --stage score                # Run only scoring
   pgdn --stage publish              # Run only publishing
-  pgdn --stage report               # Generate AI security analysis report
+  pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
+  pgdn --stage report --scan-id 123 # Generate report for specific scan ID
+  pgdn --stage report --force-report # Generate reports for all scans (even if already processed)
   pgdn --stage report --report-input scan_result.json # Generate report from specific scan
   pgdn --stage report --report-email # Generate with email notification
   pgdn --stage report --auto-save-report # Auto-save with timestamp
@@ -358,6 +360,18 @@ Examples:
     )
     
     # Report stage arguments
+    parser.add_argument(
+        '--scan-id',
+        type=int,
+        help='Specific scan ID to generate report for (if not provided, will run for all unprocessed scans)'
+    )
+    
+    parser.add_argument(
+        '--force-report',
+        action='store_true',
+        help='Force generation of report even if scan has already been processed'
+    )
+    
     parser.add_argument(
         '--report-input',
         help='Input file for report generation (JSON scan results)'
@@ -603,7 +617,9 @@ def main():
                     'format': args.report_format or 'json',
                     'auto_save': args.auto_save_report,
                     'email_report': args.report_email,
-                    'recipient_email': args.recipient_email
+                    'recipient_email': args.recipient_email,
+                    'scan_id': args.scan_id,
+                    'force_report': args.force_report
                 }
                 
                 results = orchestrator.run_report_stage(args.agent or 'ReportAgent', report_options)
