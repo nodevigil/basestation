@@ -188,6 +188,11 @@ class ValidatorScanReport(Base):
     processed = Column(Boolean, default=True, nullable=False)  # Mark as processed
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
+    # Email notification fields
+    report_email_body = Column(String, nullable=True)  # Email body content
+    report_email_subject = Column(String(255), nullable=True)  # Email subject line
+    report_email_to = Column(String(255), nullable=True)  # Email recipient
+    
     # Relationship back to scan
     scan = relationship("ValidatorScan", backref="reports")
     
@@ -210,6 +215,9 @@ class ValidatorScanReport(Base):
             'report_summary': self.report_summary,
             'processed': self.processed,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'report_email_body': self.report_email_body,
+            'report_email_subject': self.report_email_subject,
+            'report_email_to': self.report_email_to,
         }
 
 
