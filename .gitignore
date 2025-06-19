@@ -241,3 +241,4 @@ alembic/versions/*.bak
 sites.md
 config.json
 scan_result_*.json
+security_report*.json

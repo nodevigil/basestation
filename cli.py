@@ -550,78 +550,22 @@ def run_report_stage(config: Config, args) -> None:
     
     try:
         from agents.report.report_agent import ReportAgent
-        import glob
-        import json
-        import os
-        from datetime import datetime
-        
-        # Determine input file - either explicit or find latest scan result
-        input_file = args.report_input
-        if not input_file:
-            # Look for recent scan results in current directory
-            scan_files = glob.glob("scan_result_*.json")
-            if scan_files:
-                # Get the most recent file
-                input_file = max(scan_files, key=os.path.getctime)
-                print(f"📄 Using latest scan result: {input_file}")
-            else:
-                print("❌ No scan result files found. Use --report-input to specify a file")
-                sys.exit(1)
-        
-        if not os.path.exists(input_file):
-            print(f"❌ Input file not found: {input_file}")
-            sys.exit(1)
-        
-        print(f"🔍 Analyzing scan results from: {input_file}")
         
         # Initialize the report agent
         report_agent = ReportAgent(config)
         
-        # Load scan data
-        with open(input_file, 'r') as f:
-            scan_data = json.load(f)
+        # Configure report options
+        report_options = {
+            'input_file': args.report_input,
+            'output_file': args.report_output,
+            'format': args.report_format or 'json',
+            'auto_save': args.auto_save_report,
+            'email_report': args.report_email,
+            'recipient_email': args.recipient_email
+        }
         
-        print("🤖 Generating security analysis report...")
-        
-        # Generate report
-        report_data = report_agent.process_item(scan_data)
-        
-        if report_data.get('error'):
-            print(f"❌ Failed to generate report: {report_data.get('message', 'Unknown error')}")
-            sys.exit(1)
-        
-        # Determine output file
-        output_file = args.report_output
-        if args.auto_save_report or not output_file:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            target_ip = report_data.get('target_info', {}).get('ip_address', 'unknown').replace('.', '_')
-            output_file = f"security_report_{target_ip}_{timestamp}.json"
-        
-        # Save report
-        if output_file:
-            saved_file = report_agent.save_report(report_data, output_file)
-            print(f"💾 Report saved to: {saved_file}")
-        
-        # Handle different output formats
-        if args.report_format == 'summary':
-            print(f"\n� Security Report Summary:")
-            summary = report_data.get('executive_summary', {})
-            print(f"   Overall Risk Level: {summary.get('overall_risk_level', 'Unknown')}")
-            print(f"   Total Vulnerabilities: {summary.get('total_vulnerabilities', 0)}")
-            print(f"   Critical Issues: {summary.get('critical_vulnerabilities', 0)}")
-            print(f"   Open Ports: {summary.get('open_ports_count', 0)}")
-            
-            findings = report_data.get('security_findings', [])
-            critical_findings = [f for f in findings if f.get('severity') == 'CRITICAL']
-            if critical_findings:
-                print(f"   Critical Findings:")
-                for finding in critical_findings[:3]:  # Show top 3
-                    print(f"     • {finding.get('title', 'Unknown')}")
-        
-        # Handle email generation if requested
-        if args.report_email:
-            print("📧 Email notification generation not yet implemented")
-            print("   This feature will be available in the external report library")
+        # Generate and output the report
+        report_agent.generate_and_output_report(report_options)
         
         print("✅ Report generation completed successfully!")
         

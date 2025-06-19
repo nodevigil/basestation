@@ -231,6 +231,9 @@ class ReportAgent(ProcessAgent):
         """
         super().__init__(config, "ReportAgent")
         
+        # Initialize external reporter
+        self.external_reporter = None
+        
         # Dynamic report generator loading with fallback
         self.report_generator = self._load_report_generator()
     
@@ -272,7 +275,34 @@ class ReportAgent(ProcessAgent):
             Report generator instance (external or default)
         """
         # Check if external report generator is configured
-        if hasattr(self.config, 'reporting') and hasattr(self.config.reporting, 'external_generator'):
+        if hasattr(self.config, 'reporting') and hasattr(self.config.reporting, 'external_library'):
+            external_library = self.config.reporting.external_library
+            
+            if external_library and external_library.get('enabled', False):
+                module_path = external_library.get('module_path')
+                class_name = external_library.get('class_name')
+                
+                if module_path and class_name:
+                    try:
+                        self.logger.info(f"Loading external report library: {module_path}.{class_name}")
+                        
+                        # Import the module and get the class
+                        import importlib
+                        module = importlib.import_module(module_path)
+                        reporter_class = getattr(module, class_name)
+                        
+                        # Initialize with configuration
+                        config_data = external_library.get('config', {})
+                        self.external_reporter = reporter_class(config_data)
+                        
+                        self.logger.info("External report library loaded successfully")
+                        return self.external_reporter
+                        
+                    except Exception as e:
+                        self.logger.warning(f"Failed to load external report library, falling back to default: {e}")
+        
+        # Also check legacy external_generator for backward compatibility
+        elif hasattr(self.config, 'reporting') and hasattr(self.config.reporting, 'external_generator'):
             external_generator = self.config.reporting.external_generator
             
             if external_generator and external_generator.get('enabled', False):
@@ -304,14 +334,24 @@ class ReportAgent(ProcessAgent):
         try:
             self.logger.info(f"Generating report for {item.get('ip', 'unknown')}")
             
-            # Generate the report using the configured generator
-            report_data = self.report_generator.generate_report(item)
+            # Check if external reporter has custom report generation
+            if self.external_reporter and hasattr(self.external_reporter, 'generate_custom_report'):
+                try:
+                    self.logger.info("Using external reporter for custom report generation")
+                    report_data = self.external_reporter.generate_custom_report(item)
+                except Exception as e:
+                    self.logger.warning(f"External reporter failed, falling back to default: {e}")
+                    report_data = self.report_generator.generate_report(item)
+            else:
+                # Generate the report using the configured generator
+                report_data = self.report_generator.generate_report(item)
             
             # Add processing metadata
             report_data['processing_info'] = {
                 'agent': self.agent_name,
                 'processed_at': datetime.utcnow().isoformat(),
-                'generator_type': type(self.report_generator).__name__
+                'generator_type': type(self.report_generator).__name__,
+                'external_reporter': self.external_reporter is not None
             }
             
             self.logger.info(f"Report generated successfully for {item.get('ip', 'unknown')}")
@@ -381,3 +421,213 @@ class ReportAgent(ProcessAgent):
         except Exception as e:
             self.logger.error(f"Error saving report: {e}")
             raise
+
+    def generate_report_from_file(self, input_file: str, output_file: Optional[str] = None, 
+                                format_type: str = 'json', auto_save: bool = True) -> Dict[str, Any]:
+        """
+        Generate a report from a scan result file.
+        
+        Args:
+            input_file: Path to scan result JSON file
+            output_file: Optional output file path
+            format_type: Output format ('json' or 'summary')
+            auto_save: Whether to automatically save the report
+            
+        Returns:
+            Generated report data
+        """
+        import os
+        
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        
+        # Load scan data
+        try:
+            with open(input_file, 'r') as f:
+                scan_data = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Failed to load scan data from {input_file}: {e}")
+        
+        # Generate report
+        report_data = self.process_item(scan_data)
+        
+        if report_data.get('error'):
+            raise Exception(f"Failed to generate report: {report_data.get('message', 'Unknown error')}")
+        
+        # Save report if requested
+        if auto_save or output_file:
+            if not output_file:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                target_ip = report_data.get('target_info', {}).get('ip_address', 'unknown').replace('.', '_')
+                output_file = f"security_report_{target_ip}_{timestamp}.json"
+            
+            saved_file = self.save_report(report_data, output_file)
+            report_data['saved_to'] = saved_file
+        
+        return report_data
+
+    def find_latest_scan_result(self, directory: str = ".") -> Optional[str]:
+        """
+        Find the latest scan result file in the given directory.
+        
+        Args:
+            directory: Directory to search in
+            
+        Returns:
+            Path to latest scan result file or None if not found
+        """
+        import glob
+        import os
+        
+        scan_files = glob.glob(os.path.join(directory, "scan_result_*.json"))
+        if scan_files:
+            return max(scan_files, key=os.path.getctime)
+        return None
+
+    def print_report_summary(self, report_data: Dict[str, Any]) -> None:
+        """
+        Print a formatted summary of the report to console.
+        
+        Args:
+            report_data: Report data to summarize
+        """
+        print(f"\n📊 Security Report Summary:")
+        
+        summary = report_data.get('executive_summary', {})
+        print(f"   Overall Risk Level: {summary.get('overall_risk_level', 'Unknown')}")
+        print(f"   Total Vulnerabilities: {summary.get('total_vulnerabilities', 0)}")
+        print(f"   Critical Issues: {summary.get('critical_vulnerabilities', 0)}")
+        print(f"   Open Ports: {summary.get('open_ports_count', 0)}")
+        
+        findings = report_data.get('security_findings', [])
+        critical_findings = [f for f in findings if f.get('severity') == 'CRITICAL']
+        if critical_findings:
+            print(f"   Critical Findings:")
+            for finding in critical_findings[:3]:  # Show top 3
+                print(f"     • {finding.get('title', 'Unknown')}")
+
+    def send_email_report(self, report_data: Dict[str, Any], recipients: Optional[List[str]] = None) -> bool:
+        """
+        Send report via email (placeholder for future implementation).
+        
+        Args:
+            report_data: Report data to email
+            recipients: List of recipient email addresses
+            
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        # This would integrate with the email configuration
+        email_config = getattr(self.config.reporting, 'email', {})
+        
+        if not email_config.get('enabled', False):
+            self.logger.warning("Email reporting is not enabled in configuration")
+            return False
+        
+        # TODO: Implement actual email sending logic
+        self.logger.info("Email notification generation not yet implemented")
+        self.logger.info("This feature will use the external report library or built-in email functionality")
+        
+        return False
+
+    def generate_and_output_report(self, options):
+        """Generate report and handle output based on options"""
+        try:
+            # Load scan data from input
+            scan_data = self._load_scan_data(options.get('input_file'))
+            
+            # Generate the report
+            self.logger.info("Generating security analysis report...")
+            report_data = self.process_item(scan_data)
+            
+            if report_data.get('error'):
+                raise Exception(report_data.get('message', 'Unknown error in report generation'))
+            
+            # Handle output
+            self._handle_output(report_data, options)
+            
+            self.logger.info("Report generation completed successfully")
+            return report_data
+            
+        except Exception as e:
+            self.logger.error(f"Error in report generation: {e}")
+            raise
+    
+    def _load_scan_data(self, input_file):
+        """Load scan data from file or find latest scan result"""
+        import glob
+        import os
+        
+        if not input_file:
+            # Look for recent scan results in current directory
+            scan_files = glob.glob("scan_result_*.json")
+            if scan_files:
+                # Get the most recent file
+                input_file = max(scan_files, key=os.path.getctime)
+                self.logger.info(f"Using latest scan result: {input_file}")
+            else:
+                raise Exception("No scan result files found. Specify input file.")
+        
+        if not os.path.exists(input_file):
+            raise Exception(f"Input file not found: {input_file}")
+        
+        self.logger.info(f"Loading scan results from: {input_file}")
+        
+        with open(input_file, 'r') as f:
+            return json.load(f)
+    
+    def _handle_output(self, report_data, options):
+        """Handle different output formats and destinations"""
+        import json
+        from datetime import datetime
+        
+        # Determine output file
+        output_file = options.get('output_file')
+        if options.get('auto_save') or not output_file:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            target_ip = report_data.get('target_info', {}).get('ip_address', 'unknown').replace('.', '_')
+            output_file = f"security_report_{target_ip}_{timestamp}.json"
+        
+        # Save report if output file specified
+        if output_file:
+            saved_file = self.save_report(report_data, output_file)
+            self.logger.info(f"Report saved to: {saved_file}")
+        
+        # Handle different output formats
+        report_format = options.get('format', 'json')
+        if report_format == 'summary':
+            self._print_summary(report_data)
+        elif report_format == 'json' and not output_file:
+            # Print JSON to stdout if no output file
+            print(json.dumps(report_data, indent=2, default=str))
+        
+        # Handle email if requested
+        if options.get('email_report'):
+            self._send_email_report(report_data, options.get('recipient_email'))
+    
+    def _print_summary(self, report_data):
+        """Print a summary of the report to stdout"""
+        print(f"\n📊 Security Report Summary:")
+        summary = report_data.get('executive_summary', {})
+        print(f"   Overall Risk Level: {summary.get('overall_risk_level', 'Unknown')}")
+        print(f"   Total Vulnerabilities: {summary.get('total_vulnerabilities', 0)}")
+        print(f"   Critical Issues: {summary.get('critical_vulnerabilities', 0)}")
+        print(f"   Open Ports: {summary.get('open_ports_count', 0)}")
+        
+        findings = report_data.get('security_findings', [])
+        critical_findings = [f for f in findings if f.get('severity') == 'CRITICAL']
+        if critical_findings:
+            print(f"   Critical Findings:")
+            for finding in critical_findings[:3]:  # Show top 3
+                print(f"     • {finding.get('title', 'Unknown')}")
+    
+    def _send_email_report(self, report_data, recipient_email):
+        """Send report via email (placeholder for external library)"""
+        if self.external_reporter:
+            try:
+                self.external_reporter.send_email_report(report_data, recipient_email)
+                self.logger.info(f"Email report sent to {recipient_email}")
+            except Exception as e:
+                self.logger.error(f"Failed to send email report: {e}")
+        else:
+            self.logger.warning("Email notification not available - no external report library configured")

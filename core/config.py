@@ -85,6 +85,39 @@ class PublishConfig:
     api_endpoint: Optional[str] = field(default_factory=lambda: os.getenv('API_ENDPOINT'))
 
 
+@dataclass
+class ReportConfig:
+    """Report generation configuration settings."""
+    external_library: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': False,
+        'module_path': None,
+        'class_name': None,
+        'config': {}
+    })
+    external_generator: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': False,
+        'class_path': None,
+        'config': {}
+    })
+    config: Dict[str, Any] = field(default_factory=lambda: {
+        'format': 'json',
+        'include_summary': True,
+        'include_recommendations': True,
+        'severity_threshold': 'medium',
+        'auto_save': True,
+        'output_format': ['json', 'summary']
+    })
+    email: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': False,
+        'smtp_server': os.getenv('SMTP_SERVER'),
+        'smtp_port': int(os.getenv('SMTP_PORT', '587')),
+        'username': os.getenv('SMTP_USERNAME'),
+        'password': os.getenv('SMTP_PASSWORD'),
+        'from_email': os.getenv('REPORT_FROM_EMAIL'),
+        'default_recipients': []
+    })
+
+
 class Config:
     """
     Main configuration class that aggregates all configuration settings.
@@ -106,7 +139,7 @@ class Config:
         self.logging = LoggingConfig()
         self.recon = ReconConfig()
         self.publish = PublishConfig()
-        self.scoring = ScoringConfig()
+        self.reporting = ReportConfig()
         
         # Apply any overrides
         if config_overrides:
@@ -130,6 +163,7 @@ class Config:
             'recon': self.recon.__dict__,
             'publish': self.publish.__dict__,
             'scoring': self.scoring.__dict__,
+            'reporting': self.reporting.__dict__,
         }
     
     @classmethod
