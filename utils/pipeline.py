@@ -318,6 +318,38 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running scoring agent {agent_name}: {e}")
             return []
     
+    def run_report_stage(self, agent_name: str = "ReportAgent", report_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Run the report generation stage independently.
+        
+        Args:
+            agent_name: Name of report agent to use
+            report_options: Report generation options (input_file, output_file, format, etc.)
+            
+        Returns:
+            Report generation results
+        """
+        self.logger.info(f"📊 Running report stage: {agent_name}")
+        try:
+            agent = self.agent_registry.create_process_agent(agent_name, self.config)
+            
+            if not agent:
+                raise Exception(f"Failed to create report agent: {agent_name}")
+            
+            # Generate report using the agent with provided options
+            if hasattr(agent, 'generate_and_output_report') and report_options:
+                results = agent.generate_and_output_report(report_options)
+            else:
+                # Fallback to standard execute method
+                results = agent.execute()
+            
+            self.logger.info(f"📊 Report stage completed successfully")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error running report agent {agent_name}: {e}")
+            return {}
+    
     def run_single_stage(
         self,
         stage: str,
@@ -328,7 +360,7 @@ class PipelineOrchestrator:
         Run a single pipeline stage.
         
         Args:
-            stage: Stage name ('recon', 'scan', 'process', 'score', 'publish')
+            stage: Stage name ('recon', 'scan', 'process', 'score', 'report', 'publish')
             agent_name: Specific agent name to use
             **stage_args: Additional arguments for the stage
             
@@ -353,6 +385,10 @@ class PipelineOrchestrator:
         elif stage == 'publish':
             processed_results = stage_args.get('processed_results')
             return self.run_publish_stage(agent_name or "PublisherAgent", processed_results)
+        
+        elif stage == 'report':
+            report_options = stage_args.get('report_options')
+            return self.run_report_stage(agent_name or "ReportAgent", report_options)
         
         else:
             raise ValueError(f"Unknown stage: {stage}")

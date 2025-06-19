@@ -135,8 +135,14 @@ def run_single_stage(
             print(f"✅ Publishing completed: {status}")
             
         elif stage == 'report':
-            # Report stage needs access to args, so we'll handle it differently
-            print("✅ Report stage will be handled in main function")
+            orchestrator = create_orchestrator(config)
+            # For single stage report, use basic options
+            report_options = {
+                'format': 'summary',  # Default to summary for single stage
+                'auto_save': False
+            }
+            results = orchestrator.run_report_stage(agent_name or 'ReportAgent', report_options)
+            print(f"✅ Report generation completed successfully!")
             
         else:
             print(f"❌ Unknown stage: {stage}")
@@ -538,44 +544,6 @@ def scan_target(config: Config, target: str, debug: bool = False) -> None:
         traceback.print_exc()
 
 
-def run_report_stage(config: Config, args) -> None:
-    """
-    Run the report generation stage using the report agent.
-    
-    Args:
-        config: Configuration instance
-        args: Parsed command line arguments containing report options
-    """
-    print("📊 Running report generation stage")
-    
-    try:
-        from agents.report.report_agent import ReportAgent
-        
-        # Initialize the report agent
-        report_agent = ReportAgent(config)
-        
-        # Configure report options
-        report_options = {
-            'input_file': args.report_input,
-            'output_file': args.report_output,
-            'format': args.report_format or 'json',
-            'auto_save': args.auto_save_report,
-            'email_report': args.report_email,
-            'recipient_email': args.recipient_email
-        }
-        
-        # Generate and output the report
-        report_agent.generate_and_output_report(report_options)
-        
-        print("✅ Report generation completed successfully!")
-        
-    except Exception as e:
-        print(f"❌ Report generation failed: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
 def main():
     """Main entry point."""
     try:
@@ -625,8 +593,21 @@ def main():
                 results = orchestrator.run_scoring_stage(args.agent or 'ScoringAgent', force_rescore=args.force_rescore)
                 print(f"✅ Scoring completed: {len(results)} results scored")
             elif args.stage == 'report':
-                # Report stage needs special handling with args
-                run_report_stage(config, args)
+                # Report stage now uses orchestrator pattern like score stage
+                orchestrator = create_orchestrator(config)
+                
+                # Configure report options from args
+                report_options = {
+                    'input_file': args.report_input,
+                    'output_file': args.report_output,
+                    'format': args.report_format or 'json',
+                    'auto_save': args.auto_save_report,
+                    'email_report': args.report_email,
+                    'recipient_email': args.recipient_email
+                }
+                
+                results = orchestrator.run_report_stage(args.agent or 'ReportAgent', report_options)
+                print(f"✅ Report generation completed successfully!")
             else:
                 # Run single stage
                 run_single_stage(

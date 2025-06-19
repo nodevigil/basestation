@@ -13,7 +13,6 @@ from datetime import datetime
 from agents.base import ProcessAgent
 from core.config import Config
 
-
 class DefaultReportGenerator:
     """
     Default built-in report generator that creates basic security reports.
@@ -63,6 +62,94 @@ class DefaultReportGenerator:
         }
         
         return report
+
+    def generate_human_report(self, scan_data: Dict[str, Any], use_openai: bool = False, openai_api_key: str = None) -> str:
+        """
+        Generate a human-readable security analysis report from scan data.
+
+        Args:
+            scan_data: Scan data to analyze
+            use_openai: Whether to use OpenAI to enhance the report prose
+            openai_api_key: API key for OpenAI (optional)
+
+        Returns:
+            Plain text human-readable report
+        """
+        summary = self._generate_executive_summary(scan_data)
+        findings = self._analyze_security_findings(scan_data)
+        recommendations = self._generate_recommendations(scan_data)
+
+        lines = []
+        lines.append(f"Security Analysis Report")
+        lines.append(f"Generated: {datetime.utcnow().isoformat()}")
+        lines.append(f"Target IP: {scan_data.get('ip', 'unknown')}")
+        lines.append("")
+
+        # Executive Summary
+        lines.append("Executive Summary:")
+        lines.append(f"  - Overall Risk Level: {summary.get('overall_risk_level')}")
+        lines.append(f"  - Vulnerabilities found: {summary.get('total_vulnerabilities')}")
+        lines.append(f"  - Critical: {summary.get('critical_vulnerabilities')}, High: {summary.get('high_vulnerabilities')}, Medium: {summary.get('medium_vulnerabilities')}")
+        lines.append(f"  - Open Ports: {summary.get('open_ports_count')}")
+        lines.append(f"  - {summary.get('summary_text')}")
+        lines.append("")
+
+        # Findings
+        lines.append("Key Findings:")
+        if findings:
+            for f in findings[:10]:  # limit to 10 for human readability
+                lines.append(f"  - [{f.get('severity')}] {f.get('title')}: {f.get('description')}")
+                if f.get("impact"):
+                    lines.append(f"      Impact: {f.get('impact')}")
+        else:
+            lines.append("  No findings identified.")
+        lines.append("")
+
+        # Recommendations
+        lines.append("Recommendations:")
+        if recommendations:
+            for r in recommendations:
+                lines.append(f"  - [{r.get('priority')}] {r.get('title')}: {r.get('description')} (Effort: {r.get('effort')})")
+        else:
+            lines.append("  No recommendations at this time.")
+        lines.append("")
+
+        # Technical Appendix
+        lines.append("Technical Details:")
+        lines.append(f"  Open Ports: {scan_data.get('open_ports', [])}")
+        lines.append(f"  Services: {scan_data.get('services', {})}")
+        tls = scan_data.get('tls', {})
+        if tls:
+            lines.append(f"  TLS: {tls}")
+        osinfo = scan_data.get('os', {})
+        if osinfo:
+            lines.append(f"  OS: {osinfo}")
+
+        report_text = "\n".join(lines)
+
+        print("\nReport generated successfully.")
+        print(report_text)
+        print("\nReport generated successfully.")
+
+        # Optional: Run through OpenAI for better prose
+        if use_openai and openai_api_key:
+            try:
+                import openai
+                openai.api_key = openai_api_key
+                prompt = (
+                    "Rewrite the following technical security report as a clear, readable summary for a non-technical audience. "
+                    "Keep all findings and recommendations, but make it less formal and more understandable:\n\n"
+                    + report_text
+                )
+                response = openai.ChatCompletion.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1200,
+                )
+                return response.choices[0].message['content'].strip()
+            except Exception as e:
+                report_text += f"\n\n[Note: OpenAI enhancement failed: {e}]"
+        return report_text
     
     def _generate_executive_summary(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate executive summary of security findings."""
@@ -212,7 +299,6 @@ class DefaultReportGenerator:
                 "running_services": scan_data.get('processes', [])
             }
         }
-
 
 class ReportAgent(ProcessAgent):
     """
@@ -531,6 +617,7 @@ class ReportAgent(ProcessAgent):
         return False
 
     def generate_and_output_report(self, options):
+        print("Generating security analysis report with options:", options)
         """Generate report and handle output based on options"""
         try:
             # Load scan data from input
@@ -595,7 +682,15 @@ class ReportAgent(ProcessAgent):
         
         # Handle different output formats
         report_format = options.get('format', 'json')
-        if report_format == 'summary':
+        if report_format == 'human':
+            use_openai = options.get('use_openai', False)
+            openai_key = options.get('openai_api_key')
+            print(self.report_generator.generate_human_report(
+                report_data,
+                use_openai=use_openai,
+                openai_api_key=openai_key
+            ))
+        elif report_format == 'summary':
             self._print_summary(report_data)
         elif report_format == 'json' and not output_file:
             # Print JSON to stdout if no output file
