@@ -12,8 +12,7 @@ To use this library:
      "reporting": {
        "external_library": {
          "enabled": true,
-         "module_path": "docs.examples.example_external_reporter",
-         "class_name": "ExampleReporter"
+         "module_path": "docs.examples.example_external_reporter.ExampleReporter"
        }
      }
    }

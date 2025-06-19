@@ -48,7 +48,7 @@ class ScanConfig:
 @dataclass
 class ScoringConfig:
     """Scoring configuration settings."""
-    scorer_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
+    module_path: Optional[str] = field(default_factory=lambda: os.getenv('SCORER_PATH'))
     fallback_to_builtin: bool = field(default_factory=lambda: os.getenv('SCORER_FALLBACK', 'true').lower() == 'true')
     service_ports: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
         'general': {'allowed_ports': [22, 80, 443, 8080]}
@@ -91,7 +91,6 @@ class ReportConfig:
     external_library: Dict[str, Any] = field(default_factory=lambda: {
         'enabled': False,
         'module_path': None,
-        'class_name': None,
         'config': {}
     })
     external_generator: Dict[str, Any] = field(default_factory=lambda: {

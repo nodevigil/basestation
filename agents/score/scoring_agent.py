@@ -157,18 +157,18 @@ class ScoringAgent(ProcessAgent):
         # Dynamic scorer loading with fallback
         self.trust_scorer = self._load_scorer()
     
-    def _get_scorer(self, scorer_path: str):
+    def _get_scorer(self, module_path: str):
         """
         Dynamically load a scorer class from an external library.
         
         Args:
-            scorer_path: Dot-separated path to scorer class (module.ClassName)
+            module_path: Dot-separated path to scorer class (module.ClassName)
             
         Returns:
             Scorer instance
         """
         try:
-            mod_name, class_name = scorer_path.rsplit('.', 1)
+            mod_name, class_name = module_path.rsplit('.', 1)
             mod = importlib.import_module(mod_name)
             ScorerClass = getattr(mod, class_name)
             
@@ -188,11 +188,11 @@ class ScoringAgent(ProcessAgent):
                 return ScorerClass(ok_ports=ok_ports, weights=weights)
             except TypeError:
                 # Fallback if external scorer doesn't accept these parameters
-                self.logger.warning(f"External scorer '{scorer_path}' doesn't accept configuration parameters")
+                self.logger.warning(f"External scorer '{module_path}' doesn't accept configuration parameters")
                 return ScorerClass()
                 
         except Exception as e:
-            self.logger.debug(f"Failed to load external scorer '{scorer_path}': {e}")
+            self.logger.debug(f"Failed to load external scorer '{module_path}': {e}")
             raise
     
     def _load_scorer(self):
@@ -203,15 +203,15 @@ class ScoringAgent(ProcessAgent):
             Scorer instance (external or default)
         """
         # Try to load external scorer first from config
-        scorer_path = getattr(self.config.scoring, 'scorer_path', None) if hasattr(self.config, 'scoring') else None
+        module_path = getattr(self.config.scoring, 'module_path', None) if hasattr(self.config, 'scoring') else None
         
-        if scorer_path:
+        if module_path:
             try:
-                scorer = self._get_scorer(scorer_path)
-                self.logger.info(f"✅ Loaded external scorer: {scorer_path}")
+                scorer = self._get_scorer(module_path)
+                self.logger.info(f"✅ Loaded external scorer: {module_path}")
                 return scorer
             except Exception as e:
-                self.logger.warning(f"External scorer '{scorer_path}' not available: {e}")
+                self.logger.warning(f"External scorer '{module_path}' not available: {e}")
         
         # When no external scorer is configured, use built-in scorer directly
         self.logger.info("📊 Using built-in DefaultTrustScorer")

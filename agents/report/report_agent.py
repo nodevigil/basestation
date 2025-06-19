@@ -687,15 +687,15 @@ class ReportAgent(ProcessAgent):
             
             if external_library and external_library.get('enabled', False):
                 module_path = external_library.get('module_path')
-                class_name = external_library.get('class_name')
                 
-                if module_path and class_name:
+                if module_path:
                     try:
-                        self.logger.info(f"Loading external report library: {module_path}.{class_name}")
+                        self.logger.info(f"Loading external report library: {module_path}")
                         
-                        # Import the module and get the class
+                        # Import the module and get the class (same pattern as scoring)
                         import importlib
-                        module = importlib.import_module(module_path)
+                        mod_name, class_name = module_path.rsplit('.', 1)
+                        module = importlib.import_module(mod_name)
                         reporter_class = getattr(module, class_name)
                         
                         # Initialize with configuration
@@ -1061,6 +1061,14 @@ class ReportAgent(ProcessAgent):
             List of generated reports
         """
         self.logger.info(f"🚀 Starting ReportAgent execution (scan_id={scan_id}, force_report={force_report})")
+        
+        # Check if external reporter has its own execute method (like external scorers)
+        if self.external_reporter and hasattr(self.external_reporter, 'execute'):
+            try:
+                self.logger.info(f"✅ Using external reporter execute method")
+                return self.external_reporter.execute(scan_id=scan_id, force_report=force_report)
+            except Exception as e:
+                self.logger.warning(f"External reporter execute failed, falling back to built-in: {e}")
         
         # Load scan results from database
         scan_results = self._get_scans_for_reporting(scan_id=scan_id, force_report=force_report)

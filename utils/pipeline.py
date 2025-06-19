@@ -344,8 +344,15 @@ class PipelineOrchestrator:
             if scan_id is not None or force_report or not report_options or not report_options.get('input_file'):
                 # Use the database-driven execute method
                 if hasattr(agent, 'execute'):
+                    print(f"📊 Report options: {report_options}")
+                    print(f"📊 Report options: {report_options}")
+                    print(f"📊 Report options: {report_options}")
+                    print(f"📊 Report options: {report_options}")
+                    print(f"📊 Report options: {report_options}")
+            
                     results = agent.execute(scan_id=scan_id, force_report=force_report)
                 else:
+                    
                     # Fallback to standard execute method
                     results = agent.execute()
             elif hasattr(agent, 'generate_and_output_report') and report_options:

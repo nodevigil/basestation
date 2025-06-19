@@ -107,7 +107,7 @@ def test_external_scorer_loading():
     
     # Create a mock config with external scorer path
     config = Config()
-    config.scorer_path = "pgdn.scoring.advanced_scorer.AdvancedScorer"
+    config.module_path = "pgdn.scoring.advanced_scorer.AdvancedScorer"
     
     scoring_agent = ScoringAgent(config)
     
