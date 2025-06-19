@@ -43,22 +43,26 @@ class DefaultReportGenerator:
         Returns:
             Report data with analysis, findings, and recommendations
         """
+        # Extract the actual scan data from the nested structure
+        processed_data = self._normalize_scan_data(scan_data)
+        
+        # Calculate risk score based on vulnerabilities
+        risk_score = self._calculate_risk_score(processed_data)
+        
         report = {
             "report_metadata": {
                 "generated_at": datetime.utcnow().isoformat(),
-                "report_version": "1.0",
-                "generator": "DefaultReportGenerator",
-                "scan_hash": hashlib.sha256(json.dumps(scan_data, sort_keys=True).encode()).hexdigest()
+                "report_version": "2.0",
+                "custom_analysis": True,
+                "risk_score": risk_score
             },
-            "target_info": {
-                "ip_address": scan_data.get("ip", "unknown"),
-                "hostname": scan_data.get("hostname", "unknown"),
-                "scan_timestamp": scan_data.get("timestamp", "unknown")
+            "executive_summary": self._generate_executive_summary(processed_data),
+            "detailed_analysis": {
+                "vulnerability_breakdown": self._get_vulnerability_breakdown(processed_data),
+                "port_analysis": self._get_port_analysis(processed_data),
+                "compliance_check": self._get_compliance_status(processed_data)
             },
-            "executive_summary": self._generate_executive_summary(scan_data),
-            "security_findings": self._analyze_security_findings(scan_data),
-            "recommendations": self._generate_recommendations(scan_data),
-            "technical_details": self._extract_technical_details(scan_data)
+            "raw_data": scan_data
         }
         
         return report
@@ -75,23 +79,29 @@ class DefaultReportGenerator:
         Returns:
             Plain text human-readable report
         """
-        summary = self._generate_executive_summary(scan_data)
-        findings = self._analyze_security_findings(scan_data)
-        recommendations = self._generate_recommendations(scan_data)
+        # Normalize the data first
+        normalized_data = self._normalize_scan_data(scan_data)
+        
+        summary = self._generate_executive_summary(normalized_data)
+        findings = self._analyze_security_findings(normalized_data)
+        recommendations = self._generate_recommendations(normalized_data)
 
         lines = []
         lines.append(f"Security Analysis Report")
         lines.append(f"Generated: {datetime.utcnow().isoformat()}")
-        lines.append(f"Target IP: {scan_data.get('ip', 'unknown')}")
+        lines.append(f"Target IP: {normalized_data.get('ip', 'unknown')}")
         lines.append("")
 
         # Executive Summary
         lines.append("Executive Summary:")
         lines.append(f"  - Overall Risk Level: {summary.get('overall_risk_level')}")
         lines.append(f"  - Vulnerabilities found: {summary.get('total_vulnerabilities')}")
-        lines.append(f"  - Critical: {summary.get('critical_vulnerabilities')}, High: {summary.get('high_vulnerabilities')}, Medium: {summary.get('medium_vulnerabilities')}")
+        lines.append(f"  - Critical: {summary.get('critical_vulnerabilities')}")
         lines.append(f"  - Open Ports: {summary.get('open_ports_count')}")
-        lines.append(f"  - {summary.get('summary_text')}")
+        
+        custom_recs = summary.get('custom_recommendations', [])
+        if custom_recs:
+            lines.append(f"  - Key Issues: {'; '.join(custom_recs[:2])}")
         lines.append("")
 
         # Findings
@@ -116,14 +126,9 @@ class DefaultReportGenerator:
 
         # Technical Appendix
         lines.append("Technical Details:")
-        lines.append(f"  Open Ports: {scan_data.get('open_ports', [])}")
-        lines.append(f"  Services: {scan_data.get('services', {})}")
-        tls = scan_data.get('tls', {})
-        if tls:
-            lines.append(f"  TLS: {tls}")
-        osinfo = scan_data.get('os', {})
-        if osinfo:
-            lines.append(f"  OS: {osinfo}")
+        lines.append(f"  Open Ports: {normalized_data.get('open_ports', [])}")
+        lines.append(f"  Services: {normalized_data.get('services', {})}")
+        lines.append(f"  Total Vulnerabilities: {len(normalized_data.get('vulnerabilities', []))}")
 
         report_text = "\n".join(lines)
 
@@ -153,38 +158,74 @@ class DefaultReportGenerator:
     
     def _generate_executive_summary(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate executive summary of security findings."""
+        vulnerabilities = scan_data.get('vulnerabilities', [])
         open_ports = scan_data.get('open_ports', [])
-        vulns = scan_data.get('vulns', {})
         
-        # Count severity levels
-        critical_count = len([v for v in vulns.values() if v.get('severity') == 'CRITICAL'])
-        high_count = len([v for v in vulns.values() if v.get('severity') == 'HIGH'])
-        medium_count = len([v for v in vulns.values() if v.get('severity') == 'MEDIUM'])
+        # Count vulnerabilities by severity
+        severity_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'LOW').upper()
+            if severity in severity_counts:
+                severity_counts[severity] += 1
         
-        risk_level = "LOW"
+        # Determine overall risk level
+        total_vulns = len(vulnerabilities)
+        critical_count = severity_counts['CRITICAL']
+        high_count = severity_counts['HIGH']
+        medium_count = severity_counts['MEDIUM']
+        
         if critical_count > 0:
             risk_level = "CRITICAL"
         elif high_count > 0:
             risk_level = "HIGH"
         elif medium_count > 0 or len(open_ports) > 5:
             risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+        
+        # Generate recommendations
+        recommendations = []
+        if critical_count > 0:
+            recommendations.append(f"Immediately patch {critical_count} critical vulnerabilities")
+        if high_count > 0:
+            recommendations.append(f"Address {high_count} high-severity vulnerabilities")
+        
+        # Check for risky ports
+        high_risk_ports = {2375, 3306, 1433, 5432, 23, 135, 445, 3389}
+        risky_open_ports = [p for p in open_ports if p in high_risk_ports]
+        if risky_open_ports:
+            recommendations.append(f"Secure or close high-risk ports: {', '.join(map(str, risky_open_ports))}")
+        
+        if len(open_ports) > 10:
+            recommendations.append("Review and minimize open ports to reduce attack surface")
         
         return {
             "overall_risk_level": risk_level,
-            "total_vulnerabilities": len(vulns),
+            "total_vulnerabilities": total_vulns,
             "critical_vulnerabilities": critical_count,
-            "high_vulnerabilities": high_count,
-            "medium_vulnerabilities": medium_count,
             "open_ports_count": len(open_ports),
-            "summary_text": f"Security scan identified {len(vulns)} vulnerabilities with {risk_level} overall risk level."
+            "custom_recommendations": recommendations
         }
     
     def _analyze_security_findings(self, scan_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Analyze and categorize security findings."""
         findings = []
         
-        # Check for critical exposures
+        vulnerabilities = scan_data.get('vulnerabilities', [])
         open_ports = scan_data.get('open_ports', [])
+        
+        # Add vulnerability findings
+        for vuln in vulnerabilities:
+            findings.append({
+                "finding_id": vuln.get('cve_id', f"VULN_{vuln.get('id', 'UNKNOWN')}"),
+                "severity": vuln.get('severity', 'UNKNOWN'),
+                "title": vuln.get('cve_id', f'Vulnerability {vuln.get("id", "Unknown")}'),
+                "description": vuln.get('description', 'No description available')[:200] + "..." if len(vuln.get('description', '')) > 200 else vuln.get('description', 'No description available'),
+                "impact": self._assess_vulnerability_impact(vuln),
+                "confidence": "HIGH"
+            })
+        
+        # Check for critical exposures
         if 2375 in open_ports:
             findings.append({
                 "finding_id": "DOCKER_SOCKET_EXPOSED",
@@ -200,40 +241,81 @@ class DefaultReportGenerator:
             23: "Telnet - Unencrypted remote access",
             135: "RPC Endpoint Mapper - Windows RPC",
             445: "SMB - File sharing protocol",
-            3389: "RDP - Remote Desktop Protocol"
+            3389: "RDP - Remote Desktop Protocol",
+            3306: "MySQL - Database server",
+            1433: "SQL Server - Database server",
+            5432: "PostgreSQL - Database server"
         }
         
         for port in open_ports:
             if port in risky_ports:
                 findings.append({
                     "finding_id": f"RISKY_PORT_{port}",
-                    "severity": "MEDIUM",
+                    "severity": "MEDIUM" if port not in [2375, 3306, 1433, 5432] else "HIGH",
                     "title": f"Risky Port {port} Open",
                     "description": risky_ports[port],
                     "impact": "Potential unauthorized access vector",
                     "confidence": "HIGH"
                 })
         
-        # Add vulnerability findings
-        vulns = scan_data.get('vulns', {})
-        for vuln_id, vuln_data in vulns.items():
-            findings.append({
-                "finding_id": vuln_id,
-                "severity": vuln_data.get('severity', 'UNKNOWN'),
-                "title": vuln_data.get('title', f'Vulnerability {vuln_id}'),
-                "description": vuln_data.get('description', 'No description available'),
-                "impact": vuln_data.get('impact', 'Impact assessment needed'),
-                "confidence": vuln_data.get('confidence', 'MEDIUM')
-            })
-        
         return findings
+    
+    def _assess_vulnerability_impact(self, vuln: Dict[str, Any]) -> str:
+        """Assess the impact of a vulnerability."""
+        severity = vuln.get('severity', 'LOW').upper()
+        cvss_score = vuln.get('cvss_score')
+        
+        if severity == 'CRITICAL':
+            return "Critical system compromise possible"
+        elif severity == 'HIGH':
+            return "High risk of system compromise"
+        elif severity == 'MEDIUM':
+            return "Moderate security risk"
+        else:
+            return "Low security risk"
     
     def _generate_recommendations(self, scan_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Generate security recommendations based on findings."""
         recommendations = []
         
+        vulnerabilities = scan_data.get('vulnerabilities', [])
         open_ports = scan_data.get('open_ports', [])
-        vulns = scan_data.get('vulns', {})
+        
+        # Count vulnerabilities by severity
+        critical_vulns = [v for v in vulnerabilities if v.get('severity') == 'CRITICAL']
+        high_vulns = [v for v in vulnerabilities if v.get('severity') == 'HIGH']
+        medium_vulns = [v for v in vulnerabilities if v.get('severity') == 'MEDIUM']
+        
+        # Critical vulnerability recommendations
+        if critical_vulns:
+            recommendations.append({
+                "priority": "CRITICAL",
+                "category": "Vulnerability Management",
+                "title": "Patch Critical Vulnerabilities",
+                "description": f"Immediately patch {len(critical_vulns)} critical vulnerabilities including: {', '.join([v.get('cve_id', 'Unknown') for v in critical_vulns[:3]])}",
+                "effort": "High"
+            })
+        
+        # High vulnerability recommendations
+        if high_vulns:
+            recommendations.append({
+                "priority": "HIGH",
+                "category": "Vulnerability Management", 
+                "title": "Address High-Severity Vulnerabilities",
+                "description": f"Patch {len(high_vulns)} high-severity vulnerabilities",
+                "effort": "Medium"
+            })
+        
+        # SSH-specific recommendations
+        ssh_vulns = [v for v in vulnerabilities if 'SSH' in v.get('description', '')]
+        if ssh_vulns:
+            recommendations.append({
+                "priority": "HIGH",
+                "category": "Service Security",
+                "title": "Update OpenSSH",
+                "description": f"Update OpenSSH to version 9.6+ to address {len(ssh_vulns)} known vulnerabilities",
+                "effort": "Medium"
+            })
         
         # Docker socket recommendations
         if 2375 in open_ports:
@@ -245,36 +327,34 @@ class DefaultReportGenerator:
                 "effort": "Medium"
             })
         
+        # Database security recommendations
+        db_ports = [p for p in open_ports if p in [3306, 1433, 5432]]
+        if db_ports:
+            recommendations.append({
+                "priority": "HIGH",
+                "category": "Database Security",
+                "title": "Secure Database Access",
+                "description": f"Restrict database access and ensure authentication for ports: {', '.join(map(str, db_ports))}",
+                "effort": "Medium"
+            })
+        
         # General port security
         if len(open_ports) > 10:
             recommendations.append({
                 "priority": "MEDIUM",
                 "category": "Network Security",
                 "title": "Review Open Ports",
-                "description": "Review all open ports and close unnecessary services to reduce attack surface",
+                "description": f"Review all {len(open_ports)} open ports and close unnecessary services to reduce attack surface",
                 "effort": "Low"
             })
         
-        # Vulnerability patching
-        if vulns:
-            critical_vulns = [v for v in vulns.values() if v.get('severity') == 'CRITICAL']
-            if critical_vulns:
-                recommendations.append({
-                    "priority": "CRITICAL",
-                    "category": "Vulnerability Management",
-                    "title": "Patch Critical Vulnerabilities",
-                    "description": f"Immediately patch {len(critical_vulns)} critical vulnerabilities",
-                    "effort": "High"
-                })
-        
-        # TLS configuration
-        tls = scan_data.get("tls", {})
-        if tls.get("issuer") in (None, "Self-signed"):
+        # Medium vulnerability recommendations
+        if medium_vulns and len(medium_vulns) > 5:
             recommendations.append({
                 "priority": "MEDIUM",
-                "category": "Encryption",
-                "title": "Configure Valid TLS Certificate",
-                "description": "Replace self-signed certificate with valid CA-issued certificate",
+                "category": "Vulnerability Management",
+                "title": "Address Medium-Severity Vulnerabilities",
+                "description": f"Plan to address {len(medium_vulns)} medium-severity vulnerabilities",
                 "effort": "Medium"
             })
         
@@ -282,24 +362,265 @@ class DefaultReportGenerator:
     
     def _extract_technical_details(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract technical details for the report."""
+        open_ports = scan_data.get('open_ports', [])
+        services = scan_data.get('services', {})
+        vulnerabilities = scan_data.get('vulnerabilities', [])
+        nmap_data = scan_data.get('nmap_data', {})
+        
         return {
             "network_information": {
-                "open_ports": scan_data.get('open_ports', []),
-                "services": scan_data.get('services', {}),
-                "protocols": scan_data.get('protocols', [])
+                "open_ports": open_ports,
+                "services": services,
+                "total_ports_scanned": len(nmap_data.get('ports', [])),
+                "scan_duration": nmap_data.get('scan_time', 'unknown')
             },
-            "security_configuration": {
-                "tls_configuration": scan_data.get('tls', {}),
-                "authentication_methods": scan_data.get('auth', {}),
-                "encryption_status": scan_data.get('encryption', {})
+            "vulnerability_summary": {
+                "total_vulnerabilities": len(vulnerabilities),
+                "cve_count": len([v for v in vulnerabilities if v.get('cve_id')]),
+                "severity_distribution": self._get_severity_distribution(vulnerabilities)
             },
-            "system_information": {
-                "operating_system": scan_data.get('os', {}),
-                "software_versions": scan_data.get('versions', {}),
-                "running_services": scan_data.get('processes', [])
+            "service_analysis": {
+                "identified_services": list(set(services.values())),
+                "high_risk_services": self._identify_high_risk_services(open_ports, services),
+                "version_information": "Limited version detection performed"
             }
         }
+    
+    def _get_severity_distribution(self, vulnerabilities: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Get distribution of vulnerabilities by severity."""
+        distribution = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'LOW').upper()
+            if severity in distribution:
+                distribution[severity] += 1
+        return distribution
+    
+    def _identify_high_risk_services(self, open_ports: List[int], services: Dict[int, str]) -> List[str]:
+        """Identify high-risk services from open ports."""
+        high_risk_ports = {2375, 3306, 1433, 5432, 23, 135, 445, 3389}
+        risky_services = []
+        
+        for port in open_ports:
+            if port in high_risk_ports:
+                service = services.get(port, 'unknown')
+                risky_services.append(f"{service} (port {port})")
+        
+        return risky_services
 
+    def _normalize_scan_data(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize scan data from various input formats to a consistent structure.
+        
+        Args:
+            scan_data: Raw scan data in various possible formats
+            
+        Returns:
+            Normalized scan data with consistent structure
+        """
+        normalized = {
+            'ip': 'unknown',
+            'open_ports': [],
+            'vulnerabilities': [],
+            'services': {},
+            'nmap_data': {},
+            'scan_timestamp': None
+        }
+        
+        # Handle different scan data structures
+        if 'raw_data' in scan_data:
+            # This is an already processed report - extract the raw scan data
+            raw_data = scan_data['raw_data']
+            
+            # Get IP from multiple possible locations
+            normalized['ip'] = raw_data.get('ip_address', raw_data.get('address', 'unknown'))
+            
+            # Extract data from generic_scan section
+            if 'generic_scan' in raw_data:
+                generic_scan = raw_data['generic_scan']
+                normalized['open_ports'] = generic_scan.get('open_ports', [])
+                
+                # Extract vulnerabilities from the vulns structure
+                vulns_data = generic_scan.get('vulns', {})
+                for port, port_vulns in vulns_data.items():
+                    if isinstance(port_vulns, list):
+                        normalized['vulnerabilities'].extend(port_vulns)
+                
+                # Extract service information from nmap data
+                nmap_data = generic_scan.get('nmap', {})
+                normalized['nmap_data'] = nmap_data
+                if 'ports' in nmap_data:
+                    for port_info in nmap_data['ports']:
+                        port = port_info.get('port')
+                        service = port_info.get('service', 'unknown')
+                        if port:
+                            normalized['services'][port] = service
+                
+                normalized['scan_timestamp'] = raw_data.get('scan_date')
+            
+        elif 'generic_scan' in scan_data:
+            # This is the current structure from the security report
+            generic_scan = scan_data['generic_scan']
+            
+            normalized['ip'] = generic_scan.get('ip', scan_data.get('ip_address', 'unknown'))
+            normalized['open_ports'] = generic_scan.get('open_ports', [])
+            
+            # Extract vulnerabilities from the vulns structure
+            vulns_data = generic_scan.get('vulns', {})
+            for port, port_vulns in vulns_data.items():
+                if isinstance(port_vulns, list):
+                    normalized['vulnerabilities'].extend(port_vulns)
+            
+            # Extract service information from nmap data
+            nmap_data = generic_scan.get('nmap', {})
+            normalized['nmap_data'] = nmap_data
+            if 'ports' in nmap_data:
+                for port_info in nmap_data['ports']:
+                    port = port_info.get('port')
+                    service = port_info.get('service', 'unknown')
+                    if port:
+                        normalized['services'][port] = service
+            
+            normalized['scan_timestamp'] = scan_data.get('scan_date')
+            
+        elif 'ip' in scan_data or 'ip_address' in scan_data:
+            # Direct format with ip, open_ports, etc.
+            normalized['ip'] = scan_data.get('ip', scan_data.get('ip_address', 'unknown'))
+            normalized['open_ports'] = scan_data.get('open_ports', [])
+            normalized['vulnerabilities'] = scan_data.get('vulnerabilities', [])
+            normalized['services'] = scan_data.get('services', {})
+            normalized['scan_timestamp'] = scan_data.get('scan_date', scan_data.get('timestamp'))
+            
+        return normalized
+    
+    def _calculate_risk_score(self, scan_data: Dict[str, Any]) -> float:
+        """
+        Calculate overall risk score based on vulnerabilities and exposed services.
+        
+        Args:
+            scan_data: Normalized scan data
+            
+        Returns:
+            Risk score between 0.0 and 10.0
+        """
+        vulnerabilities = scan_data.get('vulnerabilities', [])
+        open_ports = scan_data.get('open_ports', [])
+        
+        # Severity weights for vulnerabilities
+        severity_weights = {
+            'CRITICAL': 10.0,
+            'HIGH': 7.0,
+            'MEDIUM': 4.0,
+            'LOW': 1.0
+        }
+        
+        # Calculate vulnerability score
+        vuln_score = 0.0
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'LOW').upper()
+            vuln_score += severity_weights.get(severity, 1.0)
+        
+        # Add bonus risk for high-risk ports
+        high_risk_ports = {2375, 3306, 1433, 5432, 23, 135, 445, 3389}
+        risk_port_count = len([p for p in open_ports if p in high_risk_ports])
+        port_risk_score = risk_port_count * 2.0
+        
+        # Combine scores and normalize to 0-10 scale
+        total_score = min(vuln_score + port_risk_score, 100.0)
+        return round(total_score / 10.0, 1)
+    
+    def _get_vulnerability_breakdown(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get breakdown of vulnerabilities by severity and type."""
+        vulnerabilities = scan_data.get('vulnerabilities', [])
+        
+        # Count by severity
+        severity_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        type_counts = {}
+        
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'LOW').upper()
+            if severity in severity_counts:
+                severity_counts[severity] += 1
+            
+            # Categorize by type (simplified)
+            if 'SSH' in vuln.get('description', ''):
+                type_counts['SSH'] = type_counts.get('SSH', 0) + 1
+            elif 'TLS' in vuln.get('description', '') or 'SSL' in vuln.get('description', ''):
+                type_counts['TLS/SSL'] = type_counts.get('TLS/SSL', 0) + 1
+            else:
+                type_counts['Other'] = type_counts.get('Other', 0) + 1
+        
+        return {
+            'by_severity': severity_counts,
+            'by_type': type_counts,
+            'trends': []
+        }
+    
+    def _get_port_analysis(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get analysis of open ports and services."""
+        open_ports = scan_data.get('open_ports', [])
+        services = scan_data.get('services', {})
+        
+        # Identify common services
+        common_services = []
+        for port in open_ports:
+            service = services.get(port, 'unknown')
+            if service != 'unknown':
+                common_services.append(f"{service} ({port})")
+        
+        # Identify high-risk ports
+        high_risk_ports = {
+            2375: "Docker API (unencrypted)",
+            3306: "MySQL Database", 
+            1433: "SQL Server",
+            5432: "PostgreSQL",
+            23: "Telnet (unencrypted)",
+            135: "RPC Endpoint Mapper",
+            445: "SMB File Sharing",
+            3389: "Remote Desktop Protocol"
+        }
+        
+        risky_ports = []
+        for port in open_ports:
+            if port in high_risk_ports:
+                risky_ports.append(f"{port}: {high_risk_ports[port]}")
+        
+        return {
+            'total_open': len(open_ports),
+            'common_services': common_services,
+            'high_risk_ports': risky_ports
+        }
+    
+    def _get_compliance_status(self, scan_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get compliance status assessment."""
+        vulnerabilities = scan_data.get('vulnerabilities', [])
+        open_ports = scan_data.get('open_ports', [])
+        
+        # Simple compliance assessment
+        has_critical_vulns = any(v.get('severity') == 'CRITICAL' for v in vulnerabilities)
+        has_risky_ports = bool(set(open_ports) & {2375, 3306, 1433, 5432, 23})
+        
+        compliance_level = "PARTIAL"
+        issues = []
+        
+        if has_critical_vulns:
+            compliance_level = "NON_COMPLIANT"
+            issues.append("Critical vulnerabilities present")
+        
+        if has_risky_ports:
+            if compliance_level != "NON_COMPLIANT":
+                compliance_level = "PARTIAL"
+            issues.append("High-risk ports exposed")
+        
+        if not vulnerabilities and len(open_ports) <= 3:
+            compliance_level = "COMPLIANT"
+        
+        return {
+            'pci_dss': compliance_level,
+            'iso_27001': compliance_level,
+            'nist': compliance_level,
+            'issues': issues
+        }
+    
 class ReportAgent(ProcessAgent):
     """
     Report agent responsible for generating security analysis reports.
@@ -617,6 +938,7 @@ class ReportAgent(ProcessAgent):
         return False
 
     def generate_and_output_report(self, options):
+        print("Generating security analysis report with options:", options)
         print("Generating security analysis report with options:", options)
         """Generate report and handle output based on options"""
         try:
