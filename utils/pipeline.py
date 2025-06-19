@@ -348,9 +348,9 @@ class PipelineOrchestrator:
                 else:
                     # Fallback to standard execute method
                     results = agent.execute()
-            elif hasattr(agent, 'generate_and_output_report') and report_options:
-                # Use file-based report generation
-                results = agent.generate_and_output_report(report_options)
+            # elif hasattr(agent, 'generate_and_output_report') and report_options:
+            #     # Use file-based report generation
+            #     results = agent.generate_and_output_report(report_options)
             else:
                 # Fallback to standard execute method
                 results = agent.execute()
