@@ -1082,10 +1082,71 @@ pgdn --log-level INFO
 3. **Generate Reports**: Export results for stakeholders
 4. **Follow-up**: Schedule re-scans for remediated issues
 
+## � Background Processing & Queues
+
+The DePIN scanner supports background job processing using Celery and Redis for scalable, distributed operations.
+
+### Quick Start with Queues
+
+1. **Start Queue Services**:
+   ```bash
+   # Start Redis and Celery worker
+   ./celery-manage.sh start-all
+   ```
+
+2. **Queue Operations**:
+   ```bash
+   # Queue any operation by adding --queue flag
+   pgdn --queue                          # Queue full pipeline
+   pgdn --stage scan --queue             # Queue scan stage
+   pgdn --scan-target 192.168.1.100 --queue  # Queue target scan
+   ```
+
+3. **Monitor Tasks**:
+   ```bash
+   # Check task status
+   pgdn --task-id abc123-def456
+   
+   # Open monitoring UI
+   open http://localhost:5555
+   ```
+
+### Queue Benefits
+
+- **Non-blocking Operations**: Long scans don't block your terminal
+- **Batch Processing**: Process multiple targets efficiently
+- **Scalability**: Add more workers for parallel processing
+- **Reliability**: Tasks are persisted and can be retried
+- **Monitoring**: Full visibility into task execution
+
+### Queue Examples
+
+```bash
+# Background scanning with different protocols
+pgdn --stage scan --protocol filecoin --queue
+pgdn --stage scan --protocol sui --queue
+
+# Queue multiple target scans
+pgdn --scan-target 192.168.1.100 --queue
+pgdn --scan-target 10.0.0.50 --queue
+
+# Queue with completion waiting
+pgdn --stage recon --queue --wait-for-completion
+
+# Task management
+pgdn --task-id 12345-67890  # Check status
+pgdn --cancel-task 12345-67890  # Cancel task
+```
+
+See [Queue Processing Guide](docs/QUEUE_PROCESSING.md) for detailed documentation.
+
 ## 🔮 Future Enhancements
-- **Distributed Processing**: Redis/Celery for distributed task execution
-- **Load Balancing**: Multiple scanner instances with work distribution
-- **Streaming**: Real-time result streaming for large networks
+
+### Enhanced Queue Processing
+- **Priority Queues**: High-priority security scans
+- **Scheduled Jobs**: Cron-like scheduling for regular scans  
+- **Worker Pools**: Specialized workers for different protocols
+- **Auto-scaling**: Dynamic worker scaling based on queue depth
 
 ### Additional Protocols
 - **Ethereum**: Beacon chain and execution layer validation

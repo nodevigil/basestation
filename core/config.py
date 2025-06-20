@@ -117,6 +117,21 @@ class ReportConfig:
     })
 
 
+@dataclass
+class CeleryConfig:
+    """Celery configuration settings."""
+    broker_url: str = field(default_factory=lambda: os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0'))
+    result_backend: str = field(default_factory=lambda: os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'))
+    task_serializer: str = field(default_factory=lambda: os.getenv('CELERY_TASK_SERIALIZER', 'json'))
+    result_serializer: str = field(default_factory=lambda: os.getenv('CELERY_RESULT_SERIALIZER', 'json'))
+    accept_content: List[str] = field(default_factory=lambda: os.getenv('CELERY_ACCEPT_CONTENT', 'json').split(','))
+    timezone: str = field(default_factory=lambda: os.getenv('CELERY_TIMEZONE', 'UTC'))
+    enable_utc: bool = field(default_factory=lambda: os.getenv('CELERY_ENABLE_UTC', 'true').lower() == 'true')
+    worker_prefetch_multiplier: int = field(default_factory=lambda: int(os.getenv('CELERY_WORKER_PREFETCH_MULTIPLIER', '1')))
+    task_acks_late: bool = field(default_factory=lambda: os.getenv('CELERY_TASK_ACKS_LATE', 'true').lower() == 'true')
+    worker_max_tasks_per_child: int = field(default_factory=lambda: int(os.getenv('CELERY_WORKER_MAX_TASKS_PER_CHILD', '1000')))
+
+
 class Config:
     """
     Main configuration class that aggregates all configuration settings.
@@ -139,6 +154,7 @@ class Config:
         self.recon = ReconConfig()
         self.publish = PublishConfig()
         self.reporting = ReportConfig()
+        self.celery = CeleryConfig()
         
         # Apply any overrides
         if config_overrides:
@@ -163,6 +179,8 @@ class Config:
             'publish': self.publish.__dict__,
             'scoring': self.scoring.__dict__,
             'reporting': self.reporting.__dict__,
+            'celery': self.celery.__dict__,
+            'celery': self.celery.__dict__,
         }
     
     @classmethod

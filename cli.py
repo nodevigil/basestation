@@ -260,6 +260,7 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Standard Operations
   pgdn                              # Run full pipeline
   pgdn --stage recon                # Run only reconnaissance
   pgdn --stage scan                 # Run only scanning
@@ -286,6 +287,22 @@ Examples:
   pgdn --update-cves --initial-cves # Initial CVE database population
   pgdn --start-cve-scheduler        # Start daily CVE update scheduler
   pgdn --update-cves --offline-cves # Use offline CVE data (no API calls)
+  
+  # Queue Operations (Background Processing)
+  pgdn --queue                      # Queue full pipeline for background processing
+  pgdn --stage scan --queue         # Queue scan stage for background processing
+  pgdn --scan-target 139.84.148.36 --queue # Queue target scan for background processing
+  pgdn --queue --wait-for-completion # Queue job and wait for completion
+  pgdn --task-id abc123-def456      # Check status of queued task
+  pgdn --cancel-task abc123-def456  # Cancel a queued task
+  pgdn --list-tasks                 # List all active queued tasks
+  
+  # Parallel Processing
+  pgdn --parallel-targets 192.168.1.100 192.168.1.101 192.168.1.102 # Scan multiple targets in parallel
+  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --queue --max-parallel 3 # Queue parallel scans with concurrency limit
+  pgdn --target-file targets.txt --queue # Scan targets from file in parallel
+  pgdn --parallel-stages recon scan --queue # Run multiple independent stages in parallel
+  pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
         """
     )
     
@@ -396,6 +413,12 @@ Examples:
     )
     
     parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force operation to bypass caching/recent result checks'
+    )
+    
+    parser.add_argument(
         '--report-input',
         help='Input file for report generation (JSON scan results)'
     )
@@ -427,6 +450,66 @@ Examples:
         '--auto-save-report',
         action='store_true',
         help='Auto-save report with timestamp filename'
+    )
+    
+    parser.add_argument(
+        '--queue',
+        action='store_true',
+        help='Queue the job for background processing using Celery (requires Redis/Celery worker)'
+    )
+
+    parser.add_argument(
+        '--task-id',
+        help='Check status of a specific queued task'
+    )
+
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=10,
+        help='Batch size for queued operations (default: 10)'
+    )
+
+    parser.add_argument(
+        '--wait-for-completion',
+        action='store_true',
+        help='Wait for queued tasks to complete before exiting (use with --queue)'
+    )
+
+    parser.add_argument(
+        '--list-tasks',
+        action='store_true',
+        help='List all active queued tasks and their status'
+    )
+
+    parser.add_argument(
+        '--cancel-task',
+        help='Cancel a specific queued task by ID'
+    )
+    
+    parser.add_argument(
+        '--parallel-targets',
+        nargs='+',
+        help='Scan multiple targets in parallel (space-separated list of IPs/hostnames)'
+    )
+
+    parser.add_argument(
+        '--max-parallel',
+        type=int,
+        default=5,
+        help='Maximum number of parallel tasks/scans (default: 5)'
+    )
+
+    parser.add_argument(
+        '--parallel-stages',
+        nargs='+',
+        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature', 'discovery'],
+        help='Run multiple stages in parallel (space-separated list)'
+    )
+
+    parser.add_argument(
+        '--target-file',
+        help='File containing list of targets to scan (one per line)'
     )
     
     return parser.parse_args()
@@ -581,6 +664,353 @@ def scan_target(config: Config, target: str, debug: bool = False) -> None:
         traceback.print_exc()
 
 
+def check_task_status(task_id: str) -> None:
+    """
+    Check the status of a queued task.
+    
+    Args:
+        task_id: Task ID to check
+    """
+    try:
+        from utils.queue_manager import create_queue_manager
+        from core.config import Config
+        
+        config = Config()
+        queue_manager = create_queue_manager(config)
+        
+        status = queue_manager.get_task_status(task_id)
+        
+        print(f"📋 Task Status for {task_id}:")
+        print(f"   Status: {status['status']}")
+        print(f"   Ready: {'✅' if status['ready'] else '⏳'}")
+        
+        if status['successful']:
+            print(f"   Result: ✅ Completed successfully")
+            if status['result']:
+                result_info = status['result']
+                if isinstance(result_info, dict):
+                    if 'execution_id' in result_info:
+                        print(f"   Execution ID: {result_info['execution_id']}")
+                    if 'results_count' in result_info:
+                        print(f"   Results Count: {result_info['results_count']}")
+        elif status['failed']:
+            print(f"   Result: ❌ Failed")
+            print(f"   Error: {status['error']}")
+        elif not status['ready']:
+            print(f"   Result: ⏳ Pending/Running")
+            
+    except Exception as e:
+        print(f"❌ Error checking task status: {e}")
+
+
+def cancel_task(task_id: str) -> None:
+    """
+    Cancel a queued task.
+    
+    Args:
+        task_id: Task ID to cancel
+    """
+    try:
+        from utils.queue_manager import create_queue_manager
+        from core.config import Config
+        
+        config = Config()
+        queue_manager = create_queue_manager(config)
+        
+        success = queue_manager.cancel_task(task_id)
+        
+        if success:
+            print(f"✅ Task {task_id} has been cancelled")
+        else:
+            print(f"❌ Failed to cancel task {task_id}")
+            
+    except Exception as e:
+        print(f"❌ Error cancelling task: {e}")
+
+
+def list_task_status() -> None:
+    """
+    List all active task statuses (placeholder - would need task tracking).
+    """
+    print("📋 Task Status Listing:")
+    print("   This feature requires additional task tracking implementation.")
+    print("   Use --task-id <id> to check specific task status.")
+
+
+def run_with_queue(config: Config, args) -> None:
+    """
+    Run operations using Celery queue.
+    
+    Args:
+        config: Configuration instance
+        args: Parsed command line arguments
+    """
+    try:
+        from utils.queue_manager import create_queue_manager
+        
+        queue_manager = create_queue_manager(config)
+        task_id = None
+        
+        print("🚀 Queueing job for background processing...")
+        
+        if args.scan_target:
+            # Queue target scan
+            task_id = queue_manager.queue_target_scan(args.scan_target, args.debug)
+            print(f"   📤 Queued target scan for {args.scan_target}")
+            
+        elif args.stage:
+            # Queue single stage
+            if args.stage == 'report':
+                # Configure report options from args
+                report_options = {
+                    'input_file': args.report_input,
+                    'output_file': args.report_output,
+                    'format': args.report_format or 'json',
+                    'auto_save': args.auto_save_report,
+                    'email_report': args.report_email,
+                    'recipient_email': args.recipient_email,
+                    'scan_id': args.scan_id,
+                    'force_report': args.force_report
+                }
+                task_id = queue_manager.queue_single_stage(
+                    args.stage,
+                    args.agent,
+                    args.recon_agents,
+                    args.protocol,
+                    args.debug,
+                    args.force_rescore,
+                    args.host,
+                    report_options=report_options
+                )
+            else:
+                task_id = queue_manager.queue_single_stage(
+                    args.stage,
+                    args.agent,
+                    args.recon_agents,
+                    args.protocol,
+                    args.debug,
+                    args.force_rescore,
+                    args.host
+                )
+            print(f"   📤 Queued single stage: {args.stage}")
+            
+        else:
+            # Queue full pipeline
+            task_id = queue_manager.queue_full_pipeline(args.recon_agents)
+            print(f"   📤 Queued full pipeline")
+        
+        if task_id:
+            print(f"✅ Task queued successfully!")
+            print(f"   Task ID: {task_id}")
+            print(f"   Check status: pgdn --task-id {task_id}")
+            print(f"   Cancel task: pgdn --cancel-task {task_id}")
+            
+            # Wait for completion if requested
+            if args.wait_for_completion:
+                print("⏳ Waiting for task completion...")
+                try:
+                    results = queue_manager.wait_for_tasks(task_id, timeout=3600)  # 1 hour timeout
+                    if task_id in results:
+                        result = results[task_id]
+                        if 'error' in result:
+                            print(f"❌ Task failed: {result['error']}")
+                        else:
+                            print(f"✅ Task completed successfully!")
+                            if isinstance(result, dict) and 'execution_id' in result:
+                                print(f"   Execution ID: {result['execution_id']}")
+                except Exception as e:
+                    print(f"⚠️  Timeout or error waiting for task: {e}")
+                    print(f"   Task is still running. Check status with: pgdn --task-id {task_id}")
+        else:
+            print("❌ Failed to queue task")
+            
+    except ImportError:
+        print("❌ Celery not available. Install with: pip install celery redis")
+        print("   Also ensure Redis server is running and Celery worker is started.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error queueing job: {e}")
+        sys.exit(1)
+
+
+def run_parallel_scans(config: Config, targets: List[str], args) -> None:
+    """
+    Run parallel scans for multiple targets.
+    
+    Args:
+        config: Configuration instance
+        targets: List of targets to scan
+        args: Parsed command line arguments
+    """
+    if not targets:
+        print("❌ No targets provided for parallel scanning")
+        return
+    
+    print(f"🚀 Running parallel scans for {len(targets)} targets")
+    print(f"   Max parallel: {args.max_parallel}")
+    if args.protocol:
+        print(f"   Protocol filter: {args.protocol}")
+    
+    if args.queue:
+        # Queue parallel scans
+        try:
+            from utils.queue_manager import create_queue_manager
+            
+            queue_manager = create_queue_manager(config)
+            result = queue_manager.queue_parallel_scans(
+                targets, 
+                args.max_parallel,
+                args.protocol,
+                args.debug
+            )
+            
+            print(f"✅ Queued {len(result['task_ids'])} parallel scan tasks")
+            print(f"   Task IDs:")
+            for i, task_id in enumerate(result['task_ids'], 1):
+                print(f"     {i}. {task_id}")
+            
+            if args.wait_for_completion:
+                print("\n⏳ Waiting for all tasks to complete...")
+                results = queue_manager.wait_for_tasks(result['task_ids'])
+                
+                successful = sum(1 for r in results.values() if not isinstance(r, dict) or 'error' not in r)
+                print(f"✅ Parallel scans completed: {successful}/{len(targets)} successful")
+            
+        except Exception as e:
+            print(f"❌ Error queueing parallel scans: {e}")
+            sys.exit(1)
+    else:
+        # Run parallel scans directly (not recommended for many targets)
+        print("⚠️  Running parallel scans directly (consider using --queue for better performance)")
+        
+        from agents.scan.node_scanner_agent import NodeScannerAgent
+        import concurrent.futures
+        import threading
+        
+        scanner_agent = NodeScannerAgent(config, protocol_filter=args.protocol, debug=args.debug)
+        
+        def scan_target(target):
+            try:
+                mock_node = {
+                    'id': 0,
+                    'address': target,
+                    'source': 'parallel_direct',
+                    'name': f'Direct parallel scan of {target}'
+                }
+                
+                results = scanner_agent.scan_nodes([mock_node])
+                print(f"✅ Completed scan for {target}")
+                return {'target': target, 'success': True, 'result': results[0] if results else None}
+                
+            except Exception as e:
+                print(f"❌ Failed to scan {target}: {e}")
+                return {'target': target, 'success': False, 'error': str(e)}
+        
+        # Use ThreadPoolExecutor for parallel execution
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_parallel) as executor:
+            futures = {executor.submit(scan_target, target): target for target in targets}
+            results = []
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                results.append(result)
+        
+        successful = sum(1 for r in results if r['success'])
+        print(f"\n✅ Parallel scans completed: {successful}/{len(targets)} successful")
+
+
+def run_parallel_stages(config: Config, stages: List[str], args) -> None:
+    """
+    Run multiple stages in parallel.
+    
+    Args:
+        config: Configuration instance
+        stages: List of stages to run in parallel
+        args: Parsed command line arguments
+    """
+    print(f"🚀 Running {len(stages)} stages in parallel: {', '.join(stages)}")
+    
+    # Validate that stages can run in parallel (some have dependencies)
+    dependent_stages = {
+        'scan': ['recon'],  # scan depends on recon
+        'process': ['scan'],  # process depends on scan
+        'score': ['process'],  # score depends on process
+        'publish': ['score', 'process'],  # publish depends on processing
+        'report': ['scan', 'process']  # report depends on scan and process
+    }
+    
+    # Check for dependencies
+    for stage in stages:
+        deps = dependent_stages.get(stage, [])
+        for dep in deps:
+            if dep not in stages:
+                print(f"⚠️  Warning: Stage '{stage}' typically depends on '{dep}' which is not included")
+    
+    if args.queue:
+        # Queue parallel stages
+        try:
+            from utils.queue_manager import create_queue_manager
+            
+            queue_manager = create_queue_manager(config)
+            
+            # Build stage configurations
+            stage_configs = {}
+            for stage in stages:
+                stage_configs[stage] = {
+                    'agent_name': args.agent,
+                    'recon_agents': args.recon_agents,
+                    'protocol_filter': args.protocol,
+                    'debug': args.debug,
+                    'force_rescore': args.force_rescore,
+                    'host': args.host
+                }
+            
+            stage_task_ids = queue_manager.queue_parallel_stages(stages, stage_configs)
+            
+            print(f"✅ Queued {len(stages)} parallel stage tasks")
+            for stage, task_id in stage_task_ids.items():
+                print(f"   {stage}: {task_id}")
+            
+            if args.wait_for_completion:
+                print("\n⏳ Waiting for all stages to complete...")
+                results = queue_manager.wait_for_tasks(list(stage_task_ids.values()))
+                
+                successful = sum(1 for r in results.values() if not isinstance(r, dict) or 'error' not in r)
+                print(f"✅ Parallel stages completed: {successful}/{len(stages)} successful")
+            
+        except Exception as e:
+            print(f"❌ Error queueing parallel stages: {e}")
+            sys.exit(1)
+    else:
+        print("❌ Parallel stages require queue mode. Use --queue flag.")
+        sys.exit(1)
+
+
+def load_targets_from_file(file_path: str) -> List[str]:
+    """
+    Load targets from a file.
+    
+    Args:
+        file_path: Path to file containing targets (one per line)
+        
+    Returns:
+        List of targets
+    """
+    try:
+        with open(file_path, 'r') as f:
+            targets = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        
+        print(f"📁 Loaded {len(targets)} targets from {file_path}")
+        return targets
+        
+    except FileNotFoundError:
+        print(f"❌ Target file not found: {file_path}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error reading target file: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     try:
@@ -614,8 +1044,26 @@ def main():
                 print("   CVE scheduler stopped")
             return
         
+        # Handle queue-related arguments first
+        if args.task_id:
+            check_task_status(args.task_id)
+            return
+        
+        if args.cancel_task:
+            cancel_task(args.cancel_task)
+            return
+        
+        if args.list_tasks:
+            list_task_status()
+            return
+        
         # Load configuration
         config = load_config(args)
+        
+        # Check if queue mode is requested
+        if args.queue:
+            run_with_queue(config, args)
+            return
         
         # Setup environment
         setup_environment(config)
@@ -659,7 +1107,7 @@ def main():
                     print("   Example: pgdn --stage discovery --host 192.168.1.1")
                     sys.exit(1)
                 orchestrator = create_orchestrator(config)
-                results = orchestrator.run_discovery_stage(args.agent or 'DiscoveryAgent', host=args.host)
+                results = orchestrator.run_discovery_stage(args.agent or 'DiscoveryAgent', host=args.host, force=args.force)
                 print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
             else:
                 # Run single stage

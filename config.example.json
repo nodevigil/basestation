@@ -29,5 +29,17 @@
     "enabled_publishers": ["database", "console", "json_file"],
     "blockchain_endpoint": null,
     "api_endpoint": null
+  },
+  "celery": {
+    "broker_url": "redis://localhost:6379/0",
+    "result_backend": "redis://localhost:6379/0",
+    "task_serializer": "json",
+    "result_serializer": "json",
+    "accept_content": ["json"],
+    "timezone": "UTC",
+    "enable_utc": true,
+    "worker_prefetch_multiplier": 1,
+    "task_acks_late": true,
+    "worker_max_tasks_per_child": 1000
   }
 }

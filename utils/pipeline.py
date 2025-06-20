@@ -412,13 +412,14 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running signature agent {agent_name}: {e}")
             return []
     
-    def run_discovery_stage(self, agent_name: str = "DiscoveryAgent", host: Optional[str] = None) -> List[Dict[str, Any]]:
+    def run_discovery_stage(self, agent_name: str = "DiscoveryAgent", host: Optional[str] = None, force: bool = False) -> List[Dict[str, Any]]:
         """
         Run the network discovery stage independently.
         
         Args:
             agent_name: Name of discovery agent to use
             host: Target host for discovery (IP address or hostname)
+            force: Force discovery even if host was recently scanned
             
         Returns:
             List of processed results with discovery information
@@ -430,8 +431,8 @@ class PipelineOrchestrator:
             if not agent:
                 raise Exception(f"Failed to create discovery agent: {agent_name}")
             
-            # Execute discovery with host parameter
-            processed_results = agent.execute(host=host)
+            # Execute discovery with host parameter and force flag
+            processed_results = agent.execute(host=host, force=force)
             
             self.logger.info(f"🔍 Discovery stage completed successfully")
             return processed_results
