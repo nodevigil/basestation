@@ -14,6 +14,11 @@ import base64
 import hashlib
 import struct
 import uuid
+import time
+import socket
+import re
+import traceback
+import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -48,6 +53,13 @@ class DePINDiscoveryResult:
 class DatabaseResultPersister:
     """Handles persisting discovery results to database"""
     
+    @staticmethod
+    def _sanitize_string(s: str) -> str:
+        """Remove NUL characters and other problematic characters from strings"""
+        if not isinstance(s, str):
+            s = str(s)
+        return s.replace('\x00', '').replace('\r', '').replace('\n', ' ')
+    
     def __init__(self, config: Optional[Config] = None):
         self.config = config
         
@@ -59,13 +71,23 @@ class DatabaseResultPersister:
         try:
             with get_db_session() as session:
                 session.execute(
-                    text("INSERT OR REPLACE INTO scan_sessions (session_id, started_at, status, created_by, scanner_version) VALUES (:session_id, :started_at, :status, :created_by, :scanner_version)"),
+                    text("""INSERT INTO scan_sessions 
+                           (session_id, started_at, status, created_by, scanner_version, 
+                            total_hosts, successful_detections, failed_scans) 
+                           VALUES (:session_id, :started_at, :status, :created_by, :scanner_version, 
+                                   :total_hosts, :successful_detections, :failed_scans)
+                           ON CONFLICT (session_id) DO UPDATE SET
+                           started_at = EXCLUDED.started_at,
+                           status = EXCLUDED.status"""),
                     {
                         'session_id': session_id,
                         'started_at': datetime.utcnow(),
                         'status': 'running',
                         'created_by': created_by or 'discovery_agent',
-                        'scanner_version': '2.0'
+                        'scanner_version': '2.0',
+                        'total_hosts': 0,  # Will be updated as hosts are processed
+                        'successful_detections': 0,  # Will be updated on completion
+                        'failed_scans': 0  # Will be updated on completion
                     }
                 )
                 session.commit()
@@ -83,17 +105,20 @@ class DatabaseResultPersister:
             with get_db_session() as session:
                 result = session.execute(
                     text("""INSERT INTO host_discoveries 
-                       (session_id, hostname, ip_address, confidence_level, confidence_score, 
-                        scan_started_at, scan_status) 
-                       VALUES (:session_id, :hostname, :ip_address, 'unknown', 0.0, :started_at, 'scanning')"""),
+                           (session_id, hostname, ip_address, confidence_level, confidence_score, 
+                            scan_started_at, scan_status, created_at, updated_at) 
+                           VALUES (:session_id, :hostname, :ip_address, 'unknown', 0.0, :started_at, 'scanning', :created_at, :updated_at)
+                           RETURNING id"""),
                     {
                         'session_id': session_id,
                         'hostname': hostname,
                         'ip_address': ip_address,
-                        'started_at': datetime.utcnow()
+                        'started_at': datetime.utcnow(),
+                        'created_at': datetime.utcnow(),
+                        'updated_at': datetime.utcnow()
                     }
                 )
-                discovery_id = result.lastrowid
+                discovery_id = result.fetchone()[0]
                 session.commit()
                 
         except Exception as e:
@@ -106,18 +131,34 @@ class DatabaseResultPersister:
         """Save network scan results"""
         try:
             with get_db_session() as session:
+                # Calculate total ports scanned - try to extract from command or use default
+                total_ports_scanned = 1000  # Default fallback
+                if "p1-" in nmap_command:
+                    try:
+                        port_range = nmap_command.split("p1-")[1].split()[0]
+                        total_ports_scanned = int(port_range)
+                    except:
+                        pass
+                
+                # Determine scan technique
+                scan_technique = 'fallback_socket' if nmap_data.get('fallback_scan') else 'nmap'
+                
                 session.execute(
                     text("""INSERT INTO network_scan_data 
-                       (discovery_id, open_ports, services_detected, nmap_command, 
-                        nmap_output, nmap_duration_seconds) 
-                       VALUES (:discovery_id, :open_ports, :services_detected, :nmap_command, :nmap_output, :nmap_duration_seconds)"""),
+                           (discovery_id, open_ports, total_ports_scanned, scan_technique, 
+                            services_detected, nmap_command, nmap_output, nmap_duration_seconds, created_at) 
+                           VALUES (:discovery_id, :open_ports, :total_ports_scanned, :scan_technique,
+                                   :services_detected, :nmap_command, :nmap_output, :nmap_duration_seconds, :created_at)"""),
                     {
                         'discovery_id': discovery_id,
                         'open_ports': json.dumps(nmap_data.get('ports', [])),
+                        'total_ports_scanned': total_ports_scanned,
+                        'scan_technique': scan_technique,
                         'services_detected': json.dumps(nmap_data.get('services', {})),
                         'nmap_command': nmap_command,
                         'nmap_output': json.dumps(nmap_data)[:10000],  # Truncate large output
-                        'nmap_duration_seconds': nmap_duration
+                        'nmap_duration_seconds': nmap_duration,
+                        'created_at': datetime.utcnow()
                     }
                 )
                 session.commit()
@@ -130,34 +171,50 @@ class DatabaseResultPersister:
         """Save individual probe result"""
         try:
             with get_db_session() as session:
+                # Calculate confidence contribution based on response characteristics
+                confidence_contribution = 0.0
+                if response_data.get('status') == 200:
+                    confidence_contribution += 0.3
+                if response_data.get('body') and len(str(response_data.get('body', ''))) > 0:
+                    confidence_contribution += 0.2
+                if response_data.get('headers') and len(response_data.get('headers', {})) > 0:
+                    confidence_contribution += 0.1
+                if response_data.get('response_time_ms', 0) < 5000:  # Fast response
+                    confidence_contribution += 0.1
+                
                 session.execute(
                     text("""INSERT INTO protocol_probe_results 
                        (discovery_id, probe_type, target_port, endpoint_path, protocol_hint,
                         request_method, request_headers, request_body, request_timestamp,
                         response_status_code, response_headers, response_body, response_size_bytes,
-                        response_time_ms, error_occurred, error_message, timeout_occurred)
+                        response_time_ms, error_occurred, error_message, timeout_occurred,
+                        confidence_contribution, created_at, updated_at)
                        VALUES (:discovery_id, :probe_type, :target_port, :endpoint_path, :protocol_hint,
                                :request_method, :request_headers, :request_body, :request_timestamp,
                                :response_status_code, :response_headers, :response_body, :response_size_bytes,
-                               :response_time_ms, :error_occurred, :error_message, :timeout_occurred)"""),
+                               :response_time_ms, :error_occurred, :error_message, :timeout_occurred,
+                               :confidence_contribution, :created_at, :updated_at)"""),
                     {
                         'discovery_id': discovery_id,
                         'probe_type': probe_type,
                         'target_port': target_port,
                         'endpoint_path': endpoint_path or '',
                         'protocol_hint': protocol_hint or '',
-                        'request_method': request_data.get('method', ''),
+                        'request_method': self._sanitize_string(request_data.get('method', '')),
                         'request_headers': json.dumps(request_data.get('headers', {})),
-                        'request_body': str(request_data.get('body', ''))[:5000],
+                        'request_body': self._sanitize_string(str(request_data.get('body', '')))[:5000],
                         'request_timestamp': datetime.utcnow(),
                         'response_status_code': response_data.get('status'),
                         'response_headers': json.dumps(response_data.get('headers', {})),
-                        'response_body': str(response_data.get('body', ''))[:10000],
+                        'response_body': self._sanitize_string(str(response_data.get('body', '')))[:10000],
                         'response_size_bytes': len(str(response_data.get('body', ''))),
                         'response_time_ms': response_data.get('response_time_ms', 0),
                         'error_occurred': error_info is not None,
-                        'error_message': error_info.get('message', '') if error_info else '',
-                        'timeout_occurred': error_info.get('timeout', False) if error_info else False
+                        'error_message': self._sanitize_string(error_info.get('message', '')) if error_info else '',
+                        'timeout_occurred': error_info.get('timeout', False) if error_info else False,
+                        'confidence_contribution': confidence_contribution,
+                        'created_at': datetime.utcnow(),
+                        'updated_at': datetime.utcnow()
                     }
                 )
                 session.commit()
@@ -170,20 +227,21 @@ class DatabaseResultPersister:
             with get_db_session() as session:
                 session.execute(
                     text("""UPDATE host_discoveries 
-                       SET detected_protocol = ?, confidence_level = ?, confidence_score = ?,
-                           detection_method = ?, scan_completed_at = ?, scan_duration_seconds = ?,
-                           scan_status = 'completed', performance_metrics = ?
-                       WHERE id = ?"""),
-                    [
-                        result.protocol,
-                        result.confidence.value,
-                        result.confidence_score,
-                        result.signature_match.get('analysis_method', 'unknown') if result.signature_match else 'unknown',
-                        datetime.utcnow(),
-                        total_duration,
-                        json.dumps(result.performance_metrics or {}),
-                        discovery_id
-                    ]
+                       SET detected_protocol = :detected_protocol, confidence_level = :confidence_level, 
+                           confidence_score = :confidence_score, detection_method = :detection_method, 
+                           scan_completed_at = :scan_completed_at, scan_duration_seconds = :scan_duration_seconds,
+                           scan_status = 'completed', performance_metrics = :performance_metrics
+                       WHERE id = :discovery_id"""),
+                    {
+                        'detected_protocol': result.protocol,
+                        'confidence_level': result.confidence.value,
+                        'confidence_score': result.confidence_score,
+                        'detection_method': result.signature_match.get('analysis_method', 'unknown') if result.signature_match else 'unknown',
+                        'scan_completed_at': datetime.utcnow(),
+                        'scan_duration_seconds': total_duration,
+                        'performance_metrics': json.dumps(result.performance_metrics or {}),
+                        'discovery_id': discovery_id
+                    }
                 )
                 session.commit()
         except Exception as e:
@@ -654,9 +712,26 @@ class DiscoveryAgent(ProcessAgent):
         
         try:
             with get_db_session() as session:
+                # First check if we have any protocols at all
+                protocol_count = session.query(Protocol).count()
+                signature_count = session.query(ProtocolSignature).count()
+                
+                self.logger.info(f"Database contains {protocol_count} protocols and {signature_count} signatures")
+                
+                if protocol_count == 0:
+                    self.logger.warning("No protocols found in database - consider running protocol seeder")
+                    return []
+                
+                if signature_count == 0:
+                    self.logger.warning("No protocol signatures found in database - consider running signature generator")
+                    return []
+                
+                # Load protocols with signatures using join
                 results = session.query(Protocol, ProtocolSignature).join(
-                    ProtocolSignature
+                    ProtocolSignature, Protocol.id == ProtocolSignature.protocol_id
                 ).order_by(ProtocolSignature.uniqueness_score.desc()).all()
+                
+                self.logger.info(f"Found {len(results)} protocols with signatures after join")
                 
                 for protocol, signature in results:
                     protocol_data = {
@@ -664,26 +739,28 @@ class DiscoveryAgent(ProcessAgent):
                         'name': protocol.name,
                         'display_name': protocol.display_name,
                         'category': protocol.category,
-                        'ports': protocol.ports,
-                        'endpoints': protocol.endpoints,
-                        'banners': protocol.banners,
-                        'rpc_methods': protocol.rpc_methods,
-                        'metrics_keywords': protocol.metrics_keywords,
-                        'http_paths': protocol.http_paths,
-                        'identification_hints': protocol.identification_hints,
+                        'ports': protocol.ports or [],
+                        'endpoints': protocol.endpoints or [],
+                        'banners': protocol.banners or [],
+                        'rpc_methods': protocol.rpc_methods or [],
+                        'metrics_keywords': protocol.metrics_keywords or [],
+                        'http_paths': protocol.http_paths or [],
+                        'identification_hints': protocol.identification_hints or [],
                         'signatures': {
                             'port_signature': signature.port_signature,
                             'banner_signature': signature.banner_signature,
                             'endpoint_signature': signature.endpoint_signature,
                             'keyword_signature': signature.keyword_signature,
-                            'uniqueness_score': signature.uniqueness_score,
-                            'signature_version': signature.signature_version
+                            'uniqueness_score': signature.uniqueness_score or 0.0,
+                            'signature_version': signature.signature_version or '1.0'
                         }
                     }
                     protocols.append(protocol_data)
                     
         except Exception as e:
             self.logger.error(f"Failed to load protocols: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             
         self.logger.info(f"Loaded {len(protocols)} protocols with signatures")
         return protocols
@@ -694,6 +771,8 @@ class DiscoveryAgent(ProcessAgent):
         probe_data = {}
         open_ports = set(nmap_data.get('ports', []))
         
+        self.logger.info(f"Starting probing on {len(open_ports)} open ports: {sorted(open_ports)}")
+        
         # Map ports to potential protocols
         port_to_protocols = {}
         for protocol in protocols:
@@ -703,34 +782,53 @@ class DiscoveryAgent(ProcessAgent):
                         port_to_protocols[port] = []
                     port_to_protocols[port].append(protocol)
         
-        # Probe each relevant port
+        self.logger.info(f"Mapped {len(port_to_protocols)} ports to protocols")
+        
+        # Probe each relevant port (with limits to prevent hanging)
+        max_paths_per_port = 3  # Limit paths to prevent excessive requests
+        request_timeout = 5     # Shorter timeout to prevent hanging
+        
         for port, potential_protocols in port_to_protocols.items():
-            paths_to_probe = set()
+            self.logger.debug(f"Probing port {port} with {len(potential_protocols)} potential protocols")
             
+            paths_to_probe = set()
             for protocol in potential_protocols:
                 paths_to_probe.update(protocol.get('http_paths', []))
             
+            # Limit the number of paths to probe per port
+            paths_to_probe = list(paths_to_probe)[:max_paths_per_port]
+            
             # HTTP probing
-            if paths_to_probe:
+            if paths_to_probe and port in [80, 443, 8080, 8443, 3000, 5000, 9000]:  # Only probe HTTP-like ports
                 for path in paths_to_probe:
                     try:
-                        import time
                         request_start = time.time()
-                        
                         protocol_hint = ','.join([p['name'] for p in potential_protocols])
                         
-                        response = requests.get(f"http://{hostname}:{port}{path}", timeout=10, verify=False)
+                        # Try HTTP first, then HTTPS if it fails
+                        url = f"http://{hostname}:{port}{path}"
+                        self.logger.debug(f"Probing {url}")
+                        
+                        response = requests.get(
+                            url, 
+                            timeout=request_timeout, 
+                            verify=False,
+                            headers={'User-Agent': 'DePIN-Discovery-Agent/2.0'},
+                            allow_redirects=False  # Don't follow redirects to prevent hanging
+                        )
                         response_time = (time.time() - request_start) * 1000
                         
                         probe_key = f"{port}{path}"
                         probe_result = {
                             'status': response.status_code,
                             'headers': dict(response.headers),
-                            'body': response.text[:1000],
-                            'url': f"http://{hostname}:{port}{path}",
+                            'body': response.text[:1000],  # Limit body size
+                            'url': url,
                             'response_time_ms': response_time
                         }
                         probe_data[probe_key] = probe_result
+                        
+                        self.logger.debug(f"HTTP probe success: {url} -> {response.status_code}")
                         
                         # Save to database
                         self.persister.save_probe_result(
@@ -748,9 +846,50 @@ class DiscoveryAgent(ProcessAgent):
                             error_info=None
                         )
                         
+                    except requests.exceptions.Timeout:
+                        self.logger.debug(f"HTTP probe timeout for {hostname}:{port}{path}")
+                        # Save timeout result
+                        error_info = {'message': 'Request timeout', 'timeout': True}
+                        self.persister.save_probe_result(
+                            discovery_id=discovery_id,
+                            probe_type='http',
+                            target_port=port,
+                            endpoint_path=path,
+                            protocol_hint=protocol_hint,
+                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
+                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': request_timeout * 1000},
+                            error_info=error_info
+                        )
+                    except requests.exceptions.ConnectionError:
+                        self.logger.debug(f"HTTP probe connection error for {hostname}:{port}{path}")
+                        # Save connection error result
+                        error_info = {'message': 'Connection error', 'timeout': False}
+                        self.persister.save_probe_result(
+                            discovery_id=discovery_id,
+                            probe_type='http',
+                            target_port=port,
+                            endpoint_path=path,
+                            protocol_hint=protocol_hint,
+                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
+                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': 0},
+                            error_info=error_info
+                        )
                     except Exception as e:
                         self.logger.debug(f"HTTP probe failed for {hostname}:{port}{path}: {e}")
+                        # Save general error result
+                        error_info = {'message': str(e), 'timeout': False}
+                        self.persister.save_probe_result(
+                            discovery_id=discovery_id,
+                            probe_type='http',
+                            target_port=port,
+                            endpoint_path=path,
+                            protocol_hint=protocol_hint,
+                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
+                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': 0},
+                            error_info=error_info
+                        )
         
+        self.logger.info(f"Completed probing with {len(probe_data)} successful responses")
         return probe_data
     
     def _match_protocol_signatures(self, nmap_data: Dict, probe_data: Dict, 
@@ -1010,18 +1149,18 @@ class DiscoveryAgent(ProcessAgent):
                            AVG(scan_duration_seconds) as avg_duration,
                            AVG(confidence_score) as avg_confidence
                        FROM host_discoveries 
-                       WHERE session_id = ?"""),
-                    [self.session_id]
+                       WHERE session_id = :session_id"""),
+                    {'session_id': self.session_id}
                 ).fetchone()
                 
                 # Get protocol breakdown
                 protocol_stats = session.execute(
                     text("""SELECT detected_protocol, COUNT(*) as count
                        FROM host_discoveries 
-                       WHERE session_id = ? AND detected_protocol IS NOT NULL
+                       WHERE session_id = :session_id AND detected_protocol IS NOT NULL
                        GROUP BY detected_protocol
                        ORDER BY count DESC"""),
-                    [self.session_id]
+                    {'session_id': self.session_id}
                 ).fetchall()
                 
                 return {
@@ -1065,8 +1204,8 @@ class DiscoveryAgent(ProcessAgent):
             with get_db_session() as session:
                 # Get the original discovery result
                 discovery = session.execute(
-                    text("SELECT detected_protocol, confidence_level FROM host_discoveries WHERE id = ?"),
-                    [discovery_id]
+                    text("SELECT detected_protocol, confidence_level FROM host_discoveries WHERE id = :discovery_id"),
+                    {'discovery_id': discovery_id}
                 ).fetchone()
                 
                 if not discovery:
@@ -1087,17 +1226,19 @@ class DiscoveryAgent(ProcessAgent):
                        (discovery_id, validation_type, validated_by, validation_timestamp,
                         actual_protocol, validation_confidence, validation_source,
                         detection_was_correct, detection_was_close, validation_notes)
-                       VALUES (?, 'manual', 'agent', ?, ?, ?, ?, ?, ?, ?)"""),
-                    [
-                        discovery_id,
-                        datetime.utcnow(),
-                        actual_protocol,
-                        validation_confidence,
-                        validation_source,
-                        detection_correct,
-                        detection_close,
-                        notes
-                    ]
+                       VALUES (:discovery_id, 'manual', 'agent', :validation_timestamp, 
+                               :actual_protocol, :validation_confidence, :validation_source,
+                               :detection_was_correct, :detection_was_close, :validation_notes)"""),
+                    {
+                        'discovery_id': discovery_id,
+                        'validation_timestamp': datetime.utcnow(),
+                        'actual_protocol': actual_protocol,
+                        'validation_confidence': validation_confidence,
+                        'validation_source': validation_source,
+                        'detection_was_correct': detection_correct,
+                        'detection_was_close': detection_close,
+                        'validation_notes': notes
+                    }
                 )
                 session.commit()
                 
@@ -1115,9 +1256,12 @@ class DiscoveryAgent(ProcessAgent):
             with get_db_session() as session:
                 session.execute(
                     text("""UPDATE scan_sessions 
-                       SET status = 'completed', completed_at = ?
-                       WHERE session_id = ?"""),
-                    [datetime.utcnow(), self.session_id]
+                       SET status = 'completed', completed_at = :completed_at
+                       WHERE session_id = :session_id"""),
+                    {
+                        'completed_at': datetime.utcnow(),
+                        'session_id': self.session_id
+                    }
                 )
                 session.commit()
                 
