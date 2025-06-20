@@ -30,40 +30,50 @@ class DiscoveryAgent(ProcessAgent):
             config: Configuration instance
         """
         super().__init__(config, "DiscoveryAgent")
-        self.logger.info("🔍 Discovery Agent initialized - DO NOT ADD CODE YET")
+        self.logger.info("🔍 Discovery Agent initialized")
+    
+    def run(self, host: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Execute network discovery for the specified host.
+        
+        Args:
+            host: Target host for discovery (IP address or hostname)
+            
+        Returns:
+            List of discovery results
+        """
+        if not host:
+            self.logger.warning("No host specified for discovery")
+            return []
+            
+        self.logger.info(f"🔍 Starting network discovery for host: {host}")
+        
+        # This will be implemented by concrete discovery agents
+        return self.discover_host(host)
+    
+    def discover_host(self, host: str) -> List[Dict[str, Any]]:
+        """
+        Discover network information for a specific host.
+        
+        This method should be overridden by concrete discovery agent implementations.
+        
+        Args:
+            host: Target host for discovery
+            
+        Returns:
+            List of discovery results
+        """
+        self.logger.info(f"🔍 Base discovery agent - no specific discovery logic implemented for {host}")
+        return []
     
     def process_results(self, scan_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Process scan results to discover additional network topology and infrastructure.
+        Legacy method for compatibility with ProcessAgent interface.
         
-        Args:
-            scan_results: List of scan result dictionaries
-            
-        Returns:
-            List of enhanced scan results with discovery information
+        This method is kept for backward compatibility but discovery agents
+        should primarily use the run() method with host parameter.
         """
-        # Placeholder - DO NOT ADD CODE YET per user request
-        self.logger.info("🔍 Discovery processing - implementation pending")
+        self.logger.warning("process_results() called - consider using execute() with host parameter instead")
         return scan_results
     
-    def discover_topology(self) -> Dict[str, Any]:
-        """
-        Discover network topology and infrastructure relationships.
-        
-        Returns:
-            Dictionary containing topology discovery results
-        """
-        # Placeholder - DO NOT ADD CODE YET per user request
-        self.logger.info("🔍 Topology discovery - implementation pending")
-        return {}
     
-    def map_infrastructure(self) -> Dict[str, Any]:
-        """
-        Map infrastructure components and their relationships.
-        
-        Returns:
-            Dictionary containing infrastructure mapping results
-        """
-        # Placeholder - DO NOT ADD CODE YET per user request
-        self.logger.info("🔍 Infrastructure mapping - implementation pending")
-        return {}
