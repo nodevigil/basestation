@@ -112,7 +112,7 @@ class CVERecord(Base):
     
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False, onupdate=datetime.utcnow)
     
     def __repr__(self):
         return f"<CVERecord(cve_id='{self.cve_id}', severity='{self.severity}', cvss_score='{self.cvss_score}')>"
@@ -294,6 +294,550 @@ class ProtocolSignature(Base):
             'keyword_signature': self.keyword_signature,
             'uniqueness_score': self.uniqueness_score,
             'signature_version': self.signature_version
+        }
+
+
+class NetworkTopology(Base):
+    """Model for storing network topology discoveries."""
+    __tablename__ = 'network_topology'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)  # UUID for external references
+    source_scan_id = Column(Integer, ForeignKey('validator_scans.id'), nullable=False)
+    network_type = Column(String(50), nullable=False)  # e.g., 'peer_network', 'blockchain', 'infrastructure'
+    node_count = Column(Integer, nullable=False)  # Number of nodes discovered
+    relationship_count = Column(Integer, nullable=False)  # Number of relationships discovered
+    topology_data = Column(JSON, nullable=False)  # Full topology data in JSON format
+    confidence_score = Column(Float, nullable=True)  # Confidence in topology mapping (0.0-1.0)
+    discovery_method = Column(String(100), nullable=False)  # Method used for discovery
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship to the scan
+    source_scan = relationship("ValidatorScan")
+    
+    def __repr__(self):
+        return f"<NetworkTopology(id={self.id}, network_type='{self.network_type}', node_count={self.node_count})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'source_scan_id': self.source_scan_id,
+            'network_type': self.network_type,
+            'node_count': self.node_count,
+            'relationship_count': self.relationship_count,
+            'topology_data': self.topology_data,
+            'confidence_score': self.confidence_score,
+            'discovery_method': self.discovery_method,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class InfrastructureMapping(Base):
+    """Model for storing infrastructure component mappings."""
+    __tablename__ = 'infrastructure_mapping'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)  # UUID for external references
+    source_scan_id = Column(Integer, ForeignKey('validator_scans.id'), nullable=False)
+    component_type = Column(String(50), nullable=False)  # e.g., 'load_balancer', 'database', 'api_gateway'
+    component_name = Column(String(255), nullable=True)  # Human-readable component name
+    ip_address = Column(String(45), nullable=True)  # IPv4 or IPv6 address
+    ports = Column(JSON, nullable=True)  # JSON array of discovered ports
+    services = Column(JSON, nullable=True)  # JSON array of discovered services
+    dependencies = Column(JSON, nullable=True)  # JSON array of component dependencies
+    component_metadata = Column(JSON, nullable=True)  # Additional component metadata
+    discovery_method = Column(String(100), nullable=False)  # Method used for discovery
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship to the scan
+    source_scan = relationship("ValidatorScan")
+    
+    def __repr__(self):
+        return f"<InfrastructureMapping(id={self.id}, component_type='{self.component_type}', ip_address='{self.ip_address}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'source_scan_id': self.source_scan_id,
+            'component_type': self.component_type,
+            'component_name': self.component_name,
+            'ip_address': self.ip_address,
+            'ports': self.ports,
+            'services': self.services,
+            'dependencies': self.dependencies,
+            'component_metadata': self.component_metadata,
+            'discovery_method': self.discovery_method,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class DiscoveryResult(Base):
+    """Model for storing general discovery results and findings."""
+    __tablename__ = 'discovery_results'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)  # UUID for external references
+    source_scan_id = Column(Integer, ForeignKey('validator_scans.id'), nullable=False)
+    discovery_type = Column(String(50), nullable=False)  # e.g., 'network_scan', 'service_enum', 'protocol_analysis'
+    title = Column(String(255), nullable=False)  # Human-readable discovery title
+    description = Column(String(2000), nullable=True)  # Detailed description of the discovery
+    severity = Column(String(20), nullable=True)  # Severity level (INFO, LOW, MEDIUM, HIGH, CRITICAL)
+    confidence = Column(Float, nullable=True)  # Confidence in the discovery (0.0-1.0)
+    discovery_data = Column(JSON, nullable=False)  # Full discovery data in JSON format
+    tags = Column(JSON, nullable=True)  # JSON array of tags for categorization
+    agent_name = Column(String(100), nullable=False)  # Name of agent that made the discovery
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship to the scan
+    source_scan = relationship("ValidatorScan")
+    
+    def __repr__(self):
+        return f"<DiscoveryResult(id={self.id}, discovery_type='{self.discovery_type}', title='{self.title}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'source_scan_id': self.source_scan_id,
+            'discovery_type': self.discovery_type,
+            'title': self.title,
+            'description': self.description,
+            'severity': self.severity,
+            'confidence': self.confidence,
+            'discovery_data': self.discovery_data,
+            'tags': self.tags,
+            'agent_name': self.agent_name,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# ==============================================================================
+# DISCOVERY DATABASE MODELS
+# ==============================================================================
+
+class ScanSession(Base):
+    """Model for grouping related discovery scans."""
+    __tablename__ = 'scan_sessions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(36), unique=True, nullable=False)  # UUID for grouping related scans
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default='running', nullable=False)  # 'running', 'completed', 'failed', 'cancelled'
+    total_hosts = Column(Integer, default=0, nullable=False)
+    successful_detections = Column(Integer, default=0, nullable=False)
+    failed_scans = Column(Integer, default=0, nullable=False)
+    scanner_version = Column(String(20), nullable=True)
+    config_hash = Column(String(64), nullable=True)  # Hash of scanner configuration used
+    created_by = Column(String(100), nullable=True)  # User/system that initiated scan
+    notes = Column(String, nullable=True)
+    
+    # Relationships
+    host_discoveries = relationship("HostDiscovery", back_populates="scan_session", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<ScanSession(session_id='{self.session_id}', status='{self.status}', total_hosts={self.total_hosts})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'status': self.status,
+            'total_hosts': self.total_hosts,
+            'successful_detections': self.successful_detections,
+            'failed_scans': self.failed_scans,
+            'scanner_version': self.scanner_version,
+            'config_hash': self.config_hash,
+            'created_by': self.created_by,
+            'notes': self.notes
+        }
+
+
+class HostDiscovery(Base):
+    """Model for individual host discovery results."""
+    __tablename__ = 'host_discoveries'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(36), ForeignKey('scan_sessions.session_id'), nullable=False)
+    hostname = Column(String(255), nullable=False)
+    ip_address = Column(String(45), nullable=True)  # IPv4 or IPv6
+    
+    # Detection Results
+    detected_protocol = Column(String(100), nullable=True)  # Protocol name if detected
+    confidence_level = Column(String(20), default='unknown', nullable=False)  # 'high', 'medium', 'low', 'unknown'
+    confidence_score = Column(Float, default=0.0, nullable=False)  # Numeric confidence (0.0 - 1.0)
+    detection_method = Column(String(100), nullable=True)  # 'hybrid_binary_detailed', 'ai_analysis', etc.
+    
+    # Scan Metadata
+    scan_started_at = Column(DateTime, nullable=False)
+    scan_completed_at = Column(DateTime, nullable=True)
+    scan_duration_seconds = Column(Float, nullable=True)
+    scan_status = Column(String(20), default='pending', nullable=False)  # 'pending', 'scanning', 'completed', 'failed'
+    error_message = Column(String, nullable=True)
+    
+    # Performance Metrics (JSON)
+    performance_metrics = Column(JSON, nullable=True)  # JSON: timing, candidates, etc.
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    scan_session = relationship("ScanSession", back_populates="host_discoveries")
+    network_scan_data = relationship("NetworkScanData", back_populates="host_discovery", cascade="all, delete-orphan")
+    protocol_probe_results = relationship("ProtocolProbeResult", back_populates="host_discovery", cascade="all, delete-orphan")
+    signature_match_results = relationship("SignatureMatchResult", back_populates="host_discovery", cascade="all, delete-orphan")
+    ai_analysis_results = relationship("AIAnalysisResult", back_populates="host_discovery", cascade="all, delete-orphan")
+    validation_results = relationship("ValidationResult", back_populates="host_discovery", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<HostDiscovery(hostname='{self.hostname}', detected_protocol='{self.detected_protocol}', confidence='{self.confidence_level}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'hostname': self.hostname,
+            'ip_address': self.ip_address,
+            'detected_protocol': self.detected_protocol,
+            'confidence_level': self.confidence_level,
+            'confidence_score': self.confidence_score,
+            'detection_method': self.detection_method,
+            'scan_started_at': self.scan_started_at.isoformat() if self.scan_started_at else None,
+            'scan_completed_at': self.scan_completed_at.isoformat() if self.scan_completed_at else None,
+            'scan_duration_seconds': self.scan_duration_seconds,
+            'scan_status': self.scan_status,
+            'error_message': self.error_message,
+            'performance_metrics': self.performance_metrics,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class NetworkScanData(Base):
+    """Model for network scan data and port scan results."""
+    __tablename__ = 'network_scan_data'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discovery_id = Column(Integer, ForeignKey('host_discoveries.id'), nullable=False)
+    
+    # Port Scan Results
+    open_ports = Column(JSON, nullable=False)  # JSON array of open ports
+    total_ports_scanned = Column(Integer, default=65535, nullable=False)
+    scan_technique = Column(String(50), default='tcp_syn', nullable=False)  # 'tcp_syn', 'tcp_connect', 'udp', etc.
+    
+    # Service Detection Results (JSON)
+    services_detected = Column(JSON, nullable=True)  # JSON: {port: {name, product, version, banner}}
+    os_detection = Column(JSON, nullable=True)  # JSON: OS fingerprinting results
+    
+    # Raw Nmap Data
+    nmap_command = Column(String, nullable=True)  # Actual nmap command executed
+    nmap_output = Column(String, nullable=True)  # Raw nmap output (truncated if large)
+    nmap_xml = Column(String, nullable=True)  # Nmap XML output (compressed/truncated)
+    nmap_duration_seconds = Column(Float, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    host_discovery = relationship("HostDiscovery", back_populates="network_scan_data")
+    
+    def __repr__(self):
+        return f"<NetworkScanData(discovery_id={self.discovery_id}, ports_count={len(self.open_ports) if self.open_ports else 0})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'discovery_id': self.discovery_id,
+            'open_ports': self.open_ports,
+            'total_ports_scanned': self.total_ports_scanned,
+            'scan_technique': self.scan_technique,
+            'services_detected': self.services_detected,
+            'os_detection': self.os_detection,
+            'nmap_command': self.nmap_command,
+            'nmap_output': self.nmap_output,
+            'nmap_xml': self.nmap_xml,
+            'nmap_duration_seconds': self.nmap_duration_seconds,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class ProtocolProbeResult(Base):
+    """Model for protocol probe results and HTTP/RPC probes."""
+    __tablename__ = 'protocol_probe_results'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discovery_id = Column(Integer, ForeignKey('host_discoveries.id'), nullable=False)
+    
+    # Probe Details
+    probe_type = Column(String(50), nullable=False)  # 'http', 'rpc', 'tcp_banner', 'custom'
+    target_port = Column(Integer, nullable=False)
+    endpoint_path = Column(String(500), nullable=True)  # HTTP path or RPC method
+    protocol_hint = Column(String(100), nullable=True)  # Expected protocol being tested
+    
+    # Request Details
+    request_method = Column(String(20), nullable=True)  # 'GET', 'POST', 'RPC', etc.
+    request_headers = Column(JSON, nullable=True)  # JSON: request headers sent
+    request_body = Column(String, nullable=True)  # Request payload (truncated if large)
+    request_timestamp = Column(DateTime, nullable=False)
+    
+    # Response Details
+    response_status_code = Column(Integer, nullable=True)
+    response_headers = Column(JSON, nullable=True)  # JSON: response headers
+    response_body = Column(String, nullable=True)  # Response body (truncated to ~10KB)
+    response_size_bytes = Column(Integer, nullable=True)
+    response_time_ms = Column(Float, nullable=True)
+    
+    # Analysis Results
+    protocol_indicators_found = Column(JSON, nullable=True)  # JSON: array of protocol clues found
+    confidence_contribution = Column(Float, default=0.0, nullable=False)  # How much this probe contributed to final score
+    
+    # Error Handling
+    error_occurred = Column(Boolean, default=False, nullable=False)
+    error_message = Column(String, nullable=True)
+    timeout_occurred = Column(Boolean, default=False, nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    host_discovery = relationship("HostDiscovery", back_populates="protocol_probe_results")
+    
+    def __repr__(self):
+        return f"<ProtocolProbeResult(discovery_id={self.discovery_id}, probe_type='{self.probe_type}', port={self.target_port})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'discovery_id': self.discovery_id,
+            'probe_type': self.probe_type,
+            'target_port': self.target_port,
+            'endpoint_path': self.endpoint_path,
+            'protocol_hint': self.protocol_hint,
+            'request_method': self.request_method,
+            'request_headers': self.request_headers,
+            'request_body': self.request_body,
+            'request_timestamp': self.request_timestamp.isoformat() if self.request_timestamp else None,
+            'response_status_code': self.response_status_code,
+            'response_headers': self.response_headers,
+            'response_body': self.response_body,
+            'response_size_bytes': self.response_size_bytes,
+            'response_time_ms': self.response_time_ms,
+            'protocol_indicators_found': self.protocol_indicators_found,
+            'confidence_contribution': self.confidence_contribution,
+            'error_occurred': self.error_occurred,
+            'error_message': self.error_message,
+            'timeout_occurred': self.timeout_occurred,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class SignatureMatchResult(Base):
+    """Model for binary signature matching results."""
+    __tablename__ = 'signature_match_results'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discovery_id = Column(Integer, ForeignKey('host_discoveries.id'), nullable=False)
+    
+    # Binary Signature Analysis
+    scan_port_signature = Column(String, nullable=True)  # Base64 encoded binary signature from scan
+    scan_banner_signature = Column(String, nullable=True)
+    scan_endpoint_signature = Column(String, nullable=True)
+    scan_keyword_signature = Column(String, nullable=True)
+    
+    # Protocol Matching Results
+    protocol_id = Column(Integer, ForeignKey('protocols.id'), nullable=True)  # Reference to matched protocol
+    protocol_name = Column(String(100), nullable=False)
+    binary_similarity_score = Column(Float, nullable=False)  # Binary pre-filter score
+    detailed_analysis_score = Column(Float, nullable=False)  # Detailed analysis score
+    combined_final_score = Column(Float, nullable=False)  # Final weighted score
+    uniqueness_boost_applied = Column(Float, default=0.0, nullable=False)  # Boost from protocol uniqueness
+    
+    # Evidence Details (JSON)
+    port_evidence = Column(JSON, nullable=True)  # JSON: matching ports and coverage
+    banner_evidence = Column(JSON, nullable=True)  # JSON: banner matches with strength
+    content_evidence = Column(JSON, nullable=True)  # JSON: keyword/content matches
+    rpc_evidence = Column(JSON, nullable=True)  # JSON: RPC method matches
+    
+    # Performance Tracking
+    binary_analysis_time_ms = Column(Float, nullable=True)
+    detailed_analysis_time_ms = Column(Float, nullable=True)
+    total_protocols_checked = Column(Integer, nullable=True)
+    binary_candidates_generated = Column(Integer, nullable=True)
+    
+    # Ranking
+    match_rank = Column(Integer, nullable=False)  # 1=best match, 2=second best, etc.
+    above_threshold = Column(Boolean, nullable=False)  # Whether this match exceeded confidence threshold
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    host_discovery = relationship("HostDiscovery", back_populates="signature_match_results")
+    
+    def __repr__(self):
+        return f"<SignatureMatchResult(discovery_id={self.discovery_id}, protocol='{self.protocol_name}', score={self.combined_final_score:.3f})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'discovery_id': self.discovery_id,
+            'scan_port_signature': self.scan_port_signature,
+            'scan_banner_signature': self.scan_banner_signature,
+            'scan_endpoint_signature': self.scan_endpoint_signature,
+            'scan_keyword_signature': self.scan_keyword_signature,
+            'protocol_id': self.protocol_id,
+            'protocol_name': self.protocol_name,
+            'binary_similarity_score': self.binary_similarity_score,
+            'detailed_analysis_score': self.detailed_analysis_score,
+            'combined_final_score': self.combined_final_score,
+            'uniqueness_boost_applied': self.uniqueness_boost_applied,
+            'port_evidence': self.port_evidence,
+            'banner_evidence': self.banner_evidence,
+            'content_evidence': self.content_evidence,
+            'rpc_evidence': self.rpc_evidence,
+            'binary_analysis_time_ms': self.binary_analysis_time_ms,
+            'detailed_analysis_time_ms': self.detailed_analysis_time_ms,
+            'total_protocols_checked': self.total_protocols_checked,
+            'binary_candidates_generated': self.binary_candidates_generated,
+            'match_rank': self.match_rank,
+            'above_threshold': self.above_threshold,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class AIAnalysisResult(Base):
+    """Model for AI analysis results and LLM responses."""
+    __tablename__ = 'ai_analysis_results'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discovery_id = Column(Integer, ForeignKey('host_discoveries.id'), nullable=False)
+    
+    # AI Analysis Details
+    ai_provider = Column(String(50), nullable=False)  # 'anthropic', 'openai', etc.
+    model_used = Column(String(100), nullable=False)  # 'claude-3-sonnet', etc.
+    analysis_timestamp = Column(DateTime, nullable=False)
+    
+    # Input Data
+    input_prompt = Column(String, nullable=True)  # Prompt sent to AI (truncated)
+    input_data_hash = Column(String(64), nullable=True)  # Hash of scan data sent
+    
+    # AI Response
+    ai_response_raw = Column(String, nullable=True)  # Raw AI response
+    ai_confidence = Column(String(20), nullable=True)  # AI's stated confidence level
+    ai_reasoning = Column(String, nullable=True)  # AI's explanation
+    ai_suggested_protocol = Column(String(100), nullable=True)  # AI's protocol suggestion
+    
+    # Processing Results
+    parsed_successfully = Column(Boolean, default=False, nullable=False)
+    parse_error_message = Column(String, nullable=True)
+    
+    # Usage Metrics
+    tokens_used = Column(Integer, nullable=True)
+    api_cost_usd = Column(Float, nullable=True)
+    response_time_seconds = Column(Float, nullable=True)
+    
+    # Integration
+    influenced_final_result = Column(Boolean, default=False, nullable=False)  # Whether AI result changed final detection
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    host_discovery = relationship("HostDiscovery", back_populates="ai_analysis_results")
+    
+    def __repr__(self):
+        return f"<AIAnalysisResult(discovery_id={self.discovery_id}, provider='{self.ai_provider}', suggested='{self.ai_suggested_protocol}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'discovery_id': self.discovery_id,
+            'ai_provider': self.ai_provider,
+            'model_used': self.model_used,
+            'analysis_timestamp': self.analysis_timestamp.isoformat() if self.analysis_timestamp else None,
+            'input_prompt': self.input_prompt,
+            'input_data_hash': self.input_data_hash,
+            'ai_response_raw': self.ai_response_raw,
+            'ai_confidence': self.ai_confidence,
+            'ai_reasoning': self.ai_reasoning,
+            'ai_suggested_protocol': self.ai_suggested_protocol,
+            'parsed_successfully': self.parsed_successfully,
+            'parse_error_message': self.parse_error_message,
+            'tokens_used': self.tokens_used,
+            'api_cost_usd': self.api_cost_usd,
+            'response_time_seconds': self.response_time_seconds,
+            'influenced_final_result': self.influenced_final_result,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class ValidationResult(Base):
+    """Model for validation results and ground truth data."""
+    __tablename__ = 'validation_results'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    discovery_id = Column(Integer, ForeignKey('host_discoveries.id'), nullable=False)
+    
+    # Validation Details
+    validation_type = Column(String(50), nullable=False)  # 'manual', 'automated', 'ground_truth'
+    validated_by = Column(String(100), nullable=True)  # User/system performing validation
+    validation_timestamp = Column(DateTime, nullable=False)
+    
+    # Ground Truth
+    actual_protocol = Column(String(100), nullable=True)  # What the host actually runs
+    validation_confidence = Column(String(20), nullable=False)  # 'certain', 'likely', 'unsure'
+    validation_source = Column(String(100), nullable=True)  # 'admin_confirmed', 'documentation', etc.
+    
+    # Accuracy Assessment
+    detection_was_correct = Column(Boolean, nullable=True)
+    detection_was_close = Column(Boolean, nullable=True)  # Same category but wrong specific protocol
+    false_positive = Column(Boolean, default=False, nullable=False)
+    false_negative = Column(Boolean, default=False, nullable=False)
+    
+    # Notes
+    validation_notes = Column(String, nullable=True)
+    correction_needed = Column(Boolean, default=False, nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    host_discovery = relationship("HostDiscovery", back_populates="validation_results")
+    
+    def __repr__(self):
+        return f"<ValidationResult(discovery_id={self.discovery_id}, actual='{self.actual_protocol}', correct={self.detection_was_correct})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'discovery_id': self.discovery_id,
+            'validation_type': self.validation_type,
+            'validated_by': self.validated_by,
+            'validation_timestamp': self.validation_timestamp.isoformat() if self.validation_timestamp else None,
+            'actual_protocol': self.actual_protocol,
+            'validation_confidence': self.validation_confidence,
+            'validation_source': self.validation_source,
+            'detection_was_correct': self.detection_was_correct,
+            'detection_was_close': self.detection_was_close,
+            'false_positive': self.false_positive,
+            'false_negative': self.false_negative,
+            'validation_notes': self.validation_notes,
+            'correction_needed': self.correction_needed,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
 

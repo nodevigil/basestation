@@ -147,7 +147,12 @@ def run_single_stage(
         elif stage == 'signature':
             orchestrator = create_orchestrator(config)
             results = orchestrator.run_signature_stage(agent_name or 'ProtocolSignatureGeneratorAgent')
-            print(f"✅ Protocol signature generation completed: {len(results)} results processed")
+            print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
+            
+        elif stage == 'discovery':
+            orchestrator = create_orchestrator(config)
+            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent')
+            print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
             
         else:
             print(f"❌ Unknown stage: {stage}")
@@ -258,6 +263,7 @@ Examples:
   pgdn --stage process              # Run only processing
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
+  pgdn --stage discovery            # Run network topology discovery
   pgdn --stage publish              # Run only publishing
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
@@ -279,7 +285,7 @@ Examples:
     
     parser.add_argument(
         '--stage',
-        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature'],
+        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature', 'discovery'],
         help='Run only the specified stage'
     )
     
@@ -635,6 +641,11 @@ def main():
                 orchestrator = create_orchestrator(config)
                 results = orchestrator.run_signature_stage(args.agent or 'ProtocolSignatureGeneratorAgent')
                 print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
+            elif args.stage == 'discovery':
+                # Discovery stage
+                orchestrator = create_orchestrator(config)
+                results = orchestrator.run_discovery_stage(args.agent or 'DiscoveryAgent')
+                print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
             else:
                 # Run single stage
                 run_single_stage(

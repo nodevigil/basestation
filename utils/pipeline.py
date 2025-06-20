@@ -412,6 +412,56 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running signature agent {agent_name}: {e}")
             return []
     
+    def run_discovery_stage(self, agent_name: str = "DiscoveryAgent") -> List[Dict[str, Any]]:
+        """
+        Run the network discovery stage independently.
+        
+        Args:
+            agent_name: Name of discovery agent to use
+            
+        Returns:
+            List of processed results with discovery information
+        """
+        self.logger.info(f"🔍 Running network discovery stage: {agent_name}")
+        try:
+            agent = self.agent_registry.create_process_agent(agent_name, self.config)
+            
+            if not agent:
+                raise Exception(f"Failed to create discovery agent: {agent_name}")
+            
+            # For discovery, we need scan results as input
+            # Get recent scan results from database that haven't been processed for discovery
+            from core.database import get_db_session, ValidatorScan
+            scan_results = []
+            
+            with get_db_session() as session:
+                # Get recent scans that need discovery processing
+                scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.scan_results.isnot(None)
+                ).order_by(ValidatorScan.created_at.desc()).limit(100).all()
+                
+                for scan in scans:
+                    if scan.scan_results:
+                        scan_result = scan.scan_results.copy()
+                        scan_result['scan_id'] = scan.id
+                        scan_result['ip_address'] = scan.ip_address
+                        scan_result['timestamp'] = scan.created_at.isoformat()
+                        scan_results.append(scan_result)
+            
+            if not scan_results:
+                self.logger.warning("No scan results found for discovery processing")
+                return []
+            
+            # Execute discovery processing
+            processed_results = agent.process_results(scan_results)
+            
+            self.logger.info(f"🔍 Discovery stage completed successfully")
+            return processed_results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error running discovery agent {agent_name}: {e}")
+            return []
+    
     def run_single_stage(
         self,
         stage: str,
@@ -454,6 +504,9 @@ class PipelineOrchestrator:
         
         elif stage == 'signature':
             return self.run_signature_stage(agent_name or "ProtocolSignatureGeneratorAgent")
+        
+        elif stage == 'discovery':
+            return self.run_discovery_stage(agent_name or "DiscoveryAgent")
         
         else:
             raise ValueError(f"Unknown stage: {stage}")

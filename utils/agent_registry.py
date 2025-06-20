@@ -76,6 +76,13 @@ class AgentRegistry:
                 ProcessAgent
             )
             
+            # Discover discovery agents (they are also process agents)
+            self._discover_agents_in_directory(
+                agents_dir / "discovery",
+                self._process_agents,
+                ProcessAgent
+            )
+            
             # Discover publish agents
             self._discover_agents_in_directory(
                 agents_dir / "publish",
