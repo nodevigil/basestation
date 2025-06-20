@@ -20,7 +20,7 @@ import re
 import traceback
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
 from enum import Enum
 
@@ -547,12 +547,13 @@ class DiscoveryAgent(ProcessAgent):
         
         self.logger.info("🔍 DePIN Discovery Agent initialized")
     
-    def run(self, host: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+    def run(self, host: Optional[str] = None, force: bool = False, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute DePIN protocol discovery for the specified host.
         
         Args:
             host: Target host for discovery (IP address or hostname)
+            force: Force discovery even if host was recently scanned
             
         Returns:
             List of discovery results in standard format
@@ -561,6 +562,14 @@ class DiscoveryAgent(ProcessAgent):
             self.logger.warning("No host specified for DePIN discovery")
             return []
             
+        # Check for recent scans unless force is used
+        if not force:
+            recent_scan = self._check_recent_scan(host)
+            if recent_scan:
+                self.logger.info(f"🔍 Using cached results for {host} (scanned {recent_scan['days_ago']:.1f} days ago)")
+                self.logger.info(f"   Use --force to bypass cache and rescan")
+                return [self._convert_cached_result_to_standard_format(recent_scan)]
+        
         self.logger.info(f"🔍 Starting DePIN protocol discovery for host: {host}")
         
         # Perform DePIN-specific discovery
@@ -706,364 +715,89 @@ class DiscoveryAgent(ProcessAgent):
                 discovery_id=discovery_id
             )
     
-    def _load_protocols_with_signatures(self) -> List[Dict]:
-        """Load protocols with signatures from database"""
-        protocols = []
+    def _check_recent_scan(self, hostname: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if the host has been scanned recently (within the last week).
         
+        Args:
+            hostname: Target hostname to check
+            
+        Returns:
+            Dictionary with recent scan data if found, None otherwise
+        """
         try:
             with get_db_session() as session:
-                # First check if we have any protocols at all
-                protocol_count = session.query(Protocol).count()
-                signature_count = session.query(ProtocolSignature).count()
+                # Look for successful scans within the last 7 days
+                from sqlalchemy import text
+                from datetime import datetime, timedelta
                 
-                self.logger.info(f"Database contains {protocol_count} protocols and {signature_count} signatures")
+                # Calculate cutoff date (7 days ago)
+                cutoff_date = datetime.utcnow() - timedelta(days=7)
                 
-                if protocol_count == 0:
-                    self.logger.warning("No protocols found in database - consider running protocol seeder")
-                    return []
+                result = session.execute(
+                    text("""SELECT 
+                           hd.id, hd.hostname, hd.ip_address, hd.detected_protocol,
+                           hd.confidence_level, hd.confidence_score, hd.scan_completed_at,
+                           hd.scan_duration_seconds, hd.performance_metrics
+                       FROM host_discoveries hd
+                       WHERE (hd.hostname = :hostname OR hd.ip_address = :hostname)
+                         AND hd.scan_status = 'completed'
+                         AND hd.scan_completed_at > :cutoff_date
+                       ORDER BY hd.scan_completed_at DESC
+                       LIMIT 1"""),
+                    {'hostname': hostname, 'cutoff_date': cutoff_date}
+                ).fetchone()
                 
-                if signature_count == 0:
-                    self.logger.warning("No protocol signatures found in database - consider running signature generator")
-                    return []
-                
-                # Load protocols with signatures using join
-                results = session.query(Protocol, ProtocolSignature).join(
-                    ProtocolSignature, Protocol.id == ProtocolSignature.protocol_id
-                ).order_by(ProtocolSignature.uniqueness_score.desc()).all()
-                
-                self.logger.info(f"Found {len(results)} protocols with signatures after join")
-                
-                for protocol, signature in results:
-                    protocol_data = {
-                        'id': protocol.id,
-                        'name': protocol.name,
-                        'display_name': protocol.display_name,
-                        'category': protocol.category,
-                        'ports': protocol.ports or [],
-                        'endpoints': protocol.endpoints or [],
-                        'banners': protocol.banners or [],
-                        'rpc_methods': protocol.rpc_methods or [],
-                        'metrics_keywords': protocol.metrics_keywords or [],
-                        'http_paths': protocol.http_paths or [],
-                        'identification_hints': protocol.identification_hints or [],
-                        'signatures': {
-                            'port_signature': signature.port_signature,
-                            'banner_signature': signature.banner_signature,
-                            'endpoint_signature': signature.endpoint_signature,
-                            'keyword_signature': signature.keyword_signature,
-                            'uniqueness_score': signature.uniqueness_score or 0.0,
-                            'signature_version': signature.signature_version or '1.0'
-                        }
+                if result:
+                    # Calculate days ago manually
+                    scan_date = result[6]  # scan_completed_at
+                    if scan_date:
+                        days_ago = (datetime.utcnow() - scan_date).total_seconds() / 86400
+                    else:
+                        days_ago = 0
+                    
+                    return {
+                        'discovery_id': result[0],
+                        'hostname': result[1],
+                        'ip_address': result[2],
+                        'detected_protocol': result[3],
+                        'confidence_level': result[4],
+                        'confidence_score': result[5],
+                        'scan_completed_at': result[6],
+                        'scan_duration_seconds': result[7],
+                        'performance_metrics': result[8],
+                        'days_ago': days_ago
                     }
-                    protocols.append(protocol_data)
-                    
+                
+                return None
+                
         except Exception as e:
-            self.logger.error(f"Failed to load protocols: {e}")
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            
-        self.logger.info(f"Loaded {len(protocols)} protocols with signatures")
-        return protocols
+            self.logger.debug(f"Error checking recent scan for {hostname}: {e}")
+            return None
     
-    def _perform_intelligent_probing(self, hostname: str, nmap_data: Dict, 
-                                   protocols: List[Dict], discovery_id: int) -> Dict:
-        """Perform intelligent protocol-specific probing"""
-        probe_data = {}
-        open_ports = set(nmap_data.get('ports', []))
-        
-        self.logger.info(f"Starting probing on {len(open_ports)} open ports: {sorted(open_ports)}")
-        
-        # Map ports to potential protocols
-        port_to_protocols = {}
-        for protocol in protocols:
-            for port in protocol.get('ports', []):
-                if port in open_ports:
-                    if port not in port_to_protocols:
-                        port_to_protocols[port] = []
-                    port_to_protocols[port].append(protocol)
-        
-        self.logger.info(f"Mapped {len(port_to_protocols)} ports to protocols")
-        
-        # Probe each relevant port (with limits to prevent hanging)
-        max_paths_per_port = 3  # Limit paths to prevent excessive requests
-        request_timeout = 5     # Shorter timeout to prevent hanging
-        
-        for port, potential_protocols in port_to_protocols.items():
-            self.logger.debug(f"Probing port {port} with {len(potential_protocols)} potential protocols")
-            
-            paths_to_probe = set()
-            for protocol in potential_protocols:
-                paths_to_probe.update(protocol.get('http_paths', []))
-            
-            # Limit the number of paths to probe per port
-            paths_to_probe = list(paths_to_probe)[:max_paths_per_port]
-            
-            # HTTP probing
-            if paths_to_probe and port in [80, 443, 8080, 8443, 3000, 5000, 9000]:  # Only probe HTTP-like ports
-                for path in paths_to_probe:
-                    try:
-                        request_start = time.time()
-                        protocol_hint = ','.join([p['name'] for p in potential_protocols])
-                        
-                        # Try HTTP first, then HTTPS if it fails
-                        url = f"http://{hostname}:{port}{path}"
-                        self.logger.debug(f"Probing {url}")
-                        
-                        response = requests.get(
-                            url, 
-                            timeout=request_timeout, 
-                            verify=False,
-                            headers={'User-Agent': 'DePIN-Discovery-Agent/2.0'},
-                            allow_redirects=False  # Don't follow redirects to prevent hanging
-                        )
-                        response_time = (time.time() - request_start) * 1000
-                        
-                        probe_key = f"{port}{path}"
-                        probe_result = {
-                            'status': response.status_code,
-                            'headers': dict(response.headers),
-                            'body': response.text[:1000],  # Limit body size
-                            'url': url,
-                            'response_time_ms': response_time
-                        }
-                        probe_data[probe_key] = probe_result
-                        
-                        self.logger.debug(f"HTTP probe success: {url} -> {response.status_code}")
-                        
-                        # Save to database
-                        self.persister.save_probe_result(
-                            discovery_id=discovery_id,
-                            probe_type='http',
-                            target_port=port,
-                            endpoint_path=path,
-                            protocol_hint=protocol_hint,
-                            request_data={
-                                'method': 'GET',
-                                'headers': {'User-Agent': 'DePIN-Discovery-Agent/2.0'},
-                                'body': ''
-                            },
-                            response_data=probe_result,
-                            error_info=None
-                        )
-                        
-                    except requests.exceptions.Timeout:
-                        self.logger.debug(f"HTTP probe timeout for {hostname}:{port}{path}")
-                        # Save timeout result
-                        error_info = {'message': 'Request timeout', 'timeout': True}
-                        self.persister.save_probe_result(
-                            discovery_id=discovery_id,
-                            probe_type='http',
-                            target_port=port,
-                            endpoint_path=path,
-                            protocol_hint=protocol_hint,
-                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
-                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': request_timeout * 1000},
-                            error_info=error_info
-                        )
-                    except requests.exceptions.ConnectionError:
-                        self.logger.debug(f"HTTP probe connection error for {hostname}:{port}{path}")
-                        # Save connection error result
-                        error_info = {'message': 'Connection error', 'timeout': False}
-                        self.persister.save_probe_result(
-                            discovery_id=discovery_id,
-                            probe_type='http',
-                            target_port=port,
-                            endpoint_path=path,
-                            protocol_hint=protocol_hint,
-                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
-                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': 0},
-                            error_info=error_info
-                        )
-                    except Exception as e:
-                        self.logger.debug(f"HTTP probe failed for {hostname}:{port}{path}: {e}")
-                        # Save general error result
-                        error_info = {'message': str(e), 'timeout': False}
-                        self.persister.save_probe_result(
-                            discovery_id=discovery_id,
-                            probe_type='http',
-                            target_port=port,
-                            endpoint_path=path,
-                            protocol_hint=protocol_hint,
-                            request_data={'method': 'GET', 'headers': {}, 'body': ''},
-                            response_data={'status': None, 'headers': {}, 'body': '', 'response_time_ms': 0},
-                            error_info=error_info
-                        )
-        
-        self.logger.info(f"Completed probing with {len(probe_data)} successful responses")
-        return probe_data
-    
-    def _match_protocol_signatures(self, nmap_data: Dict, probe_data: Dict, 
-                                 protocols: List[Dict]) -> Tuple[Optional[str], float, Dict, Dict]:
-        """Match protocols using binary signatures and detailed analysis"""
-        import time
-        
-        performance_metrics = {
-            'total_protocols_available': len(protocols),
-            'binary_filter_time': 0,
-            'detailed_analysis_time': 0,
-            'candidates_after_binary_filter': 0
+    def _convert_cached_result_to_standard_format(self, cached_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert cached scan result to standard discovery agent format"""
+        return {
+            'host': cached_result.get('hostname', 'unknown'),
+            'discovery_type': 'depin_protocol',
+            'protocol': cached_result.get('detected_protocol'),
+            'confidence': cached_result.get('confidence_level', 'unknown'),
+            'confidence_score': cached_result.get('confidence_score', 0.0),
+            'evidence': {'cached_result': True, 'original_scan_date': cached_result.get('scan_completed_at')},
+            'scan_data': {
+                'hostname': cached_result.get('hostname'),
+                'ip_address': cached_result.get('ip_address'),
+                'cached': True,
+                'days_ago': cached_result.get('days_ago')
+            },
+            'signature_match': None,
+            'performance_metrics': cached_result.get('performance_metrics', {}),
+            'discovery_id': cached_result.get('discovery_id'),
+            'timestamp': datetime.utcnow().isoformat(),
+            'agent': 'DePINDiscoveryAgent',
+            'cached': True,
+            'cache_age_days': cached_result.get('days_ago')
         }
-        
-        # Phase 1: Binary pre-filtering
-        binary_start = time.time()
-        scan_signatures = HighPerformanceBinaryMatcher.generate_scan_signatures(nmap_data, probe_data)
-        candidates = self._binary_filter_protocols(scan_signatures, protocols)
-        performance_metrics['binary_filter_time'] = time.time() - binary_start
-        performance_metrics['candidates_after_binary_filter'] = len(candidates)
-        
-        if not candidates:
-            return None, 0.0, {"binary_filter": "no_candidates"}, performance_metrics
-        
-        # Phase 2: Detailed analysis
-        detailed_start = time.time()
-        best_match = None
-        best_score = 0.0
-        best_evidence = {}
-        
-        for protocol_data, binary_score in candidates:
-            detailed_score, evidence = self._calculate_detailed_match_score(protocol_data, nmap_data, probe_data)
-            final_score = (binary_score * 0.3) + (detailed_score * 0.7)
-            
-            if final_score > best_score:
-                best_score = final_score
-                best_match = protocol_data['name']
-                best_evidence = {
-                    **evidence,
-                    'binary_score': binary_score,
-                    'detailed_score': detailed_score,
-                    'combined_score': final_score
-                }
-        
-        performance_metrics['detailed_analysis_time'] = time.time() - detailed_start
-        
-        if best_score >= self.detailed_threshold:
-            return best_match, best_score, best_evidence, performance_metrics
-        else:
-            return None, best_score, {"insufficient_confidence": best_score}, performance_metrics
-    
-    def _binary_filter_protocols(self, scan_signatures: Dict[str, str], protocols: List[Dict]) -> List[Tuple[Dict, float]]:
-        """Fast binary signature pre-filtering"""
-        candidates = []
-        
-        for protocol in protocols:
-            try:
-                sigs = protocol['signatures']
-                
-                port_sim = HighPerformanceBinaryMatcher.calculate_binary_similarity(
-                    scan_signatures['port'], sigs['port_signature']
-                )
-                banner_sim = HighPerformanceBinaryMatcher.calculate_binary_similarity(
-                    scan_signatures['banner'], sigs['banner_signature']
-                )
-                endpoint_sim = HighPerformanceBinaryMatcher.calculate_binary_similarity(
-                    scan_signatures['endpoint'], sigs['endpoint_signature']
-                )
-                keyword_sim = HighPerformanceBinaryMatcher.calculate_binary_similarity(
-                    scan_signatures['keyword'], sigs['keyword_signature']
-                )
-                
-                binary_score = (
-                    port_sim * 0.1 +
-                    banner_sim * 0.4 +
-                    endpoint_sim * 0.2 +
-                    keyword_sim * 0.3
-                )
-                
-                uniqueness_boost = 1.0 + (sigs['uniqueness_score'] * 0.2)
-                final_score = binary_score * uniqueness_boost
-                
-                if final_score >= self.binary_threshold:
-                    candidates.append((protocol, final_score))
-                    
-            except Exception as e:
-                self.logger.debug(f"Binary matching failed for {protocol.get('name', 'unknown')}: {e}")
-        
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates[:10]
-    
-    def _calculate_detailed_match_score(self, protocol: Dict, nmap_data: Dict, probe_data: Dict) -> Tuple[float, Dict]:
-        """Calculate detailed traditional matching score"""
-        score = 0.0
-        evidence = {}
-        
-        # Port matching (15% weight)
-        open_ports = set(nmap_data.get('ports', []))
-        expected_ports = set(protocol.get('ports', []))
-        port_matches = list(open_ports.intersection(expected_ports))
-        
-        if port_matches:
-            port_score = len(port_matches) / len(expected_ports) if expected_ports else 0
-            score += port_score * 0.15
-            evidence['port_matches'] = port_matches
-        
-        # Service banner matching (35% weight)
-        banner_matches = []
-        for port, service in nmap_data.get('services', {}).items():
-            service_text = ' '.join([
-                service.get('name', ''),
-                service.get('product', ''),
-                service.get('version', ''),
-                service.get('banner', '')
-            ]).lower()
-            
-            for banner_pattern in protocol.get('banners', []):
-                if banner_pattern.lower() in service_text:
-                    banner_matches.append({
-                        'port': port,
-                        'pattern': banner_pattern,
-                        'matched_text': service_text[:100]
-                    })
-        
-        if banner_matches:
-            score += 0.35
-            evidence['banner_matches'] = banner_matches
-        
-        # HTTP content matching (30% weight)
-        content_matches = []
-        for endpoint_key, response in probe_data.items():
-            if not isinstance(response, dict) or response.get('status') != 200:
-                continue
-            
-            body = response.get('body', '').lower()
-            for keyword in protocol.get('metrics_keywords', []):
-                if keyword.lower() in body:
-                    content_matches.append({
-                        'keyword': keyword,
-                        'endpoint': endpoint_key
-                    })
-            
-            for hint in protocol.get('identification_hints', []):
-                if hint.lower() in body:
-                    content_matches.append({
-                        'hint': hint,
-                        'endpoint': endpoint_key,
-                        'type': 'identification_hint'
-                    })
-        
-        if content_matches:
-            content_score = min(len(content_matches) * 0.05, 0.30)
-            score += content_score
-            evidence['content_matches'] = content_matches
-        
-        # RPC method matching (20% weight)
-        rpc_matches = []
-        for endpoint_key, response in probe_data.items():
-            if 'rpc' in str(endpoint_key).lower():
-                for rpc_method in protocol.get('rpc_methods', []):
-                    if (rpc_method.lower() in str(endpoint_key).lower() or
-                        (response.get('status') == 200 and 
-                         rpc_method.lower() in str(response.get('body', '')).lower())):
-                        rpc_matches.append({
-                            'method': rpc_method,
-                            'endpoint': endpoint_key
-                        })
-        
-        if rpc_matches:
-            rpc_score = min(len(rpc_matches) * 0.1, 0.20)
-            score += rpc_score
-            evidence['rpc_matches'] = rpc_matches
-        
-        return score, evidence
     
     def _convert_to_standard_format(self, discovery_result: DePINDiscoveryResult) -> Dict[str, Any]:
         """Convert DePINDiscoveryResult to standard discovery agent format"""
@@ -1082,25 +816,27 @@ class DiscoveryAgent(ProcessAgent):
             'agent': 'DePINDiscoveryAgent'
         }
     
-    def discover_host(self, host: str) -> List[Dict[str, Any]]:
+    def discover_host(self, host: str, force: bool = False) -> List[Dict[str, Any]]:
         """
         Discover DePIN protocol for a single host (legacy interface support).
         
         Args:
             host: Target hostname or IP address
+            force: Force discovery even if host was recently scanned
             
         Returns:
             List containing single discovery result
         """
         self.logger.info(f"🔍 Legacy discover_host called for: {host}")
-        return self.run(host=host)
+        return self.run(host=host, force=force)
     
-    def batch_discover(self, hosts: List[str]) -> List[Dict[str, Any]]:
+    def batch_discover(self, hosts: List[str], force: bool = False) -> List[Dict[str, Any]]:
         """
         Perform batch DePIN discovery across multiple hosts.
         
         Args:
             hosts: List of hostnames/IP addresses to discover
+            force: Force discovery even if hosts were recently scanned
             
         Returns:
             List of discovery results for all hosts
@@ -1112,7 +848,7 @@ class DiscoveryAgent(ProcessAgent):
             self.logger.info(f"📡 [{i}/{len(hosts)}] Discovering {host}")
             
             try:
-                host_results = self.run(host=host)
+                host_results = self.run(host=host, force=force)
                 results.extend(host_results)
             except Exception as e:
                 self.logger.error(f"Failed to discover {host}: {e}")
@@ -1317,52 +1053,568 @@ class DiscoveryAgent(ProcessAgent):
         
         return discovery_results
 
-
-# Example usage and testing functions
-def test_depin_discovery():
-    """Test function for the DePIN Discovery Agent"""
-    
-    # Initialize agent
-    agent = DiscoveryAgent()
-    
-    # Test single host discovery
-    test_hosts = [
-        "sui-validator.example.com",
-        "filecoin-node.example.com", 
-        "unknown-host.example.com"
-    ]
-    
-    print("🧪 Testing DePIN Discovery Agent")
-    print("=" * 50)
-    
-    for host in test_hosts:
-        print(f"\n🔍 Testing discovery for: {host}")
+    def _load_protocols_with_signatures(self) -> List[Dict[str, Any]]:
+        """
+        Load all protocols with their signatures from the database.
         
+        Returns:
+            List of protocol dictionaries with signature data
+        """
         try:
-            results = agent.run(host=host)
+            self.logger.info("🔍 Starting to load protocols with signatures...")
             
-            if results:
-                result = results[0]
-                print(f"✅ Protocol: {result.get('protocol', 'Unknown')}")
-                print(f"🎯 Confidence: {result.get('confidence', 'unknown')} ({result.get('confidence_score', 0):.3f})")
-                print(f"⏱️  Duration: {result.get('performance_metrics', {}).get('total_time', 0):.2f}s")
-            else:
-                print("❌ No results returned")
+            with get_db_session() as session:
+                self.logger.info("🔗 Database session established")
+                
+                # First check individual counts
+                protocol_count = session.query(Protocol).count()
+                signature_count = session.query(ProtocolSignature).count()
+                self.logger.info(f"📊 Found {protocol_count} protocols and {signature_count} signatures in database")
+                
+                # Query protocols with their signatures
+                self.logger.info("🔄 Starting database join query...")
+                protocols_query = session.query(Protocol, ProtocolSignature).join(
+                    ProtocolSignature, Protocol.id == ProtocolSignature.protocol_id
+                ).all()
+                self.logger.info(f"✅ Join query completed, processing {len(protocols_query)} results...")
+                
+                if not protocols_query:
+                    self.logger.warning("No protocols with signatures found in database")
+                    return []
+                
+                self.logger.info(f"Found {len(protocols_query)} protocols with signatures after join")
+                
+                protocols = []
+                self.logger.info("🔄 Processing protocol results...")
+                
+                for i, (protocol_obj, signature_obj) in enumerate(protocols_query):
+                    if i % 5 == 0:  # Log every 5th protocol
+                        self.logger.info(f"   Processing protocol {i+1}/{len(protocols_query)}: {protocol_obj.name}")
+                    
+                    protocol_dict = {
+                        'id': protocol_obj.id,
+                        'name': protocol_obj.name,
+                        'display_name': protocol_obj.display_name,
+                        'category': protocol_obj.category,
+                        'ports': protocol_obj.ports or [],
+                        'endpoints': protocol_obj.endpoints or [],
+                        'banners': protocol_obj.banners or [],
+                        'rpc_methods': protocol_obj.rpc_methods or [],
+                        'metrics_keywords': protocol_obj.metrics_keywords or [],
+                        'http_paths': protocol_obj.http_paths or [],
+                        'identification_hints': protocol_obj.identification_hints or [],
+                        'signature': {
+                            'port_signature': signature_obj.port_signature,
+                            'banner_signature': signature_obj.banner_signature,
+                            'endpoint_signature': signature_obj.endpoint_signature,
+                            'keyword_signature': signature_obj.keyword_signature,
+                            'uniqueness_score': signature_obj.uniqueness_score,
+                            'signature_version': signature_obj.signature_version
+                        }
+                    }
+                    protocols.append(protocol_dict)
+                
+                self.logger.info(f"✅ Successfully processed all {len(protocols)} protocols with signatures")
+                return protocols
                 
         except Exception as e:
-            print(f"❌ Discovery failed: {e}")
+            self.logger.error(f"❌ Failed to load protocols with signatures: {e}")
+            import traceback
+            self.logger.error(f"Stack trace: {traceback.format_exc()}")
+            return []
     
-    # Show statistics
-    print(f"\n📊 Discovery Statistics:")
-    stats = agent.get_discovery_statistics()
-    print(f"   Total Discoveries: {stats.get('total_discoveries', 0)}")
-    print(f"   Success Rate: {stats.get('success_rate', 0):.1f}%")
-    print(f"   Average Duration: {stats.get('average_duration_seconds', 0):.2f}s")
+    def _perform_intelligent_probing(self, hostname: str, nmap_data: Dict, protocols: List[Dict], discovery_id: int) -> Dict[str, Any]:
+        """
+        Perform intelligent protocol-specific probing based on discovered ports and protocol definitions.
+        
+        Args:
+            hostname: Target hostname
+            nmap_data: Network scan data
+            protocols: List of protocol definitions
+            discovery_id: Database discovery ID for persistence
+            
+        Returns:
+            Dictionary of probe results
+        """
+        probe_data = {}
+        open_ports = nmap_data.get('ports', [])
+        
+        if not open_ports:
+            self.logger.warning("No open ports available for probing")
+            return probe_data
+        
+        self.logger.info(f"Starting probing on {len(open_ports)} open ports: {open_ports}")
+        
+        # Create port-to-protocol mapping based on protocol definitions
+        port_to_protocols = {}
+        for protocol in protocols:
+            for port in protocol.get('ports', []):
+                if port in open_ports:
+                    if port not in port_to_protocols:
+                        port_to_protocols[port] = []
+                    port_to_protocols[port].append(protocol)
+        
+        self.logger.info(f"Mapped {len(port_to_protocols)} ports to protocols")
+        
+        successful_probes = 0
+        
+        # Probe each port with protocol-specific requests
+        self.logger.info(f"🔄 Starting to probe {len(open_ports)} open ports...")
+        for i, port in enumerate(open_ports):
+            self.logger.debug(f"   Probing port {i+1}/{len(open_ports)}: {port}")
+            relevant_protocols = port_to_protocols.get(port, [])
+            
+            # HTTP/HTTPS probing for web ports
+            if port in [80, 8080, 3000, 5000, 9000]:
+                self.logger.debug(f"   Starting HTTP probing for port {port}...")
+                try:
+                    probe_data.update(self._probe_http_endpoints(hostname, port, relevant_protocols, discovery_id))
+                    successful_probes += 1
+                    self.logger.debug(f"   ✅ HTTP probing completed for port {port}")
+                except Exception as e:
+                    self.logger.debug(f"   ❌ HTTP probing failed for port {port}: {e}")
+                    
+            elif port in [443, 8443, 9100]:
+                self.logger.debug(f"   Starting HTTPS probing for port {port}...")
+                try:
+                    probe_data.update(self._probe_https_endpoints(hostname, port, relevant_protocols, discovery_id))
+                    successful_probes += 1
+                    self.logger.debug(f"   ✅ HTTPS probing completed for port {port}")
+                except Exception as e:
+                    self.logger.debug(f"   ❌ HTTPS probing failed for port {port}: {e}")
+            
+            # RPC probing for potential RPC ports
+            if port in [9000, 9100, 8545, 8546] or any(p.get('name') == 'sui' for p in relevant_protocols):
+                self.logger.debug(f"   Starting RPC probing for port {port}...")
+                try:
+                    probe_data.update(self._probe_rpc_endpoints(hostname, port, relevant_protocols, discovery_id))
+                    successful_probes += 1
+                    self.logger.debug(f"   ✅ RPC probing completed for port {port}")
+                except Exception as e:
+                    self.logger.debug(f"   ❌ RPC probing failed for port {port}: {e}")
+        
+        self.logger.info(f"✅ Completed probing with {successful_probes} successful responses")
+        return probe_data
     
-    # Cleanup
-    agent.cleanup_session()
-    print(f"\n✅ Test completed")
+    def _probe_http_endpoints(self, hostname: str, port: int, protocols: List[Dict], discovery_id: int) -> Dict[str, Any]:
+        """Probe HTTP endpoints for protocol identification"""
+        probe_results = {}
+        
+        # Common endpoints to probe
+        endpoints = ['/health', '/status', '/metrics', '/info', '/api/v1/status', '/']
+        
+        # Add protocol-specific endpoints
+        for protocol in protocols:
+            endpoints.extend(protocol.get('http_paths', []))
+            endpoints.extend(protocol.get('endpoints', []))
+        
+        # Remove duplicates and limit
+        endpoints = list(set(endpoints))[:10]
+        
+        self.logger.info(f"   Probing {len(endpoints)} HTTP endpoints on port {port}")
+        
+        for i, endpoint in enumerate(endpoints):
+            try:
+                self.logger.debug(f"     Endpoint {i+1}/{len(endpoints)}: {endpoint}")
+                url = f"http://{hostname}:{port}{endpoint}"
+                
+                import requests
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise requests.exceptions.Timeout(f"Request to {url} timed out after 5 seconds")
+                
+                # Set aggressive timeout for individual requests
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)  # 5 second timeout per request
+                
+                try:
+                    response = requests.get(url, timeout=3, verify=False)  # 3 second requests timeout
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    
+                    response_data = {
+                        'status': response.status_code,
+                        'headers': dict(response.headers),
+                        'body': response.text[:5000],  # Limit body size
+                        'url': url,
+                        'response_time_ms': response.elapsed.total_seconds() * 1000
+                    }
+                    
+                    request_data = {
+                        'method': 'GET',
+                        'headers': {},
+                        'body': ''
+                    }
+                    
+                    # Save probe result to database
+                    protocol_hint = protocols[0].get('name', '') if protocols else ''
+                    self.persister.save_probe_result(
+                        discovery_id, 'http', port, endpoint, protocol_hint, 
+                        request_data, response_data
+                    )
+                    
+                    probe_results[f"http_{port}_{endpoint}"] = response_data
+                    self.logger.debug(f"     ✅ HTTP {endpoint} responded: {response.status_code}")
+                    
+                except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    self.logger.debug(f"     ⏰ HTTP {endpoint} timeout/error: {str(e)[:100]}")
+                    
+                    error_info = {'message': str(e), 'timeout': True}
+                    self.persister.save_probe_result(
+                        discovery_id, 'http', port, endpoint, 
+                        protocols[0].get('name', '') if protocols else '',
+                        {'method': 'GET'}, {}, error_info
+                    )
+                    continue
+                    
+            except Exception as e:
+                self.logger.debug(f"     ❌ HTTP {endpoint} failed: {str(e)[:100]}")
+                error_info = {'message': str(e), 'timeout': 'timeout' in str(e).lower()}
+                self.persister.save_probe_result(
+                    discovery_id, 'http', port, endpoint, 
+                    protocols[0].get('name', '') if protocols else '',
+                    {'method': 'GET'}, {}, error_info
+                )
+        
+        return probe_results
+    
+    def _probe_https_endpoints(self, hostname: str, port: int, protocols: List[Dict], discovery_id: int) -> Dict[str, Any]:
+        """Probe HTTPS endpoints for protocol identification"""
+        probe_results = {}
+        
+        # Common HTTPS endpoints
+        endpoints = ['/health', '/status', '/metrics', '/info', '/api/v1/status', '/']
+        
+        # Add protocol-specific endpoints
+        for protocol in protocols:
+            endpoints.extend(protocol.get('http_paths', []))
+            endpoints.extend(protocol.get('endpoints', []))
+        
+        endpoints = list(set(endpoints))[:10]
+        
+        self.logger.info(f"   Probing {len(endpoints)} HTTPS endpoints on port {port}")
+        
+        for i, endpoint in enumerate(endpoints):
+            try:
+                self.logger.debug(f"     Endpoint {i+1}/{len(endpoints)}: {endpoint}")
+                url = f"https://{hostname}:{port}{endpoint}"
+                
+                import requests
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise requests.exceptions.Timeout(f"Request to {url} timed out after 5 seconds")
+                
+                # Set aggressive timeout for individual requests
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)  # 5 second timeout per request
+                
+                try:
+                    response = requests.get(url, timeout=3, verify=False)  # 3 second requests timeout
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    
+                    response_data = {
+                        'status': response.status_code,
+                        'headers': dict(response.headers),
+                        'body': response.text[:5000],
+                        'url': url,
+                        'response_time_ms': response.elapsed.total_seconds() * 1000
+                    }
+                    
+                    request_data = {
+                        'method': 'GET',
+                        'headers': {},
+                        'body': ''
+                    }
+                    
+                    protocol_hint = protocols[0].get('name', '') if protocols else ''
+                    self.persister.save_probe_result(
+                        discovery_id, 'https', port, endpoint, protocol_hint,
+                        request_data, response_data
+                    )
+                    
+                    probe_results[f"https_{port}_{endpoint}"] = response_data
+                    self.logger.debug(f"     ✅ HTTPS {endpoint} responded: {response.status_code}")
+                    
+                except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    self.logger.debug(f"     ⏰ HTTPS {endpoint} timeout/error: {str(e)[:100]}")
+                    
+                    error_info = {'message': str(e), 'timeout': True}
+                    self.persister.save_probe_result(
+                        discovery_id, 'https', port, endpoint,
+                        protocols[0].get('name', '') if protocols else '',
+                        {'method': 'GET'}, {}, error_info
+                    )
+                    continue
+                    
+            except Exception as e:
+                self.logger.debug(f"     ❌ HTTPS {endpoint} failed: {str(e)[:100]}")
+                error_info = {'message': str(e), 'timeout': 'timeout' in str(e).lower()}
+                self.persister.save_probe_result(
+                    discovery_id, 'https', port, endpoint,
+                    protocols[0].get('name', '') if protocols else '',
+                    {'method': 'GET'}, {}, error_info
+                )
+        
+        return probe_results
+    
+    def _probe_rpc_endpoints(self, hostname: str, port: int, protocols: List[Dict], discovery_id: int) -> Dict[str, Any]:
+        """Probe RPC endpoints for protocol identification"""
+        probe_results = {}
+        
+        # Protocol-specific RPC methods
+        rpc_methods = []
+        for protocol in protocols:
+            rpc_methods.extend(protocol.get('rpc_methods', []))
+        
+        # Default RPC methods if none specified
+        if not rpc_methods:
+            rpc_methods = ['sui_getChainId', 'eth_chainId', 'system.listMethods', 'getinfo']
+        
+        self.logger.info(f"   Probing {len(rpc_methods)} RPC methods on port {port}")
+        
+        for i, method in enumerate(rpc_methods[:5]):  # Limit to 5 methods
+            try:
+                self.logger.debug(f"     RPC Method {i+1}/{min(5, len(rpc_methods))}: {method}")
+                url = f"http://{hostname}:{port}/"
+                
+                payload = {
+                    "jsonrpc": "2.0",
+                    "method": method,
+                    "params": [],
+                    "id": 1
+                }
+                
+                import requests
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise requests.exceptions.Timeout(f"RPC request to {url} timed out after 5 seconds")
+                
+                # Set aggressive timeout for individual requests
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(5)  # 5 second timeout per request
+                
+                try:
+                    response = requests.post(url, json=payload, timeout=3, verify=False)  # 3 second requests timeout
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    
+                    response_data = {
+                        'status': response.status_code,
+                        'headers': dict(response.headers),
+                        'body': response.text[:5000],
+                        'url': url,
+                        'response_time_ms': response.elapsed.total_seconds() * 1000
+                    }
+                    
+                    request_data = {
+                        'method': 'POST',
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': str(payload)
+                    }
+                    
+                    protocol_hint = protocols[0].get('name', '') if protocols else ''
+                    self.persister.save_probe_result(
+                        discovery_id, 'rpc', port, '/', protocol_hint,
+                        request_data, response_data
+                    )
+                    
+                    probe_results[f"rpc_{port}_{method}"] = response_data
+                    self.logger.debug(f"     ✅ RPC {method} responded: {response.status_code}")
+                    
+                except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+                    signal.alarm(0)  # Cancel alarm
+                    signal.signal(signal.SIGALRM, old_handler)  # Restore previous handler
+                    self.logger.debug(f"     ⏰ RPC {method} timeout/error: {str(e)[:100]}")
+                    
+                    error_info = {'message': str(e), 'timeout': True}
+                    self.persister.save_probe_result(
+                        discovery_id, 'rpc', port, '/',
+                        protocols[0].get('name', '') if protocols else '',
+                        {'method': 'POST', 'body': str(payload)},
+                        {}, error_info
+                    )
+                    continue
+                    
+            except Exception as e:
+                self.logger.debug(f"     ❌ RPC {method} failed: {str(e)[:100]}")
+                error_info = {'message': str(e), 'timeout': 'timeout' in str(e).lower()}
+                self.persister.save_probe_result(
+                    discovery_id, 'rpc', port, '/',
+                    protocols[0].get('name', '') if protocols else '',
+                    {'method': 'POST', 'body': str(payload) if 'payload' in locals() else ''},
+                    {}, error_info
+                )
+        
+        return probe_results
 
-
-if __name__ == "__main__":
-    test_depin_discovery()
+    def _match_protocol_signatures(self, nmap_data: Dict, probe_data: Dict, protocols: List[Dict]) -> Tuple[Optional[str], float, Dict[str, Any], Dict[str, Any]]:
+        """
+        Match protocol signatures against scan and probe data.
+        
+        Args:
+            nmap_data: Network scan data
+            probe_data: Protocol probe data
+            protocols: List of protocol definitions with signatures
+            
+        Returns:
+            Tuple of (protocol_name, confidence_score, evidence, performance_metrics)
+        """
+        import time
+        start_time = time.time()
+        
+        self.logger.info(f"🔍 Starting signature matching for {len(protocols)} protocols...")
+        
+        best_protocol = None
+        best_confidence = 0.0
+        best_evidence = {}
+        
+        # Generate signatures from scan data
+        self.logger.info("🔄 Generating scan signatures...")
+        scan_signatures = HighPerformanceBinaryMatcher.generate_scan_signatures(
+            nmap_data, probe_data, signature_length=256
+        )
+        self.logger.info("✅ Scan signatures generated")
+        
+        # Debug log the protocols being checked
+        self.logger.info(f"Checking signatures for {len(protocols)} protocols")
+        for protocol in protocols:
+            if protocol.get('name') == 'sui':
+                self.logger.info(f"Found Sui protocol in database: {protocol.get('display_name', 'Unknown')}")
+        
+        # Check each protocol
+        self.logger.info("🔄 Starting protocol matching loop...")
+        for i, protocol in enumerate(protocols):
+            if i % 5 == 0:  # Log every 5th protocol
+                self.logger.info(f"   Checking protocol {i+1}/{len(protocols)}: {protocol.get('name', 'unknown')}")
+            
+            protocol_name = protocol.get('name', 'unknown')
+            signature_data = protocol.get('signature', {})
+            
+            # Calculate similarity scores for each signature type
+            port_similarity = 0.0
+            banner_similarity = 0.0
+            endpoint_similarity = 0.0
+            keyword_similarity = 0.0
+            
+            if signature_data.get('port_signature'):
+                port_similarity = HighPerformanceBinaryMatcher.calculate_binary_similarity(
+                    scan_signatures['port'], signature_data['port_signature']
+                )
+            
+            if signature_data.get('banner_signature'):
+                banner_similarity = HighPerformanceBinaryMatcher.calculate_binary_similarity(
+                    scan_signatures['banner'], signature_data['banner_signature']
+                )
+            
+            if signature_data.get('endpoint_signature'):
+                endpoint_similarity = HighPerformanceBinaryMatcher.calculate_binary_similarity(
+                    scan_signatures['endpoint'], signature_data['endpoint_signature']
+                )
+            
+            if signature_data.get('keyword_signature'):
+                keyword_similarity = HighPerformanceBinaryMatcher.calculate_binary_similarity(
+                    scan_signatures['keyword'], signature_data['keyword_signature']
+                )
+            
+            # Additional manual checks for Sui protocol
+            manual_score = 0.0
+            manual_evidence = {}
+            
+            if protocol_name == 'sui':
+                # Check for Sui-specific indicators
+                open_ports = nmap_data.get('ports', [])
+                
+                # Sui commonly uses ports 9000, 9100
+                if 9000 in open_ports or 9100 in open_ports:
+                    manual_score += 0.3
+                    manual_evidence['sui_ports'] = 'Found Sui common ports'
+                
+                # Check probe responses for Sui indicators
+                for probe_key, probe_response in probe_data.items():
+                    if isinstance(probe_response, dict):
+                        body = probe_response.get('body', '').lower()
+                        headers = str(probe_response.get('headers', {})).lower()
+                        
+                        # Look for Sui-specific keywords
+                        sui_keywords = ['sui', 'move', 'epoch', 'validator', 'checkpoint', 'object', 'digest']
+                        found_keywords = [kw for kw in sui_keywords if kw in body or kw in headers]
+                        
+                        if found_keywords:
+                            manual_score += min(0.4, len(found_keywords) * 0.1)
+                            manual_evidence['sui_keywords'] = found_keywords
+                        
+                        # Check for JSON-RPC structure typical of Sui
+                        if '"jsonrpc"' in body or '"result"' in body:
+                            manual_score += 0.2
+                            manual_evidence['jsonrpc'] = 'Found JSON-RPC structure'
+                        
+                        # Check for Sui-specific error messages or responses
+                        if 'sui_' in body or 'move' in body:
+                            manual_score += 0.3
+                            manual_evidence['sui_specific'] = 'Found Sui-specific content'
+            
+            # Weighted combination of signature similarities and manual checks
+            uniqueness_score = signature_data.get('uniqueness_score', 0.5)
+            combined_similarity = (
+                port_similarity * 0.25 +
+                banner_similarity * 0.25 +
+                endpoint_similarity * 0.25 +
+                keyword_similarity * 0.25
+            )
+            
+            # Final confidence calculation
+            confidence = (combined_similarity * 0.6 + manual_score * 0.4) * uniqueness_score
+            
+            # Debug logging for Sui
+            if protocol_name == 'sui':
+                self.logger.info(f"Sui signature analysis:")
+                self.logger.info(f"  Port similarity: {port_similarity:.3f}")
+                self.logger.info(f"  Banner similarity: {banner_similarity:.3f}")
+                self.logger.info(f"  Endpoint similarity: {endpoint_similarity:.3f}")
+                self.logger.info(f"  Keyword similarity: {keyword_similarity:.3f}")
+                self.logger.info(f"  Manual score: {manual_score:.3f}")
+                self.logger.info(f"  Combined similarity: {combined_similarity:.3f}")
+                self.logger.info(f"  Uniqueness score: {uniqueness_score:.3f}")
+                self.logger.info(f"  Final confidence: {confidence:.3f}")
+                self.logger.info(f"  Manual evidence: {manual_evidence}")
+            
+            # Update best match
+            if confidence > best_confidence:
+                best_confidence = confidence
+                best_protocol = protocol_name
+                best_evidence = {
+                    'signature_similarities': {
+                        'port': port_similarity,
+                        'banner': banner_similarity,
+                        'endpoint': endpoint_similarity,
+                        'keyword': keyword_similarity
+                    },
+                    'manual_checks': manual_evidence,
+                    'combined_similarity': combined_similarity,
+                    'manual_score': manual_score,
+                    'uniqueness_score': uniqueness_score,
+                    'protocol_details': {
+                        'name': protocol.get('name'),
+                        'display_name': protocol.get('display_name'),
+                        'category': protocol.get('category')
+                    }
+                }
+        
+        self.logger.info(f"✅ Protocol matching completed. Best match: {best_protocol} ({best_confidence:.3f})")
+        
+        performance_metrics = {
+            'signature_matching_time': time.time() - start_time,
+            'protocols_checked': len(protocols),
+            'best_protocol': best_protocol,
+            'best_confidence': best_confidence
+        }
+        
+        return best_protocol, best_confidence, best_evidence, performance_metrics
