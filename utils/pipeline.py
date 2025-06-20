@@ -431,7 +431,7 @@ class PipelineOrchestrator:
                 raise Exception(f"Failed to create discovery agent: {agent_name}")
             
             # Execute discovery with host parameter
-            processed_results = agent.execute(host)
+            processed_results = agent.execute(host=host)
             
             self.logger.info(f"🔍 Discovery stage completed successfully")
             return processed_results

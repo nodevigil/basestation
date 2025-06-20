@@ -198,6 +198,38 @@ class AgentRegistry:
             return agent_class(*args, **kwargs)
         return None
     
+    def create_agent(self, name: str, *args, **kwargs) -> Optional[BaseAgent]:
+        """
+        Create an instance of any agent by name, checking all categories.
+        
+        Args:
+            name: Name of the agent to create
+            *args, **kwargs: Arguments to pass to agent constructor
+            
+        Returns:
+            Agent instance or None if not found
+        """
+        # Try each category in order
+        agent = self.create_recon_agent(name, *args, **kwargs)
+        if agent:
+            return agent
+            
+        agent = self.create_scan_agent(name, *args, **kwargs)
+        if agent:
+            return agent
+            
+        agent = self.create_process_agent(name, *args, **kwargs)  
+        if agent:
+            return agent
+            
+        agent = self.create_publish_agent(name, *args, **kwargs)
+        if agent:
+            return agent
+            
+        # If not found in any category, log warning
+        self.logger.warning(f"Agent {name} not found in any category")
+        return None
+    
     def list_all_agents(self) -> Dict[str, List[str]]:
         """List all available agents by category."""
         return {
