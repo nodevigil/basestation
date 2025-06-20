@@ -78,7 +78,8 @@ def run_single_stage(
     recon_agents: Optional[List[str]] = None,
     protocol_filter: Optional[str] = None,
     debug: bool = False,
-    force_rescore: bool = False
+    force_rescore: bool = False,
+    host: Optional[str] = None
 ) -> None:
     """
     Run a single pipeline stage.
@@ -90,6 +91,7 @@ def run_single_stage(
         recon_agents: List of recon agents (for recon stage)
         protocol_filter: Protocol filter for scanning (e.g., 'filecoin', 'sui')
         debug: Enable debug logging for scanners
+        host: Host/IP address for network topology discovery (required for discovery stage)
     """
     print(f"🎯 Running single stage: {stage}")
     if debug:
@@ -150,8 +152,12 @@ def run_single_stage(
             print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
             
         elif stage == 'discovery':
+            if not host:
+                print("❌ Discovery stage requires --host argument")
+                print("   Example: pgdn --stage discovery --host 192.168.1.1")
+                sys.exit(1)
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent')
+            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent', host=host)
             print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
             
         else:
@@ -263,7 +269,7 @@ Examples:
   pgdn --stage process              # Run only processing
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
-  pgdn --stage discovery            # Run network topology discovery
+  pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
   pgdn --stage publish              # Run only publishing
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
@@ -309,6 +315,11 @@ Examples:
         '--protocol',
         choices=['filecoin', 'sui'],
         help='Protocol filter for scanning (e.g., filecoin, sui)'
+    )
+    
+    parser.add_argument(
+        '--host',
+        help='Host/IP address for network topology discovery (required for discovery stage)'
     )
     
     parser.add_argument(
@@ -642,9 +653,13 @@ def main():
                 results = orchestrator.run_signature_stage(args.agent or 'ProtocolSignatureGeneratorAgent')
                 print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
             elif args.stage == 'discovery':
-                # Discovery stage
+                # Discovery stage requires host argument
+                if not args.host:
+                    print("❌ Discovery stage requires --host argument")
+                    print("   Example: pgdn --stage discovery --host 192.168.1.1")
+                    sys.exit(1)
                 orchestrator = create_orchestrator(config)
-                results = orchestrator.run_discovery_stage(args.agent or 'DiscoveryAgent')
+                results = orchestrator.run_discovery_stage(args.agent or 'DiscoveryAgent', host=args.host)
                 print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
             else:
                 # Run single stage
@@ -655,7 +670,8 @@ def main():
                     args.recon_agents,
                     args.protocol,
                     args.debug,
-                    args.force_rescore
+                    args.force_rescore,
+                    args.host
                 )
         else:
             # Run full pipeline
