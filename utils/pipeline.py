@@ -362,6 +362,56 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running report agent {agent_name}: {e}")
             return {}
     
+    def run_signature_stage(self, agent_name: str = "ProtocolSignatureGeneratorAgent") -> List[Dict[str, Any]]:
+        """
+        Run the protocol signature generation stage independently.
+        
+        Args:
+            agent_name: Name of signature agent to use
+            
+        Returns:
+            List of processed results with signature information
+        """
+        self.logger.info(f"🔏 Running signature generation stage: {agent_name}")
+        try:
+            agent = self.agent_registry.create_process_agent(agent_name, self.config)
+            
+            if not agent:
+                raise Exception(f"Failed to create signature agent: {agent_name}")
+            
+            # For signature generation, we need scan results as input
+            # Get recent scan results from database that haven't been processed for signatures
+            from core.database import get_db_session, ValidatorScan
+            scan_results = []
+            
+            with get_db_session() as session:
+                # Get recent scans that need signature processing
+                scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.scan_results.isnot(None)
+                ).order_by(ValidatorScan.created_at.desc()).limit(100).all()
+                
+                for scan in scans:
+                    if scan.scan_results:
+                        scan_result = scan.scan_results.copy()
+                        scan_result['scan_id'] = scan.id
+                        scan_result['ip_address'] = scan.ip_address
+                        scan_result['timestamp'] = scan.created_at.isoformat()
+                        scan_results.append(scan_result)
+            
+            if not scan_results:
+                self.logger.warning("No scan results found for signature generation")
+                return []
+            
+            # Execute signature generation
+            processed_results = agent.execute(scan_results)
+            
+            self.logger.info(f"🔏 Signature generation stage completed successfully")
+            return processed_results
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error running signature agent {agent_name}: {e}")
+            return []
+    
     def run_single_stage(
         self,
         stage: str,
@@ -372,7 +422,7 @@ class PipelineOrchestrator:
         Run a single pipeline stage.
         
         Args:
-            stage: Stage name ('recon', 'scan', 'process', 'score', 'report', 'publish')
+            stage: Stage name ('recon', 'scan', 'process', 'score', 'report', 'signature', 'publish')
             agent_name: Specific agent name to use
             **stage_args: Additional arguments for the stage
             
@@ -401,6 +451,9 @@ class PipelineOrchestrator:
         elif stage == 'report':
             report_options = stage_args.get('report_options')
             return self.run_report_stage(agent_name or "ReportAgent", report_options)
+        
+        elif stage == 'signature':
+            return self.run_signature_stage(agent_name or "ProtocolSignatureGeneratorAgent")
         
         else:
             raise ValueError(f"Unknown stage: {stage}")

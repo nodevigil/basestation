@@ -143,6 +143,11 @@ def run_single_stage(
             }
             results = orchestrator.run_report_stage(agent_name or 'ReportAgent', report_options)
             print(f"✅ Report generation completed successfully!")
+        
+        elif stage == 'signature':
+            orchestrator = create_orchestrator(config)
+            results = orchestrator.run_signature_stage(agent_name or 'ProtocolSignatureGeneratorAgent')
+            print(f"✅ Protocol signature generation completed: {len(results)} results processed")
             
         else:
             print(f"❌ Unknown stage: {stage}")
@@ -252,6 +257,7 @@ Examples:
   pgdn --stage scan --protocol sui  # Scan only Sui nodes
   pgdn --stage process              # Run only processing
   pgdn --stage score                # Run only scoring
+  pgdn --stage signature            # Generate protocol signatures
   pgdn --stage publish              # Run only publishing
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
@@ -273,7 +279,7 @@ Examples:
     
     parser.add_argument(
         '--stage',
-        choices=['recon', 'scan', 'process', 'score', 'publish', 'report'],
+        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature'],
         help='Run only the specified stage'
     )
     
@@ -624,6 +630,11 @@ def main():
                 
                 results = orchestrator.run_report_stage(args.agent or 'ReportAgent', report_options)
                 print(f"✅ Report generation completed successfully!")
+            elif args.stage == 'signature':
+                # Signature generation stage
+                orchestrator = create_orchestrator(config)
+                results = orchestrator.run_signature_stage(args.agent or 'ProtocolSignatureGeneratorAgent')
+                print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
             else:
                 # Run single stage
                 run_single_stage(

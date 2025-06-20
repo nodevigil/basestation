@@ -4,7 +4,7 @@ Database management and models for the DePIN infrastructure scanner.
 
 import os
 import uuid
-from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, String, DateTime, Boolean, Integer, ForeignKey, JSON, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
@@ -218,6 +218,82 @@ class ValidatorScanReport(Base):
             'report_email_body': self.report_email_body,
             'report_email_subject': self.report_email_subject,
             'report_email_to': self.report_email_to,
+        }
+
+
+class Protocol(Base):
+    """Model for storing protocol definitions."""
+    __tablename__ = 'protocols'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)  # UUID for external references
+    name = Column(String(50), unique=True, nullable=False)  # Protocol name (sui, filecoin, etc.)
+    display_name = Column(String(100), nullable=False)  # Human readable name
+    category = Column(String(50), nullable=False)  # DePIN category
+    ports = Column(JSON, nullable=False)  # JSON array of common ports
+    endpoints = Column(JSON, nullable=False)  # JSON array of common endpoints
+    banners = Column(JSON, nullable=False)  # JSON array of banner patterns
+    rpc_methods = Column(JSON, nullable=False)  # JSON array of RPC methods
+    metrics_keywords = Column(JSON, nullable=False)  # JSON array of metrics keywords
+    http_paths = Column(JSON, nullable=False)  # JSON array of HTTP paths
+    identification_hints = Column(JSON, nullable=False)  # JSON array of identification hints
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship to signatures
+    signature = relationship("ProtocolSignature", back_populates="protocol", uselist=False)
+    
+    def __repr__(self):
+        return f"<Protocol(name='{self.name}', display_name='{self.display_name}', category='{self.category}')>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'name': self.name,
+            'display_name': self.display_name,
+            'category': self.category,
+            'ports': self.ports,
+            'endpoints': self.endpoints,
+            'banners': self.banners,
+            'rpc_methods': self.rpc_methods,
+            'metrics_keywords': self.metrics_keywords,
+            'http_paths': self.http_paths,
+            'identification_hints': self.identification_hints,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class ProtocolSignature(Base):
+    """Model for storing binary protocol signatures for fast matching."""
+    __tablename__ = 'protocol_signatures'
+    
+    protocol_id = Column(Integer, ForeignKey('protocols.id'), primary_key=True)
+    port_signature = Column(String, nullable=False)  # Binary signature as base64 string
+    banner_signature = Column(String, nullable=False)  # Binary signature as base64 string
+    endpoint_signature = Column(String, nullable=False)  # Binary signature as base64 string
+    keyword_signature = Column(String, nullable=False)  # Binary signature as base64 string
+    uniqueness_score = Column(Float, nullable=False)  # Uniqueness score for ranking
+    signature_version = Column(Integer, default=1, nullable=False)  # Version for signature updates
+    
+    # Relationship back to protocol
+    protocol = relationship("Protocol", back_populates="signature")
+    
+    def __repr__(self):
+        return f"<ProtocolSignature(protocol_id={self.protocol_id}, uniqueness_score={self.uniqueness_score})>"
+    
+    def to_dict(self):
+        """Convert to dictionary representation."""
+        return {
+            'protocol_id': self.protocol_id,
+            'port_signature': self.port_signature,
+            'banner_signature': self.banner_signature,
+            'endpoint_signature': self.endpoint_signature,
+            'keyword_signature': self.keyword_signature,
+            'uniqueness_score': self.uniqueness_score,
+            'signature_version': self.signature_version
         }
 
 
