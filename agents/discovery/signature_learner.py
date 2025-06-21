@@ -541,3 +541,556 @@ if __name__ == "__main__":
     print("2. Learn improved signatures")
     print("3. Prepare AI fine-tuning data")
     print("4. Track training improvements")
+
+class ScanDataSignatureLearner(SignatureLearner):
+    """Learn signatures from existing scan data in the database"""
+    
+    def __init__(self, existing_signatures: Dict[str, Any] = None, db_path: str = None):
+        super().__init__(existing_signatures)
+        self.db_path = db_path or "training_data.db"
+        self.training_manager = TrainingDataManager(self.db_path)
+        self.logger = logging.getLogger(self.__class__.__name__)
+    
+    def learn_from_scans(self, protocol: str = None, source: str = None, 
+                        min_confidence: float = 0.7, max_examples: int = 1000) -> Dict[str, Any]:
+        """
+        Learn signatures from existing scan data in the database
+        
+        Args:
+            protocol: Specific protocol to learn (None for all)
+            source: Source identifier for tracking (required)
+            min_confidence: Minimum confidence threshold for scans to include
+            max_examples: Maximum examples to process per protocol
+            
+        Returns:
+            Dictionary with learning results and statistics
+        """
+        if not source:
+            raise ValueError("Source identifier is required for tracking")
+        
+        self.logger.info(f"🎓 Learning signatures from existing scans")
+        self.logger.info(f"   Protocol filter: {protocol or 'all'}")
+        self.logger.info(f"   Source: {source}")
+        self.logger.info(f"   Min confidence: {min_confidence}")
+        self.logger.info(f"   Max examples: {max_examples}")
+        
+        # Start learning session for tracking
+        session_id = self._start_learning_session(source, protocol, min_confidence, max_examples)
+        
+        try:
+            # Extract scan data from database
+            scan_data = self._extract_scan_data_from_database(protocol, min_confidence, max_examples)
+            
+            if not scan_data:
+                self.logger.warning("No suitable scan data found for learning")
+                return {'success': False, 'error': 'No scan data found'}
+            
+            # Convert to labeled training data
+            labeled_examples = []
+            for scan in scan_data:
+                try:
+                    labeled_data = self._convert_discovery_to_labeled_data(scan, source)
+                    if labeled_data:
+                        labeled_examples.append(labeled_data)
+                except Exception as e:
+                    self.logger.warning(f"Failed to convert scan {scan.get('hostname', 'unknown')}: {e}")
+            
+            if not labeled_examples:
+                self.logger.warning("No valid labeled examples created from scan data")
+                return {'success': False, 'error': 'No valid examples created'}
+            
+            # Learn signatures using the parent class method
+            learning_results = self.learn_from_labeled_data(labeled_examples)
+            
+            # Ensure uniqueness and update database
+            unique_signatures = self._ensure_signature_uniqueness(learning_results['learned_signatures'])
+            update_results = self._update_protocol_signatures_database(unique_signatures, source)
+            
+            # Complete learning session
+            session_results = {
+                'signatures_learned': len(unique_signatures),
+                'examples_processed': len(labeled_examples),
+                'protocols_affected': list(unique_signatures.keys()),
+                'database_updates': update_results,
+                'improvements': learning_results.get('improvements', {})
+            }
+            
+            self._complete_learning_session(session_id, session_results)
+            
+            return {
+                'success': True,
+                'session_id': session_id,
+                'signatures_learned': unique_signatures,
+                'statistics': session_results,
+                'source': source
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Learning failed: {e}")
+            self._fail_learning_session(session_id, str(e))
+            raise
+    
+    def _extract_scan_data_from_database(self, protocol: str = None, min_confidence: float = 0.7, 
+                                       limit: int = 1000) -> List[Dict[str, Any]]:
+        """Extract scan data from validator_scans table"""
+        from core.database import get_db_session
+        from sqlalchemy import text
+        
+        try:
+            with get_db_session() as session:
+                # Query validator_scans table for recent scans
+                query = """
+                    SELECT 
+                        id,
+                        ip_address,
+                        scan_results,
+                        created_at,
+                        failed
+                    FROM validator_scans
+                    WHERE failed = false
+                      AND scan_results IS NOT NULL
+                      AND scan_results->>'source' IS NOT NULL
+                """
+                
+                params = {}
+                
+                if protocol:
+                    # Try to match protocol in scan results
+                    query += " AND (scan_results->>'source' ILIKE :protocol OR scan_results->'protocol_scan'->>'scan_type' ILIKE :protocol)"
+                    params['protocol'] = f'%{protocol}%'
+                
+                query += " ORDER BY created_at DESC LIMIT :limit"
+                params['limit'] = limit
+                
+                scans = session.execute(text(query), params).fetchall()
+                
+                scan_data = []
+                for scan in scans:
+                    scan_results = scan.scan_results
+                    
+                    # Extract protocol information from scan_results
+                    source = scan_results.get('source', 'unknown')
+                    protocol_scan = scan_results.get('protocol_scan', {})
+                    scan_type = protocol_scan.get('scan_type', source)
+                    
+                    # Determine detected protocol from scan data
+                    detected_protocol = self._infer_protocol_from_scan(scan_results)
+                    
+                    # Calculate a simple confidence score based on scan completeness
+                    confidence = self._calculate_scan_confidence(scan_results)
+                    
+                    if confidence >= min_confidence:
+                        scan_record = {
+                            'hostname': scan.ip_address,
+                            'detected_protocol': detected_protocol,
+                            'confidence_score': confidence,
+                            'scan_completed_at': scan.created_at,
+                            'discovery_id': scan.id,
+                            'source': source,
+                            'scan_type': scan_type,
+                            'network_scan_data': self._extract_network_data(scan_results),
+                            'probe_results': self._extract_probe_data(scan_results)
+                        }
+                        
+                        scan_data.append(scan_record)
+                
+                self.logger.info(f"Extracted {len(scan_data)} scan records from validator_scans table")
+                return scan_data
+                
+        except Exception as e:
+            self.logger.error(f"Failed to extract scan data: {e}")
+            return []
+    
+    def _convert_discovery_to_labeled_data(self, scan_record: Dict[str, Any], source: str) -> LabeledScanData:
+        """Convert a host discovery record to labeled training data"""
+        # Build scan_data structure expected by the parent class
+        nmap_data = scan_record['network_scan_data']
+        
+        # Convert probe results to the expected format
+        probes = {}
+        for probe in scan_record['probe_results']:
+            key = f"{probe['probe_type']}_{probe['target_port']}_{probe['endpoint_path'] or ''}"
+            probes[key] = probe['response_data']
+        
+        scan_data = {
+            'nmap': {
+                'ports': nmap_data.get('open_ports', []),
+                'services': nmap_data.get('services_detected', {})
+            },
+            'probes': probes
+        }
+        
+        return LabeledScanData(
+            hostname=scan_record['hostname'],
+            true_protocol=scan_record['detected_protocol'],
+            scan_data=scan_data,
+            confidence=scan_record['confidence_score'],
+            source=source,
+            timestamp=scan_record['scan_completed_at']
+        )
+    
+    def _ensure_signature_uniqueness(self, learned_signatures: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure learned signatures are unique across the database"""
+        from core.database import get_db_session, ProtocolSignature, Protocol
+        from sqlalchemy import text
+        
+        unique_signatures = {}
+        
+        try:
+            with get_db_session() as session:
+                # Get existing signatures for comparison
+                existing_sigs = session.execute(
+                    text("""SELECT p.name, ps.port_signature, ps.banner_signature, 
+                               ps.endpoint_signature, ps.keyword_signature
+                           FROM protocol_signatures ps
+                           JOIN protocols p ON ps.protocol_id = p.id""")
+                ).fetchall()
+                
+                existing_by_protocol = {}
+                for sig in existing_sigs:
+                    existing_by_protocol[sig.name] = {
+                        'port_signature': sig.port_signature,
+                        'banner_signature': sig.banner_signature,
+                        'endpoint_signature': sig.endpoint_signature,
+                        'keyword_signature': sig.keyword_signature
+                    }
+                
+                # Check each learned signature for uniqueness
+                for protocol, signature_data in learned_signatures.items():
+                    if self._check_signature_uniqueness(signature_data, existing_by_protocol, protocol):
+                        unique_signatures[protocol] = signature_data
+                        self.logger.info(f"✅ Signature for {protocol} is unique")
+                    else:
+                        self.logger.warning(f"⚠️  Signature for {protocol} is not unique, skipping")
+                
+                return unique_signatures
+                
+        except Exception as e:
+            self.logger.error(f"Failed to check signature uniqueness: {e}")
+            # Return original signatures if uniqueness check fails
+            return learned_signatures
+    
+    def _check_signature_uniqueness(self, new_signature: Dict[str, Any], 
+                                  existing_signatures: Dict[str, Dict], 
+                                  protocol: str) -> bool:
+        """Check if a signature is unique enough to warrant updating"""
+        if protocol not in existing_signatures:
+            return True  # No existing signature for this protocol
+        
+        existing = existing_signatures[protocol]
+        
+        # Check if any component is exactly the same (indicating no improvement)
+        for sig_type in ['port_signature', 'banner_signature', 'endpoint_signature', 'keyword_signature']:
+            if (new_signature.get(sig_type) == existing.get(sig_type) and 
+                new_signature.get(sig_type) is not None):
+                # If any signature component is identical, check if we have enough new examples
+                new_examples = new_signature.get('examples_count', 0)
+                if new_examples < 5:  # Need at least 5 new examples to justify update
+                    return False
+        
+        # Check for duplicate across other protocols (cross-protocol uniqueness)
+        new_port_sig = new_signature.get('port_signature')
+        if new_port_sig:
+            for other_protocol, other_sig in existing_signatures.items():
+                if other_protocol != protocol and other_sig.get('port_signature') == new_port_sig:
+                    self.logger.warning(f"Port signature for {protocol} matches {other_protocol}")
+                    return False
+        
+        return True
+    
+    def _update_protocol_signatures_database(self, signatures: Dict[str, Any], source: str) -> Dict[str, Any]:
+        """Update protocol signatures in the database"""
+        from core.database import get_db_session, Protocol, ProtocolSignature
+        from sqlalchemy import text
+        
+        update_results = {'updated': [], 'created': [], 'errors': []}
+        
+        try:
+            with get_db_session() as session:
+                for protocol_name, signature_data in signatures.items():
+                    try:
+                        # Get protocol ID
+                        protocol = session.execute(
+                            text("SELECT id FROM protocols WHERE name = :name"),
+                            {'name': protocol_name}
+                        ).fetchone()
+                        
+                        if not protocol:
+                            self.logger.warning(f"Protocol {protocol_name} not found in database")
+                            update_results['errors'].append(f"Protocol {protocol_name} not found")
+                            continue
+                        
+                        protocol_id = protocol.id
+                        
+                        # Check if signature exists
+                        existing = session.execute(
+                            text("SELECT signature_version FROM protocol_signatures WHERE protocol_id = :id"),
+                            {'id': protocol_id}
+                        ).fetchone()
+                        
+                        if existing:
+                            # Update existing signature
+                            session.execute(
+                                text("""UPDATE protocol_signatures 
+                                       SET port_signature = :port_sig,
+                                           banner_signature = :banner_sig,
+                                           endpoint_signature = :endpoint_sig,
+                                           keyword_signature = :keyword_sig,
+                                           uniqueness_score = :uniqueness_score,
+                                           signature_version = signature_version + 1
+                                       WHERE protocol_id = :protocol_id"""),
+                                {
+                                    'port_sig': signature_data['port_signature'],
+                                    'banner_sig': signature_data['banner_signature'],
+                                    'endpoint_sig': signature_data['endpoint_signature'],
+                                    'keyword_sig': signature_data['keyword_signature'],
+                                    'uniqueness_score': signature_data.get('uniqueness_score', 0.5),
+                                    'protocol_id': protocol_id
+                                }
+                            )
+                            update_results['updated'].append(protocol_name)
+                            self.logger.info(f"✅ Updated signature for {protocol_name}")
+                        else:
+                            # Create new signature
+                            session.execute(
+                                text("""INSERT INTO protocol_signatures 
+                                       (protocol_id, port_signature, banner_signature, endpoint_signature, 
+                                        keyword_signature, uniqueness_score, signature_version)
+                                       VALUES (:protocol_id, :port_sig, :banner_sig, :endpoint_sig, 
+                                               :keyword_sig, :uniqueness_score, 1)"""),
+                                {
+                                    'protocol_id': protocol_id,
+                                    'port_sig': signature_data['port_signature'],
+                                    'banner_sig': signature_data['banner_signature'],
+                                    'endpoint_sig': signature_data['endpoint_signature'],
+                                    'keyword_sig': signature_data['keyword_signature'],
+                                    'uniqueness_score': signature_data.get('uniqueness_score', 0.5)
+                                }
+                            )
+                            update_results['created'].append(protocol_name)
+                            self.logger.info(f"✅ Created new signature for {protocol_name}")
+                        
+                        # Save to training data manager for tracking
+                        self.training_manager.add_labeled_example(
+                            hostname=f"learned_from_scans_{protocol_name}",
+                            true_protocol=protocol_name,
+                            scan_data={
+                                'learning_metadata': {
+                                    'examples_count': signature_data.get('examples_count', 0),
+                                    'confidence_score': signature_data.get('confidence_score', 0.0),
+                                    'source': source
+                                }
+                            },
+                            confidence=signature_data.get('confidence_score', 0.0),
+                            source=source
+                        )
+                        
+                    except Exception as e:
+                        error_msg = f"Failed to update {protocol_name}: {e}"
+                        self.logger.error(error_msg)
+                        update_results['errors'].append(error_msg)
+                
+                session.commit()
+                return update_results
+                
+        except Exception as e:
+            self.logger.error(f"Database update failed: {e}")
+            return {'updated': [], 'created': [], 'errors': [str(e)]}
+    
+    def _start_learning_session(self, source: str, protocol: str = None, 
+                              min_confidence: float = 0.7, max_examples: int = 1000) -> str:
+        """Start a learning session for tracking"""
+        session_id = f"scan_learning_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{source}"
+        
+        self.training_manager.save_training_session(session_id, {
+            'session_type': 'scan_data_learning',
+            'source': source,
+            'protocol_filter': protocol,
+            'min_confidence': min_confidence,
+            'max_examples': max_examples,
+            'status': 'started',
+            'started_at': datetime.utcnow().isoformat()
+        })
+        
+        return session_id
+    
+    def _complete_learning_session(self, session_id: str, results: Dict) -> None:
+        """Complete a learning session with results"""
+        results.update({
+            'status': 'completed',
+            'completed_at': datetime.utcnow().isoformat()
+        })
+        
+        self.training_manager.save_training_session(f"{session_id}_completed", results)
+    
+    def _fail_learning_session(self, session_id: str, error: str) -> None:
+        """Mark a learning session as failed"""
+        self.training_manager.save_training_session(f"{session_id}_failed", {
+            'status': 'failed',
+            'error': error,
+            'failed_at': datetime.utcnow().isoformat()
+        })
+    
+    def _infer_protocol_from_scan(self, scan_results: Dict[str, Any]) -> str:
+        """Infer the protocol type from scan results"""
+        # Check for explicit source first
+        source = scan_results.get('source', '')
+        if 'filecoin' in source.lower():
+            return 'filecoin'
+        elif 'sui' in source.lower():
+            return 'sui'
+        elif 'lotus' in source.lower():
+            return 'filecoin'
+        
+        # Check protocol_scan section
+        protocol_scan = scan_results.get('protocol_scan', {})
+        scan_type = protocol_scan.get('scan_type', '')
+        if 'filecoin' in scan_type.lower():
+            return 'filecoin'
+        elif 'sui' in scan_type.lower():
+            return 'sui'
+        
+        # Check for specific API endpoints that indicate protocols
+        if protocol_scan.get('lotus_api_exposed'):
+            return 'filecoin'
+        
+        # Default based on source
+        if source:
+            return source.split('_')[0] if '_' in source else source
+        
+        return 'unknown'
+    
+    def _calculate_scan_confidence(self, scan_results: Dict[str, Any]) -> float:
+        """Calculate confidence score based on scan completeness"""
+        confidence = 0.0
+        
+        # Base confidence for having scan results
+        confidence += 0.3
+        
+        # Check if scan completed successfully
+        if not scan_results.get('failed', True):
+            confidence += 0.2
+        
+        # Check for network scan data
+        generic_scan = scan_results.get('generic_scan', {})
+        if generic_scan.get('open_ports'):
+            confidence += 0.1
+        if generic_scan.get('banners'):
+            confidence += 0.1
+        
+        # Check for protocol-specific scan
+        protocol_scan = scan_results.get('protocol_scan', {})
+        if protocol_scan:
+            confidence += 0.2
+            
+            # Bonus for specific protocol indicators
+            if protocol_scan.get('lotus_api_exposed') or protocol_scan.get('storage_api_exposed'):
+                confidence += 0.1
+        
+        return min(1.0, confidence)
+    
+    def _extract_network_data(self, scan_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract network scan data from scan results"""
+        generic_scan = scan_results.get('generic_scan', {})
+        nmap_data = generic_scan.get('nmap', {})
+        
+        open_ports = generic_scan.get('open_ports', [])
+        
+        # Convert nmap ports to services dict with proper structure
+        services_detected = {}
+        for port_info in nmap_data.get('ports', []):
+            port = port_info.get('port')
+            if port:
+                # Create service dict with expected structure
+                services_detected[str(port)] = {
+                    'name': port_info.get('service', 'unknown'),
+                    'product': port_info.get('product', ''),
+                    'version': port_info.get('version', ''),
+                    'banner': ''  # Will be filled from banners if available
+                }
+        
+        # Add banner information to services
+        banners = generic_scan.get('banners', {})
+        for port_str, banner_data in banners.items():
+            if port_str in services_detected:
+                # Extract actual banner text
+                if isinstance(banner_data, str):
+                    services_detected[port_str]['banner'] = banner_data
+                elif isinstance(banner_data, dict):
+                    # If banner_data is a dict, try to extract meaningful text
+                    services_detected[port_str]['banner'] = str(banner_data)
+        
+        return {
+            'open_ports': open_ports,
+            'services_detected': services_detected,
+            'banners': banners,
+            'nmap_data': nmap_data
+        }
+    
+    def _extract_probe_data(self, scan_results: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract probe results from scan results"""
+        probe_results = []
+        
+        # Extract protocol-specific probe data
+        protocol_scan = scan_results.get('protocol_scan', {})
+        if protocol_scan:
+            # Add API endpoint probes
+            for api_type in ['lotus_api', 'storage_api', 'market_api']:
+                url_key = f'{api_type}_url'
+                exposed_key = f'{api_type}_exposed'
+                
+                if protocol_scan.get(url_key) and protocol_scan.get(exposed_key):
+                    probe_results.append({
+                        'probe_type': api_type,
+                        'target_port': self._extract_port_from_url(protocol_scan[url_key]),
+                        'endpoint_path': self._extract_path_from_url(protocol_scan[url_key]),
+                        'response_data': protocol_scan.get(f'{api_type[:-4]}_info', {})
+                    })
+        
+        # Extract web probe data
+        web_probes = scan_results.get('web_probes', {})
+        for target, probe_data in web_probes.items():
+            if ':' in target:
+                host, port = target.split(':', 1)
+                for probe_type, result in probe_data.items():
+                    if result.get('detected'):
+                        probe_results.append({
+                            'probe_type': f'web_{probe_type}',
+                            'target_port': int(port),
+                            'endpoint_path': '/',
+                            'response_data': result
+                        })
+        
+        return probe_results
+    
+    def _extract_port_from_url(self, url: str) -> int:
+        """Extract port number from URL"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            return parsed.port or (443 if parsed.scheme == 'https' else 80)
+        except:
+            return 80
+    
+    def _extract_path_from_url(self, url: str) -> str:
+        """Extract path from URL"""
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            return parsed.path or '/'
+        except:
+            return '/'
+
+# Add new methods to the existing SignatureLearner class
+def learn_from_existing_scans(self, protocol: str = None, source: str = None, 
+                            min_confidence: float = 0.7, max_examples: int = 1000) -> Dict[str, Any]:
+    """
+    Learn signatures from existing scan data (convenience method)
+    
+    This method creates a ScanDataSignatureLearner and uses it to learn from existing scans.
+    """
+    scan_learner = ScanDataSignatureLearner(self.existing_signatures)
+    return scan_learner.learn_from_scans(protocol, source, min_confidence, max_examples)
+
+# Monkey patch the method onto SignatureLearner
+SignatureLearner.learn_from_existing_scans = learn_from_existing_scans

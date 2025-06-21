@@ -303,6 +303,12 @@ Examples:
   pgdn --target-file targets.txt --queue # Scan targets from file in parallel
   pgdn --parallel-stages recon scan --queue # Run multiple independent stages in parallel
   pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
+  
+  # Signature Learning from Existing Scans
+  pgdn --learn-signatures-from-scans --signature-learning-source sui_recon_agent # Learn Sui signatures from existing scans
+  pgdn --learn-signatures-from-scans --signature-learning-source filecoin_lotus_peer --signature-learning-protocol filecoin # Learn Filecoin signatures only
+  pgdn --learn-signatures-from-scans --signature-learning-source comprehensive_discovery --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
+  pgdn --learn-signatures-from-scans --signature-learning-source ethereum_discovery --signature-learning-max-examples 500 # Limit examples per protocol
         """
     )
     
@@ -510,6 +516,36 @@ Examples:
     parser.add_argument(
         '--target-file',
         help='File containing list of targets to scan (one per line)'
+    )
+    
+    parser.add_argument(
+        '--learn-signatures-from-scans',
+        action='store_true',
+        help='Learn improved protocol signatures from existing scan data'
+    )
+    
+    parser.add_argument(
+        '--signature-learning-source',
+        help='Source identifier for signature learning (required with --learn-signatures-from-scans)'
+    )
+    
+    parser.add_argument(
+        '--signature-learning-protocol',
+        help='Protocol to learn signatures for (e.g., sui, filecoin, ethereum). If not specified, learns for all protocols'
+    )
+    
+    parser.add_argument(
+        '--signature-learning-min-confidence',
+        type=float,
+        default=0.7,
+        help='Minimum confidence threshold for scans to include in learning (default: 0.7)'
+    )
+    
+    parser.add_argument(
+        '--signature-learning-max-examples',
+        type=int,
+        default=1000,
+        help='Maximum examples to process per protocol (default: 1000)'
     )
     
     return parser.parse_args()
@@ -1013,6 +1049,107 @@ def load_targets_from_file(file_path: str) -> List[str]:
         sys.exit(1)
 
 
+def learn_signatures_from_scans(args) -> None:
+    """
+    Learn improved protocol signatures from existing scan data.
+    
+    Args:
+        args: Parsed command line arguments
+    """
+    if not args.signature_learning_source:
+        print("❌ Error: --signature-learning-source is required when using --learn-signatures-from-scans")
+        print("   Examples:")
+        print("     --signature-learning-source filecoin_lotus_peer")
+        print("     --signature-learning-source sui_recon_agent")
+        print("     --signature-learning-source comprehensive_discovery")
+        sys.exit(1)
+    
+    print("🎓 Learning Protocol Signatures from Existing Scan Data")
+    print("="*60)
+    print(f"   Source: {args.signature_learning_source}")
+    print(f"   Protocol filter: {args.signature_learning_protocol or 'all protocols'}")
+    print(f"   Min confidence: {args.signature_learning_min_confidence}")
+    print(f"   Max examples: {args.signature_learning_max_examples}")
+    print()
+    
+    try:
+        from agents.discovery.signature_learner import ScanDataSignatureLearner
+        
+        # Initialize the signature learner
+        learner = ScanDataSignatureLearner()
+        
+        print("📊 Analyzing existing scan data...")
+        
+        # Learn signatures from scans
+        results = learner.learn_from_scans(
+            protocol=args.signature_learning_protocol,
+            source=args.signature_learning_source,
+            min_confidence=args.signature_learning_min_confidence,
+            max_examples=args.signature_learning_max_examples
+        )
+        
+        if results['success']:
+            stats = results['statistics']
+            print(f"✅ Signature learning completed successfully!")
+            print(f"   Session ID: {results['session_id']}")
+            print()
+            print("📈 Learning Results:")
+            print(f"   • Signatures learned: {stats['signatures_learned']}")
+            print(f"   • Examples processed: {stats['examples_processed']}")
+            print(f"   • Protocols affected: {len(stats['protocols_affected'])}")
+            
+            if stats['protocols_affected']:
+                print(f"   • Protocol list: {', '.join(stats['protocols_affected'])}")
+            
+            print()
+            print("💾 Database Updates:")
+            db_updates = stats['database_updates']
+            if db_updates['updated']:
+                print(f"   • Updated signatures: {', '.join(db_updates['updated'])}")
+            if db_updates['created']:
+                print(f"   • Created signatures: {', '.join(db_updates['created'])}")
+            if db_updates['errors']:
+                print(f"   • Errors: {len(db_updates['errors'])}")
+                for error in db_updates['errors'][:3]:  # Show first 3 errors
+                    print(f"     - {error}")
+                if len(db_updates['errors']) > 3:
+                    print(f"     ... and {len(db_updates['errors']) - 3} more")
+            
+            print()
+            print("🔄 Signature Improvements:")
+            improvements = stats['improvements']
+            if improvements:
+                for protocol, improvement in improvements.items():
+                    print(f"   • {protocol}:")
+                    if 'examples_added' in improvement:
+                        print(f"     - Examples added: {improvement['examples_added']}")
+                    if 'confidence_improvement' in improvement:
+                        print(f"     - Confidence improvement: {improvement['confidence_improvement']:.3f}")
+            else:
+                print("   No specific improvements tracked")
+            
+            print()
+            print("💡 Next Steps:")
+            print("   1. Run protocol discovery to test improved signatures")
+            print("   2. Validate signatures against known hosts")
+            print("   3. Monitor signature performance in production")
+            print(f"   4. Check session results: {results['session_id']}")
+            
+        else:
+            print(f"❌ Signature learning failed: {results.get('error', 'Unknown error')}")
+            sys.exit(1)
+            
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("   Make sure the signature learning module is properly installed")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error during signature learning: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     try:
@@ -1044,6 +1181,11 @@ def main():
                 from utils.cve_scheduler import stop_cve_scheduler
                 stop_cve_scheduler()
                 print("   CVE scheduler stopped")
+            return
+        
+        # Learn signatures from existing scans and exit
+        if args.learn_signatures_from_scans:
+            learn_signatures_from_scans(args)
             return
         
         # Handle queue-related arguments first
