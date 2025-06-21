@@ -99,6 +99,7 @@ def run_single_stage_task(
         orchestrator = create_orchestrator(config)
         
         logger.info(f"Running single stage: {stage}")
+        logger.info(f"Task parameters - agent_name: {agent_name}, host: {host}, force_rescore: {force_rescore}, debug: {debug}")
         
         # Run the appropriate stage
         if stage == 'recon':
@@ -130,9 +131,12 @@ def run_single_stage_task(
             results = orchestrator.run_signature_stage(agent_name or 'ProtocolSignatureGeneratorAgent')
             
         elif stage == 'discovery':
+            logger.info(f"Discovery stage - host parameter: {host}")
             if not host:
                 raise ValueError("Discovery stage requires host parameter")
-            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent', host=host)
+            logger.info(f"Calling orchestrator.run_discovery_stage with agent: {agent_name or 'DiscoveryAgent'}, host: {host}, force: {kwargs.get('force', False)}")
+            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent', host=host, force=kwargs.get('force', False))
+            logger.info(f"Discovery stage results: {len(results) if results else 0} items returned")
             
         else:
             raise ValueError(f"Unknown stage: {stage}")

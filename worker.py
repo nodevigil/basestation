@@ -20,6 +20,6 @@ if __name__ == '__main__':
         'worker',
         '--loglevel=info',
         '--concurrency=4',  # Adjust based on your system
-        '--queues=pipeline,scan,process,report',
+        '--queues=pipeline,scan,process,report,discovery',
         '--hostname=depin-worker@%h'
     ])

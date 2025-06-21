@@ -780,7 +780,8 @@ def run_with_queue(config: Config, args) -> None:
                     args.debug,
                     args.force_rescore,
                     args.host,
-                    report_options=report_options
+                    report_options=report_options,
+                    force=args.force
                 )
             else:
                 task_id = queue_manager.queue_single_stage(
@@ -790,7 +791,8 @@ def run_with_queue(config: Config, args) -> None:
                     args.protocol,
                     args.debug,
                     args.force_rescore,
-                    args.host
+                    args.host,
+                    force=args.force
                 )
             print(f"   📤 Queued single stage: {args.stage}")
             
