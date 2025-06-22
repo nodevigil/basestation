@@ -148,13 +148,13 @@ def example_signature_tracking():
     print(f"   python cli.py --update-signature-flags")
     print(f"   ")
     print(f"   # Update signature flags for specific protocol")
-    print(f"   python cli.py --update-signature-flags --signature-protocol-filter sui")
+    print(f"   python cli.py --update-signature-flags --protocol-filter sui")
     print(f"   ")
     print(f"   # Mark specific scan as signature created")
     print(f"   python cli.py --mark-signature-created 123")
     print(f"   ")
     print(f"   # Learn signatures from existing scans")
-    print(f"   python cli.py --learn-signatures-from-scans --signature-learning-protocol sui")
+    print(f"   python cli.py --learn-signatures-from-scans --protocol sui")
 
 
 if __name__ == "__main__":

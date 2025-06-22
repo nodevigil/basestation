@@ -305,10 +305,10 @@ Examples:
   pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
   
   # Signature Learning from Existing Scans
-  pgdn --learn-signatures-from-scans --signature-learning-protocol sui # Learn Sui signatures from existing scans
-  pgdn --learn-signatures-from-scans --signature-learning-protocol filecoin # Learn Filecoin signatures
-  pgdn --learn-signatures-from-scans --signature-learning-protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
-  pgdn --learn-signatures-from-scans --signature-learning-protocol sui --signature-learning-max-examples 500 # Limit examples
+  pgdn --learn-signatures-from-scans --protocol sui # Learn Sui signatures from existing scans
+  pgdn --learn-signatures-from-scans --protocol filecoin # Learn Filecoin signatures
+  pgdn --learn-signatures-from-scans --protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
+  pgdn --learn-signatures-from-scans --protocol sui --signature-learning-max-examples 500 # Limit examples
         """
     )
     
@@ -525,7 +525,7 @@ Examples:
     )
     
     parser.add_argument(
-        '--signature-learning-protocol',
+        '--protocol',
         help='Protocol name for signature learning (required with --learn-signatures-from-scans). Examples: sui, filecoin, ethereum'
     )
     
@@ -550,7 +550,7 @@ Examples:
     )
     
     parser.add_argument(
-        '--signature-protocol-filter',
+        '--protocol-filter',
         help='Protocol filter for signature flag updates (e.g., sui, filecoin, ethereum)'
     )
     
@@ -1075,11 +1075,11 @@ def learn_signatures_from_scans(args) -> None:
         args: Parsed command line arguments
     """
     if not args.signature_learning_protocol:
-        print("❌ Error: --signature-learning-protocol is required when using --learn-signatures-from-scans")
+        print("❌ Error: --protocol is required when using --learn-signatures-from-scans")
         print("   Examples:")
-        print("     --signature-learning-protocol sui")
-        print("     --signature-learning-protocol filecoin")
-        print("     --signature-learning-protocol ethereum")
+        print("     --protocol sui")
+        print("     --protocol filecoin")
+        print("     --protocol ethereum")
         sys.exit(1)
     
     print("🎓 Learning Protocol Signatures from Existing Scan Data")
