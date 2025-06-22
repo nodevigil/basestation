@@ -305,10 +305,10 @@ Examples:
   pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
   
   # Signature Learning from Existing Scans
-  pgdn --learn-signatures-from-scans --protocol sui # Learn Sui signatures from existing scans
-  pgdn --learn-signatures-from-scans --protocol filecoin # Learn Filecoin signatures
-  pgdn --learn-signatures-from-scans --protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
-  pgdn --learn-signatures-from-scans --protocol sui --signature-learning-max-examples 500 # Limit examples
+  pgdn --learn-signatures-from-scans --signature-protocol sui # Learn Sui signatures from existing scans
+  pgdn --learn-signatures-from-scans --signature-protocol filecoin # Learn Filecoin signatures
+  pgdn --learn-signatures-from-scans --signature-protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
+  pgdn --learn-signatures-from-scans --signature-protocol sui --signature-learning-max-examples 500 # Limit examples
         """
     )
     
@@ -525,7 +525,7 @@ Examples:
     )
     
     parser.add_argument(
-        '--protocol',
+        '--signature-protocol',
         help='Protocol name for signature learning (required with --learn-signatures-from-scans). Examples: sui, filecoin, ethereum'
     )
     
@@ -1074,17 +1074,17 @@ def learn_signatures_from_scans(args) -> None:
     Args:
         args: Parsed command line arguments
     """
-    if not args.signature_learning_protocol:
-        print("❌ Error: --protocol is required when using --learn-signatures-from-scans")
+    if not args.signature_protocol:
+        print("❌ Error: --signature-protocol is required when using --learn-signatures-from-scans")
         print("   Examples:")
-        print("     --protocol sui")
-        print("     --protocol filecoin")
-        print("     --protocol ethereum")
+        print("     --signature-protocol sui")
+        print("     --signature-protocol filecoin")
+        print("     --signature-protocol ethereum")
         sys.exit(1)
     
     print("🎓 Learning Protocol Signatures from Existing Scan Data")
     print("="*60)
-    print(f"   Protocol: {args.signature_learning_protocol}")
+    print(f"   Protocol: {args.signature_protocol}")
     print(f"   Min confidence: {args.signature_learning_min_confidence}")
     print(f"   Max examples: {args.signature_learning_max_examples}")
     print()
@@ -1099,7 +1099,7 @@ def learn_signatures_from_scans(args) -> None:
         
         # Learn signatures from scans using protocol instead of source
         results = learner.learn_from_scans(
-            protocol=args.signature_learning_protocol,
+            protocol=args.signature_protocol,
             min_confidence=args.signature_learning_min_confidence,
             max_examples=args.signature_learning_max_examples
         )

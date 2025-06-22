@@ -154,7 +154,7 @@ def example_signature_tracking():
     print(f"   python cli.py --mark-signature-created 123")
     print(f"   ")
     print(f"   # Learn signatures from existing scans")
-    print(f"   python cli.py --learn-signatures-from-scans --protocol sui")
+    print(f"   python cli.py --learn-signatures-from-scans --signature-protocol sui")
 
 
 if __name__ == "__main__":
