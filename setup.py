@@ -12,7 +12,7 @@ def read_requirements():
 setup(
     name="pgdn",
     version="1.0.0",
-    description="DePIN Infrastructure Scanner with Agentic Architecture",
+    description="PGDN - Agentic DePIN Infrastructure Scanner",
     long_description="A comprehensive infrastructure scanner for DePIN networks with agentic architecture for reconnaissance, scanning, processing, and publishing security analysis results.",
     author="DePIN Team",
     author_email="",

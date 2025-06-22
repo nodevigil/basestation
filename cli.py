@@ -29,7 +29,7 @@ def setup_environment(config: Config) -> None:
     # Create database tables
     create_tables(config.database)
     
-    print("🚀 DePIN Infrastructure Scanner - Agentic Architecture")
+    print("🐦 PGND - Agentic DePIN Infrastructure Scanner")
     print("="*60)
 
 
@@ -263,7 +263,7 @@ def update_cve_database(replace_existing: bool = False, offline: bool = False,
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="DePIN Infrastructure Scanner - Agentic Architecture",
+        description="PGDN - Agentic DePIN Infrastructure Scanner CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

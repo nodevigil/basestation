@@ -1,4 +1,4 @@
-# DePIN Infrastructure Scanner - Agentic Architecture
+# 🐦 PGND - Agentic DePIN Infrastructure Scanner
 
 A modular, extensible infrastructure scanner for DePIN (Decentralized Physical Infrastructure) networks with an agentic, staged pipeline architecture.
 
@@ -964,7 +964,7 @@ alembic upgrade head
 pgdn --log-level INFO
 
 # Expected output:
-# 🚀 DePIN Infrastructure Scanner - Agentic Architecture
+# 🐦 PGND - Agentic DePIN Infrastructure Scanner
 # ============================================================
 # 📋 Running full pipeline with all stages:
 #    🔍 Stage 1: Reconnaissance (Node Discovery)
