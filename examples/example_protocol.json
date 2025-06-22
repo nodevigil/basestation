@@ -1,0 +1,12 @@
+{
+    "name": "example_protocol",
+    "display_name": "Example Protocol",
+    "category": "blockchain",
+    "ports": [8080, 8081, 9090],
+    "endpoints": ["/health", "/status", "/metrics"],
+    "banners": ["example-node", "example-protocol"],
+    "rpc_methods": ["example_getInfo", "example_getStatus"],
+    "metrics_keywords": ["example_metrics", "node_stats"],
+    "http_paths": ["/metrics", "/debug"],
+    "identification_hints": ["example protocol", "blockchain node"]
+}
