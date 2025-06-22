@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ReconAgent
-from core.database import get_db_session, ValidatorAddress
+from core.database import get_db_session, ValidatorAddress, Protocol, ProtocolSignature
 from core.config import Config
 
 
@@ -42,6 +42,12 @@ class SuiReconAgent(ReconAgent):
         """
         self.logger.info(f"🔍 Discovering Sui validators from {self.rpc_url}")
         
+        # First, ensure we have the protocol and its signature
+        protocol_id = self._get_protocol_with_signature()
+        if protocol_id is None:
+            self.logger.error("❌ Cannot proceed without Sui protocol signature. Exiting discovery.")
+            return []
+        
         try:
             # Fetch validator data from Sui RPC
             validator_data = self._fetch_validator_data()
@@ -51,7 +57,7 @@ class SuiReconAgent(ReconAgent):
                 return []
             
             # Parse validator addresses
-            discovered_nodes = self._parse_validator_addresses(validator_data)
+            discovered_nodes = self._parse_validator_addresses(validator_data, protocol_id)
             
             # Save to database
             saved_count = self._save_nodes_to_database(discovered_nodes)
@@ -103,12 +109,13 @@ class SuiReconAgent(ReconAgent):
                     
         return None
     
-    def _parse_validator_addresses(self, validator_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _parse_validator_addresses(self, validator_data: List[Dict[str, Any]], protocol_id: int) -> List[Dict[str, Any]]:
         """
         Parse validator network addresses from RPC data.
         
         Args:
             validator_data: Raw validator data from RPC
+            protocol_id: ID of the Sui protocol from the database
             
         Returns:
             List of parsed validator node information
@@ -136,7 +143,7 @@ class SuiReconAgent(ReconAgent):
                 node_info = {
                     "address": hostname,
                     "name": validator_name,
-                    "source": "sui_recon_agent",
+                    "protocol_id": protocol_id,
                     "ip_address": ip_address,
                     "raw_net_address": net_address,
                     "discovered_at": datetime.utcnow().isoformat()
@@ -195,14 +202,14 @@ class SuiReconAgent(ReconAgent):
                             # Update existing record
                             existing.active = True
                             existing.name = node.get("name") or existing.name
-                            existing.source = node["source"]
+                            existing.protocol_id = node["protocol_id"]
                             self.logger.debug(f"Updated existing validator: {node['address']}")
                         else:
                             # Create new record
                             new_validator = ValidatorAddress(
                                 address=node["address"],
                                 name=node.get("name"),
-                                source=node["source"],
+                                protocol_id=node["protocol_id"],
                                 created_at=datetime.utcnow(),
                                 active=True
                             )
@@ -231,9 +238,15 @@ class SuiReconAgent(ReconAgent):
         """
         try:
             with get_db_session() as session:
+                # Get the Sui protocol
+                sui_protocol = session.query(Protocol).filter_by(name="sui").first()
+                if not sui_protocol:
+                    self.logger.error("Sui protocol not found in database")
+                    return []
+                
                 validators = session.query(ValidatorAddress).filter_by(
                     active=True,
-                    source="sui_recon_agent"
+                    protocol_id=sui_protocol.id
                 ).all()
                 
                 return [validator.to_dict() for validator in validators]
@@ -242,6 +255,35 @@ class SuiReconAgent(ReconAgent):
             self.logger.error(f"Failed to get active validators: {e}")
             return []
     
+    def _get_protocol_with_signature(self) -> Optional[int]:
+        """
+        Get the Sui protocol ID and ensure it has a signature.
+        
+        Returns:
+            Protocol ID if protocol exists and has signature, None otherwise
+        """
+        try:
+            with get_db_session() as session:
+                protocol = session.query(Protocol).filter_by(name="sui").first()
+                
+                if not protocol:
+                    self.logger.error("❌ Sui protocol not found in database. Please run protocol seeder first.")
+                    return None
+                
+                # Check if protocol has a signature
+                signature = session.query(ProtocolSignature).filter_by(protocol_id=protocol.id).first()
+                
+                if not signature:
+                    self.logger.error(f"❌ Sui protocol (ID: {protocol.id}) has no signature. Please run signature generation first.")
+                    return None
+                
+                self.logger.debug(f"✅ Found Sui protocol (ID: {protocol.id}) with signature")
+                return protocol.id
+                
+        except Exception as e:
+            self.logger.error(f"❌ Failed to get Sui protocol: {e}")
+            return None
+
     def run(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute Sui reconnaissance.

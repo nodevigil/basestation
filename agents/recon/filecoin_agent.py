@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ReconAgent
-from core.database import get_db_session, ValidatorAddress
+from core.database import get_db_session, ValidatorAddress, Protocol, ProtocolSignature
 
 
 class FilecoinReconAgent(ReconAgent):
@@ -37,12 +37,19 @@ class FilecoinReconAgent(ReconAgent):
         """
         Discover Filecoin nodes from Lotus Docker peers and public APIs.
         """
-        discovered_nodes = []
         self.logger.info("🔍 Starting Filecoin peer discovery (Docker + API)...")
+        
+        # First, ensure we have the protocol and its signature
+        protocol_id = self._get_protocol_with_signature()
+        if protocol_id is None:
+            self.logger.error("❌ Cannot proceed without Filecoin protocol signature. Exiting discovery.")
+            return []
+        
+        discovered_nodes = []
 
         # Docker Lotus peer scraping
         try:
-            peer_nodes = self.discover_peers_from_lotus()
+            peer_nodes = self.discover_peers_from_lotus(protocol_id)
             if peer_nodes:
                 self.logger.info(f"🪐 Discovered {len(peer_nodes)} peers from Lotus Docker")
                 discovered_nodes.extend(peer_nodes)
@@ -53,7 +60,7 @@ class FilecoinReconAgent(ReconAgent):
         for api_url in self.filecoin_api_urls:
             try:
                 self.logger.info(f"📡 Querying {api_url}")
-                nodes = self._query_filecoin_api(api_url)
+                nodes = self._query_filecoin_api(api_url, protocol_id)
                 discovered_nodes.extend(nodes)
                 time.sleep(self.delay_between_requests)
             except Exception as e:
@@ -73,7 +80,7 @@ class FilecoinReconAgent(ReconAgent):
         self.logger.info(f"💾 Saved {saved_count} new Filecoin nodes to database")
         return final_nodes
 
-    def discover_peers_from_lotus(self) -> List[Dict[str, Any]]:
+    def discover_peers_from_lotus(self, protocol_id: int) -> List[Dict[str, Any]]:
         """
         Discover peer IPs from a running Lotus Docker container using 'lotus net peers'.
         Handles format: <peer_id>, [/ip4/<ip>/tcp/<port>]
@@ -94,12 +101,12 @@ class FilecoinReconAgent(ReconAgent):
                 nodes.append({
                     "address": ip,
                     "name": f"lotus_peer_{peer_id}",
-                    "source": "filecoin_lotus_peer",
+                    "protocol_id": protocol_id,
                     "raw_data": {"multiaddr": f"/ip4/{ip}/tcp/{port}", "peer_id": peer_id, "port": port}
                 })
         return nodes
 
-    def _query_filecoin_api(self, api_url: str) -> List[Dict[str, Any]]:
+    def _query_filecoin_api(self, api_url: str, protocol_id: int) -> List[Dict[str, Any]]:
         """Query a Filecoin API endpoint for storage provider data."""
         nodes = []
         try:
@@ -129,7 +136,7 @@ class FilecoinReconAgent(ReconAgent):
             # Extract node information
             for provider in providers[:100]:  # Limit to first 100 for speed/test
                 try:
-                    node_info = self._extract_node_info(provider)
+                    node_info = self._extract_node_info(provider, protocol_id)
                     if node_info:
                         nodes.append(node_info)
                 except Exception as e:
@@ -141,7 +148,7 @@ class FilecoinReconAgent(ReconAgent):
             # Do not raise; just return what you have so far
         return nodes
 
-    def _extract_node_info(self, provider_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _extract_node_info(self, provider_data: Dict[str, Any], protocol_id: int) -> Optional[Dict[str, Any]]:
         """Extract node information from provider data."""
         address = None
         name = None
@@ -178,7 +185,7 @@ class FilecoinReconAgent(ReconAgent):
         return {
             'address': address,
             'name': name,
-            'source': 'filecoin_api',
+            'protocol_id': protocol_id,
             'raw_data': provider_data
         }
 
@@ -203,7 +210,7 @@ class FilecoinReconAgent(ReconAgent):
                         validator_address = ValidatorAddress(
                             address=node['address'],
                             name=node.get('name'),
-                            source=node['source'],
+                            protocol_id=node['protocol_id'],
                             created_at=datetime.utcnow(),
                             active=True
                         )
@@ -214,6 +221,35 @@ class FilecoinReconAgent(ReconAgent):
                     continue
             session.commit()
         return saved_count
+
+    def _get_protocol_with_signature(self) -> Optional[int]:
+        """
+        Get the Filecoin protocol ID and ensure it has a signature.
+        
+        Returns:
+            Protocol ID if protocol exists and has signature, None otherwise
+        """
+        try:
+            with get_db_session() as session:
+                protocol = session.query(Protocol).filter_by(name="filecoin").first()
+                
+                if not protocol:
+                    self.logger.error("❌ Filecoin protocol not found in database. Please run protocol seeder first.")
+                    return None
+                
+                # Check if protocol has a signature
+                signature = session.query(ProtocolSignature).filter_by(protocol_id=protocol.id).first()
+                
+                if not signature:
+                    self.logger.error(f"❌ Filecoin protocol (ID: {protocol.id}) has no signature. Please run signature generation first.")
+                    return None
+                
+                self.logger.debug(f"✅ Found Filecoin protocol (ID: {protocol.id}) with signature")
+                return protocol.id
+                
+        except Exception as e:
+            self.logger.error(f"❌ Failed to get Filecoin protocol: {e}")
+            return None
 
     def run(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """

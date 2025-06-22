@@ -11,18 +11,20 @@ class ValidatorAddress(Base):
     __tablename__ = 'validator_addresses'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False)  # UUID for external references
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)  # UUID for external references
     address = Column(String(255), unique=True, nullable=False)
     name = Column(String(255), nullable=True)
-    source = Column(String(100), nullable=False)  # e.g., 'sui', 'ethereum', 'manual'
+    protocol_id = Column(Integer, ForeignKey('protocols.id'), nullable=False)  # Link to protocol table
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     
-    # Relationship to scans
+    # Relationships
     scans = relationship("ValidatorScan", back_populates="validator_address")
+    # Note: Protocol relationship is available via foreign key, 
+    # but avoid circular imports by not defining it here
 
     def __repr__(self):
-        return f"<ValidatorAddress(address='{self.address}', name='{self.name}', source='{self.source}', active={self.active})>"
+        return f"<ValidatorAddress(address='{self.address}', name='{self.name}', protocol_id={self.protocol_id}, active={self.active})>"
 
     def to_dict(self):
         return {
@@ -30,7 +32,7 @@ class ValidatorAddress(Base):
             'uuid': str(self.uuid) if self.uuid else None,
             'address': self.address,
             'name': self.name,
-            'source': self.source,
+            'protocol_id': self.protocol_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'active': self.active
         }

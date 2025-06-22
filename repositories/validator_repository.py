@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from models.validator import ValidatorAddress
+from core.database import Protocol  # Import Protocol from core.database
 from database import SessionLocal, get_db
 from typing import List, Optional
 from datetime import datetime
@@ -19,13 +20,18 @@ class ValidatorRepository:
         if self._should_close:
             self.db.close()
     
-    def add_validator(self, address: str, name: str = None, source: str = "manual", active: bool = True) -> ValidatorAddress:
+    def add_validator(self, address: str, name: str = None, protocol_name: str = "manual", active: bool = True) -> ValidatorAddress:
         """Add a new validator address"""
         try:
+            # Get protocol ID from protocol name
+            protocol = self.db.query(Protocol).filter(Protocol.name == protocol_name).first()
+            if not protocol:
+                raise ValueError(f"Protocol '{protocol_name}' not found in database")
+            
             validator = ValidatorAddress(
                 address=address,
                 name=name,
-                source=source,
+                protocol_id=protocol.id,
                 created_at=datetime.utcnow(),
                 active=active
             )
@@ -36,7 +42,7 @@ class ValidatorRepository:
         except IntegrityError:
             self.db.rollback()
             # If validator already exists, update it
-            return self.update_validator(address, name=name, source=source, active=active)
+            return self.update_validator(address, name=name, protocol_name=protocol_name, active=active)
     
     def get_validator(self, address: str) -> Optional[ValidatorAddress]:
         """Get a validator by address"""
@@ -53,14 +59,18 @@ class ValidatorRepository:
             query = query.filter(ValidatorAddress.active == True)
         return query.all()
     
-    def get_validators_by_source(self, source: str, active_only: bool = True) -> List[ValidatorAddress]:
-        """Get validators by source"""
-        query = self.db.query(ValidatorAddress).filter(ValidatorAddress.source == source)
+    def get_validators_by_protocol(self, protocol_name: str, active_only: bool = True) -> List[ValidatorAddress]:
+        """Get validators by protocol"""
+        protocol = self.db.query(Protocol).filter(Protocol.name == protocol_name).first()
+        if not protocol:
+            return []
+        
+        query = self.db.query(ValidatorAddress).filter(ValidatorAddress.protocol_id == protocol.id)
         if active_only:
             query = query.filter(ValidatorAddress.active == True)
         return query.all()
     
-    def update_validator(self, address: str, name: str = None, source: str = None, active: bool = None) -> Optional[ValidatorAddress]:
+    def update_validator(self, address: str, name: str = None, protocol_name: str = None, active: bool = None) -> Optional[ValidatorAddress]:
         """Update an existing validator"""
         validator = self.get_validator(address)
         if not validator:
@@ -68,8 +78,11 @@ class ValidatorRepository:
         
         if name is not None:
             validator.name = name
-        if source is not None:
-            validator.source = source
+        if protocol_name is not None:
+            protocol = self.db.query(Protocol).filter(Protocol.name == protocol_name).first()
+            if not protocol:
+                raise ValueError(f"Protocol '{protocol_name}' not found in database")
+            validator.protocol_id = protocol.id
         if active is not None:
             validator.active = active
         
@@ -100,10 +113,17 @@ class ValidatorRepository:
         validators = []
         for data in validators_data:
             try:
+                # Get protocol ID from protocol name
+                protocol_name = data.get('protocol_name', 'manual')
+                protocol = self.db.query(Protocol).filter(Protocol.name == protocol_name).first()
+                if not protocol:
+                    print(f"Error: Protocol '{protocol_name}' not found for validator {data.get('address')}")
+                    continue
+                
                 validator = ValidatorAddress(
                     address=data['address'],
                     name=data.get('name'),
-                    source=data.get('source', 'bulk_import'),
+                    protocol_id=protocol.id,
                     created_at=datetime.utcnow(),
                     active=data.get('active', True)
                 )
@@ -125,7 +145,7 @@ class ValidatorRepository:
                 validator = self.add_validator(
                     address=data['address'],
                     name=data.get('name'),
-                    source=data.get('source', 'bulk_import'),
+                    protocol_name=data.get('protocol_name', 'manual'),
                     active=data.get('active', True)
                 )
                 if validator:
