@@ -17,6 +17,9 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from models.validator import Base
+# Import all models to ensure they're registered with Base.metadata
+from models import *
+from core.database import *
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
