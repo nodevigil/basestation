@@ -66,6 +66,7 @@ class ValidatorScan(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     failed = Column(Boolean, default=False, nullable=False)
     version = Column(String(20), nullable=False)  # Scanner version - must be set explicitly
+    signature_created = Column(Boolean, default=False, nullable=False)  # Track if protocol signature was created from this scan
     
     # Relationship back to validator address
     validator_address = relationship("ValidatorAddress", back_populates="scans")
@@ -86,6 +87,7 @@ class ValidatorScan(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'failed': self.failed,
             'version': self.version,
+            'signature_created': self.signature_created,
         }
 
 

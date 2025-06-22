@@ -280,3 +280,237 @@ class ProtocolSignatureGeneratorAgent(ProcessAgent):
                 signature_bytes[byte_pos] |= (1 << bit_offset)
         
         return base64.b64encode(bytes(signature_bytes)).decode('utf-8')
+    
+    def process_pending_scan_signatures(self) -> Dict[str, Any]:
+        """
+        Process scans that need protocol signature creation and mark them as completed.
+        
+        Returns:
+            Dictionary with processing results and statistics
+        """
+        processed_scans = []
+        skipped_scans = []
+        errors = []
+        
+        try:
+            with get_db_session() as session:
+                # Get scans that need signature creation (not already processed)
+                pending_scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.signature_created == False,
+                    ValidatorScan.scan_results.isnot(None)
+                ).all()
+                
+                self.logger.info(f"🔍 Found {len(pending_scans)} scans pending signature creation")
+                
+                for scan in pending_scans:
+                    try:
+                        # Check if we can determine the protocol from scan results
+                        scan_results = scan.scan_results
+                        detected_protocol = self._extract_protocol_from_scan(scan_results)
+                        
+                        if not detected_protocol or detected_protocol == 'unknown':
+                            skipped_scans.append({
+                                'scan_id': scan.id,
+                                'reason': 'No definitive protocol detected',
+                                'detected_protocol': detected_protocol
+                            })
+                            continue
+                        
+                        # Check if this protocol exists in our database
+                        protocol = session.query(Protocol).filter_by(name=detected_protocol).first()
+                        if not protocol:
+                            skipped_scans.append({
+                                'scan_id': scan.id,
+                                'reason': f'Protocol {detected_protocol} not found in database',
+                                'detected_protocol': detected_protocol
+                            })
+                            continue
+                        
+                        # Process the scan for signature creation
+                        success = self._process_scan_for_signature(scan, protocol, session)
+                        
+                        if success:
+                            # Mark as signature created
+                            scan.signature_created = True
+                            processed_scans.append({
+                                'scan_id': scan.id,
+                                'protocol': detected_protocol,
+                                'ip_address': scan.ip_address
+                            })
+                            self.logger.debug(f"✅ Processed scan {scan.id} for {detected_protocol}")
+                        else:
+                            errors.append({
+                                'scan_id': scan.id,
+                                'error': 'Failed to process scan for signature creation'
+                            })
+                    
+                    except Exception as e:
+                        errors.append({
+                            'scan_id': scan.id,
+                            'error': str(e)
+                        })
+                        self.logger.error(f"Error processing scan {scan.id}: {e}")
+                
+                # Commit all changes
+                session.commit()
+                
+                result = {
+                    'processed_count': len(processed_scans),
+                    'skipped_count': len(skipped_scans),
+                    'error_count': len(errors),
+                    'processed_scans': processed_scans,
+                    'skipped_scans': skipped_scans,
+                    'errors': errors
+                }
+                
+                self.logger.info(f"📊 Signature processing complete: "
+                               f"{len(processed_scans)} processed, "
+                               f"{len(skipped_scans)} skipped, "
+                               f"{len(errors)} errors")
+                
+                return result
+                
+        except Exception as e:
+            self.logger.error(f"Failed to process pending scan signatures: {e}")
+            return {
+                'processed_count': 0,
+                'skipped_count': 0,
+                'error_count': 1,
+                'processed_scans': [],
+                'skipped_scans': [],
+                'errors': [{'error': str(e)}]
+            }
+    
+    def _extract_protocol_from_scan(self, scan_results: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the detected protocol from scan results.
+        
+        Args:
+            scan_results: The scan results dictionary
+            
+        Returns:
+            Protocol name if detected, None if uncertain
+        """
+        if not scan_results:
+            return None
+        
+        # Check for explicitly detected protocol
+        detected_protocol = scan_results.get('detected_protocol')
+        if detected_protocol and detected_protocol != 'unknown':
+            return detected_protocol
+        
+        # Check source for protocol hints
+        source = scan_results.get('source', '').lower()
+        if 'sui' in source:
+            return 'sui'
+        elif 'filecoin' in source or 'lotus' in source:
+            return 'filecoin'
+        elif 'ethereum' in source or 'geth' in source:
+            return 'ethereum'
+        
+        # Check protocol_scan section
+        protocol_scan = scan_results.get('protocol_scan', {})
+        if protocol_scan:
+            scan_type = protocol_scan.get('scan_type', '').lower()
+            if 'sui' in scan_type:
+                return 'sui'
+            elif 'filecoin' in scan_type:
+                return 'filecoin'
+            elif 'ethereum' in scan_type:
+                return 'ethereum'
+        
+        return None
+    
+    def _process_scan_for_signature(self, scan: ValidatorScan, protocol: Protocol, session) -> bool:
+        """
+        Process a scan to potentially improve the protocol signature.
+        
+        Args:
+            scan: The ValidatorScan object
+            protocol: The Protocol object
+            session: Database session
+            
+        Returns:
+            True if processing was successful, False otherwise
+        """
+        try:
+            # This could be enhanced to actually learn from the scan data
+            # For now, we just mark it as processed since the signature generation
+            # from protocol definitions is handled separately
+            
+            # Future enhancement: Extract scan features and update signatures
+            # scan_features = self._extract_scan_features(scan.scan_results)
+            # updated_signature = self._update_protocol_signature(protocol, scan_features)
+            
+            self.logger.debug(f"Processed scan {scan.id} for protocol {protocol.name}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to process scan {scan.id} for signature: {e}")
+            return False
+    
+    def get_signature_processing_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about signature processing status.
+        
+        Returns:
+            Dictionary with processing statistics
+        """
+        try:
+            with get_db_session() as session:
+                from sqlalchemy import func
+                
+                total_scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.scan_results.isnot(None)
+                ).count()
+                
+                processed_scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.signature_created == True
+                ).count()
+                
+                pending_scans = session.query(ValidatorScan).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.signature_created == False,
+                    ValidatorScan.scan_results.isnot(None)
+                ).count()
+                
+                # Get breakdown by detected protocol
+                protocol_stats = session.query(
+                    ValidatorScan.scan_results.op('->>')('detected_protocol').label('protocol'),
+                    func.count().label('total'),
+                    func.sum(func.cast(ValidatorScan.signature_created, type_=int)).label('processed')
+                ).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.scan_results.isnot(None)
+                ).group_by(
+                    ValidatorScan.scan_results.op('->>')('detected_protocol')
+                ).all()
+                
+                return {
+                    'total_scans': total_scans,
+                    'processed_scans': processed_scans,
+                    'pending_scans': pending_scans,
+                    'processing_rate': processed_scans / total_scans if total_scans > 0 else 0,
+                    'protocol_breakdown': [
+                        {
+                            'protocol': stat.protocol or 'unknown',
+                            'total_scans': stat.total,
+                            'processed': stat.processed or 0,
+                            'pending': stat.total - (stat.processed or 0)
+                        }
+                        for stat in protocol_stats
+                    ]
+                }
+                
+        except Exception as e:
+            self.logger.error(f"Failed to get signature processing stats: {e}")
+            return {
+                'total_scans': 0,
+                'processed_scans': 0,
+                'pending_scans': 0,
+                'processing_rate': 0,
+                'protocol_breakdown': []
+            }

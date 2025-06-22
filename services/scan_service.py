@@ -145,3 +145,41 @@ class ScanService:
                 if not scan_repo.has_recent_scan(validator_id, days=scan_interval_days):
                     return validator_id
         return None
+    
+    def get_scans_pending_signature_creation(self, protocol_filter=None):
+        """
+        Get scans that have a known protocol but no signature has been created yet.
+        
+        Args:
+            protocol_filter: Optional protocol name to filter by (e.g., 'sui', 'filecoin')
+            
+        Returns:
+            List of scan records that need signature creation
+        """
+        with ScanRepository() as scan_repo:
+            return scan_repo.get_scans_for_signature_creation(
+                protocol_filter=protocol_filter
+            )
+    
+    def mark_signature_created(self, scan_id):
+        """
+        Mark a scan as having its protocol signature created.
+        
+        Args:
+            scan_id: The ID of the scan to mark
+            
+        Returns:
+            bool: True if successfully marked, False otherwise
+        """
+        with ScanRepository() as scan_repo:
+            return scan_repo.mark_scan_signature_created(scan_id)
+    
+    def get_signature_creation_stats(self):
+        """
+        Get statistics about signature creation status.
+        
+        Returns:
+            dict: Stats including total scans, signatures created, pending, etc.
+        """
+        with ScanRepository() as scan_repo:
+            return scan_repo.get_signature_creation_statistics()

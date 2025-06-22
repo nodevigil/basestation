@@ -305,10 +305,10 @@ Examples:
   pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
   
   # Signature Learning from Existing Scans
-  pgdn --learn-signatures-from-scans --signature-learning-source sui_recon_agent # Learn Sui signatures from existing scans
-  pgdn --learn-signatures-from-scans --signature-learning-source filecoin_lotus_peer --signature-learning-protocol filecoin # Learn Filecoin signatures only
-  pgdn --learn-signatures-from-scans --signature-learning-source comprehensive_discovery --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
-  pgdn --learn-signatures-from-scans --signature-learning-source ethereum_discovery --signature-learning-max-examples 500 # Limit examples per protocol
+  pgdn --learn-signatures-from-scans --signature-learning-protocol sui # Learn Sui signatures from existing scans
+  pgdn --learn-signatures-from-scans --signature-learning-protocol filecoin # Learn Filecoin signatures
+  pgdn --learn-signatures-from-scans --signature-learning-protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
+  pgdn --learn-signatures-from-scans --signature-learning-protocol sui --signature-learning-max-examples 500 # Limit examples
         """
     )
     
@@ -525,13 +525,8 @@ Examples:
     )
     
     parser.add_argument(
-        '--signature-learning-source',
-        help='Source identifier for signature learning (required with --learn-signatures-from-scans)'
-    )
-    
-    parser.add_argument(
         '--signature-learning-protocol',
-        help='Protocol to learn signatures for (e.g., sui, filecoin, ethereum). If not specified, learns for all protocols'
+        help='Protocol name for signature learning (required with --learn-signatures-from-scans). Examples: sui, filecoin, ethereum'
     )
     
     parser.add_argument(
@@ -546,6 +541,29 @@ Examples:
         type=int,
         default=1000,
         help='Maximum examples to process per protocol (default: 1000)'
+    )
+    
+    parser.add_argument(
+        '--update-signature-flags',
+        action='store_true',
+        help='Update signature_created flags for scans that have been processed for signature generation'
+    )
+    
+    parser.add_argument(
+        '--signature-protocol-filter',
+        help='Protocol filter for signature flag updates (e.g., sui, filecoin, ethereum)'
+    )
+    
+    parser.add_argument(
+        '--mark-signature-created',
+        type=int,
+        help='Mark a specific scan ID as having its signature created'
+    )
+    
+    parser.add_argument(
+        '--show-signature-stats',
+        action='store_true',
+        help='Show statistics about signature creation status for scans'
     )
     
     return parser.parse_args()
@@ -1056,18 +1074,17 @@ def learn_signatures_from_scans(args) -> None:
     Args:
         args: Parsed command line arguments
     """
-    if not args.signature_learning_source:
-        print("❌ Error: --signature-learning-source is required when using --learn-signatures-from-scans")
+    if not args.signature_learning_protocol:
+        print("❌ Error: --signature-learning-protocol is required when using --learn-signatures-from-scans")
         print("   Examples:")
-        print("     --signature-learning-source filecoin_lotus_peer")
-        print("     --signature-learning-source sui_recon_agent")
-        print("     --signature-learning-source comprehensive_discovery")
+        print("     --signature-learning-protocol sui")
+        print("     --signature-learning-protocol filecoin")
+        print("     --signature-learning-protocol ethereum")
         sys.exit(1)
     
     print("🎓 Learning Protocol Signatures from Existing Scan Data")
     print("="*60)
-    print(f"   Source: {args.signature_learning_source}")
-    print(f"   Protocol filter: {args.signature_learning_protocol or 'all protocols'}")
+    print(f"   Protocol: {args.signature_learning_protocol}")
     print(f"   Min confidence: {args.signature_learning_min_confidence}")
     print(f"   Max examples: {args.signature_learning_max_examples}")
     print()
@@ -1080,10 +1097,9 @@ def learn_signatures_from_scans(args) -> None:
         
         print("📊 Analyzing existing scan data...")
         
-        # Learn signatures from scans
+        # Learn signatures from scans using protocol instead of source
         results = learner.learn_from_scans(
             protocol=args.signature_learning_protocol,
-            source=args.signature_learning_source,
             min_confidence=args.signature_learning_min_confidence,
             max_examples=args.signature_learning_max_examples
         )
@@ -1150,6 +1166,166 @@ def learn_signatures_from_scans(args) -> None:
         sys.exit(1)
 
 
+def update_signature_flags(args) -> None:
+    """
+    Update signature_created flags for scans that have been processed for signature generation.
+    
+    Args:
+        args: Parsed command line arguments
+    """
+    print("🔄 Updating Signature Creation Flags")
+    print("="*50)
+    
+    if args.signature_protocol_filter:
+        print(f"   Protocol filter: {args.signature_protocol_filter}")
+    else:
+        print("   Processing all protocols")
+    print()
+    
+    try:
+        from services.scan_service import ScanService
+        
+        scan_service = ScanService()
+        
+        print("📊 Getting scans pending signature creation...")
+        
+        # Get scans that need signature creation
+        pending_scans = scan_service.get_scans_pending_signature_creation(
+            protocol_filter=args.signature_protocol_filter
+        )
+        
+        if not pending_scans:
+            print("✅ No scans found that need signature creation")
+            return
+        
+        print(f"🔍 Found {len(pending_scans)} scans pending signature creation")
+        
+        # Process each scan that has a definitive protocol
+        processed_count = 0
+        skipped_count = 0
+        
+        for scan in pending_scans:
+            try:
+                scan_results = scan.scan_results
+                detected_protocol = scan_results.get('detected_protocol') if scan_results else None
+                
+                # Only process scans where we definitely know the protocol
+                if detected_protocol and detected_protocol != 'unknown':
+                    success = scan_service.mark_signature_created(scan.id)
+                    if success:
+                        processed_count += 1
+                        print(f"✅ Marked scan {scan.id} ({detected_protocol}) as signature created")
+                    else:
+                        print(f"❌ Failed to mark scan {scan.id}")
+                        skipped_count += 1
+                else:
+                    skipped_count += 1
+                    print(f"⏭️  Skipped scan {scan.id} (protocol: {detected_protocol or 'unknown'})")
+                    
+            except Exception as e:
+                print(f"❌ Error processing scan {scan.id}: {e}")
+                skipped_count += 1
+        
+        print()
+        print("📈 Update Results:")
+        print(f"   • Scans processed: {processed_count}")
+        print(f"   • Scans skipped: {skipped_count}")
+        print(f"   • Total scans: {len(pending_scans)}")
+        
+        if processed_count > 0:
+            print()
+            print("💡 Next Steps:")
+            print("   1. Run --show-signature-stats to see updated statistics")
+            print("   2. Continue with signature learning if needed")
+        
+    except Exception as e:
+        print(f"❌ Error updating signature flags: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def mark_scan_signature_created(scan_id: int) -> None:
+    """
+    Mark a specific scan ID as having its signature created.
+    
+    Args:
+        scan_id: The scan ID to mark
+    """
+    print(f"🏷️  Marking Scan {scan_id} as Signature Created")
+    print("="*50)
+    
+    try:
+        from services.scan_service import ScanService
+        
+        scan_service = ScanService()
+        
+        success = scan_service.mark_signature_created(scan_id)
+        
+        if success:
+            print(f"✅ Successfully marked scan {scan_id} as signature created")
+        else:
+            print(f"❌ Failed to mark scan {scan_id} (scan may not exist or already marked)")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"❌ Error marking scan: {e}")
+        sys.exit(1)
+
+
+def show_signature_stats() -> None:
+    """
+    Show statistics about signature creation status for scans.
+    """
+    print("📊 Signature Creation Statistics")
+    print("="*50)
+    
+    try:
+        from services.scan_service import ScanService
+        
+        scan_service = ScanService()
+        
+        stats = scan_service.get_signature_creation_stats()
+        
+        print("📈 Overall Statistics:")
+        print(f"   • Total scans: {stats['total_scans']}")
+        print(f"   • Signatures created: {stats['signatures_created']}")
+        print(f"   • Signatures pending: {stats['pending_signatures']}")
+        print(f"   • Completion rate: {stats['completion_rate']:.1%}")
+        print()
+        
+        if stats['protocol_breakdown']:
+            print("🔍 Protocol Breakdown:")
+            for protocol_stat in stats['protocol_breakdown']:
+                protocol = protocol_stat['protocol']
+                total = protocol_stat['total_scans']
+                created = protocol_stat['signatures_created']
+                pending = protocol_stat['pending']
+                rate = (created / total * 100) if total > 0 else 0
+                
+                print(f"   • {protocol}:")
+                print(f"     - Total scans: {total}")
+                print(f"     - Signatures created: {created}")
+                print(f"     - Pending: {pending}")
+                print(f"     - Completion rate: {rate:.1f}%")
+        else:
+            print("🔍 No protocol-specific data available")
+        
+        print()
+        print("💡 Available Actions:")
+        if stats['pending_signatures'] > 0:
+            print("   • Run --update-signature-flags to mark processed scans")
+            print("   • Run --learn-signatures-from-scans to improve signatures")
+        print("   • Run --mark-signature-created <scan_id> to mark specific scans")
+        
+    except Exception as e:
+        print(f"❌ Error getting signature statistics: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    
+
+
 def main():
     """Main entry point."""
     try:
@@ -1186,6 +1362,19 @@ def main():
         # Learn signatures from existing scans and exit
         if args.learn_signatures_from_scans:
             learn_signatures_from_scans(args)
+            return
+        
+        # Handle signature flag management commands and exit
+        if args.update_signature_flags:
+            update_signature_flags(args)
+            return
+        
+        if args.mark_signature_created:
+            mark_scan_signature_created(args.mark_signature_created)
+            return
+        
+        if args.show_signature_stats:
+            show_signature_stats()
             return
         
         # Handle queue-related arguments first

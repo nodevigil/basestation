@@ -124,3 +124,110 @@ class ScanRepository:
             if not recent_scan:
                 validators_needing_scan.append(validator.id)
         return validators_needing_scan
+    
+    def get_scans_for_signature_creation(self, protocol_filter=None):
+        """
+        Get scans that have a detected protocol but no signature has been created yet.
+        
+        Args:
+            protocol_filter: Optional protocol name to filter by
+            
+        Returns:
+            List of ValidatorScan objects that need signature creation
+        """
+        query = self.db.query(ValidatorScan).filter(
+            ValidatorScan.failed == False,
+            ValidatorScan.signature_created == False,
+            ValidatorScan.scan_results.isnot(None)
+        )
+        
+        if protocol_filter:
+            # Filter by protocol mentioned in scan results
+            query = query.filter(
+                ValidatorScan.scan_results.op('->>')('detected_protocol') == protocol_filter
+            )
+        
+        # Only include scans where we definitely know the protocol
+        query = query.filter(
+            ValidatorScan.scan_results.op('->>')('detected_protocol').isnot(None),
+            ValidatorScan.scan_results.op('->>')('detected_protocol') != 'unknown'
+        )
+        
+        return query.order_by(ValidatorScan.created_at.desc()).all()
+    
+    def mark_scan_signature_created(self, scan_id):
+        """
+        Mark a scan as having its protocol signature created.
+        
+        Args:
+            scan_id: The ID of the scan to mark
+            
+        Returns:
+            bool: True if successfully marked, False otherwise
+        """
+        try:
+            scan = self.db.query(ValidatorScan).filter(ValidatorScan.id == scan_id).first()
+            if scan:
+                scan.signature_created = True
+                self.db.commit()
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            return False
+    
+    def get_signature_creation_statistics(self):
+        """
+        Get statistics about signature creation status.
+        
+        Returns:
+            dict: Stats including total scans, signatures created, pending, etc.
+        """
+        from sqlalchemy import func
+        
+        total_scans = self.db.query(ValidatorScan).filter(
+            ValidatorScan.failed == False,
+            ValidatorScan.scan_results.isnot(None)
+        ).count()
+        
+        signatures_created = self.db.query(ValidatorScan).filter(
+            ValidatorScan.failed == False,
+            ValidatorScan.signature_created == True
+        ).count()
+        
+        pending_signatures = self.db.query(ValidatorScan).filter(
+            ValidatorScan.failed == False,
+            ValidatorScan.signature_created == False,
+            ValidatorScan.scan_results.op('->>')('detected_protocol').isnot(None),
+            ValidatorScan.scan_results.op('->>')('detected_protocol') != 'unknown'
+        ).count()
+        
+        # Get breakdown by protocol
+        from sqlalchemy import Integer
+        protocol_stats = self.db.query(
+            ValidatorScan.scan_results.op('->>')('detected_protocol').label('protocol'),
+            func.count().label('total'),
+            func.sum(func.cast(ValidatorScan.signature_created, Integer)).label('created')
+        ).filter(
+            ValidatorScan.failed == False,
+            ValidatorScan.scan_results.op('->>')('detected_protocol').isnot(None),
+            ValidatorScan.scan_results.op('->>')('detected_protocol') != 'unknown'
+        ).group_by(
+            ValidatorScan.scan_results.op('->>')('detected_protocol')
+        ).all()
+        
+        return {
+            'total_scans': total_scans,
+            'signatures_created': signatures_created,
+            'pending_signatures': pending_signatures,
+            'completion_rate': signatures_created / total_scans if total_scans > 0 else 0,
+            'protocol_breakdown': [
+                {
+                    'protocol': stat.protocol,
+                    'total_scans': stat.total,
+                    'signatures_created': stat.created or 0,
+                    'pending': stat.total - (stat.created or 0)
+                }
+                for stat in protocol_stats
+            ]
+        }

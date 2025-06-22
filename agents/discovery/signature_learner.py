@@ -551,31 +551,29 @@ class ScanDataSignatureLearner(SignatureLearner):
         self.training_manager = TrainingDataManager(self.db_path)
         self.logger = logging.getLogger(self.__class__.__name__)
     
-    def learn_from_scans(self, protocol: str = None, source: str = None, 
+    def learn_from_scans(self, protocol: str = None, 
                         min_confidence: float = 0.7, max_examples: int = 1000) -> Dict[str, Any]:
         """
         Learn signatures from existing scan data in the database
         
         Args:
-            protocol: Specific protocol to learn (None for all)
-            source: Source identifier for tracking (required)
+            protocol: Specific protocol to learn (required)
             min_confidence: Minimum confidence threshold for scans to include
             max_examples: Maximum examples to process per protocol
             
         Returns:
             Dictionary with learning results and statistics
         """
-        if not source:
-            raise ValueError("Source identifier is required for tracking")
+        if not protocol:
+            raise ValueError("Protocol name is required for signature learning")
         
         self.logger.info(f"🎓 Learning signatures from existing scans")
-        self.logger.info(f"   Protocol filter: {protocol or 'all'}")
-        self.logger.info(f"   Source: {source}")
+        self.logger.info(f"   Protocol: {protocol}")
         self.logger.info(f"   Min confidence: {min_confidence}")
         self.logger.info(f"   Max examples: {max_examples}")
         
         # Start learning session for tracking
-        session_id = self._start_learning_session(source, protocol, min_confidence, max_examples)
+        session_id = self._start_learning_session(protocol, protocol, min_confidence, max_examples)
         
         try:
             # Extract scan data from database
@@ -589,7 +587,7 @@ class ScanDataSignatureLearner(SignatureLearner):
             labeled_examples = []
             for scan in scan_data:
                 try:
-                    labeled_data = self._convert_discovery_to_labeled_data(scan, source)
+                    labeled_data = self._convert_discovery_to_labeled_data(scan, protocol)
                     if labeled_data:
                         labeled_examples.append(labeled_data)
                 except Exception as e:
@@ -604,7 +602,7 @@ class ScanDataSignatureLearner(SignatureLearner):
             
             # Ensure uniqueness and update database
             unique_signatures = self._ensure_signature_uniqueness(learning_results['learned_signatures'])
-            update_results = self._update_protocol_signatures_database(unique_signatures, source)
+            update_results = self._update_protocol_signatures_database(unique_signatures, protocol)
             
             # Complete learning session
             session_results = {
@@ -622,7 +620,7 @@ class ScanDataSignatureLearner(SignatureLearner):
                 'session_id': session_id,
                 'signatures_learned': unique_signatures,
                 'statistics': session_results,
-                'source': source
+                'protocol': protocol
             }
             
         except Exception as e:
@@ -632,49 +630,34 @@ class ScanDataSignatureLearner(SignatureLearner):
     
     def _extract_scan_data_from_database(self, protocol: str = None, min_confidence: float = 0.7, 
                                        limit: int = 1000) -> List[Dict[str, Any]]:
-        """Extract scan data from validator_scans table"""
-        from core.database import get_db_session
-        from sqlalchemy import text
+        """Extract scan data from validator_scans table by protocol relationship"""
+        from core.database import get_db_session, ValidatorScan, ValidatorAddress, Protocol
         
         try:
             with get_db_session() as session:
-                # Query validator_scans table for recent scans
-                query = """
-                    SELECT 
-                        id,
-                        ip_address,
-                        scan_results,
-                        created_at,
-                        failed
-                    FROM validator_scans
-                    WHERE failed = false
-                      AND scan_results IS NOT NULL
-                      AND scan_results->>'source' IS NOT NULL
-                """
-                
-                params = {}
+                # Query validator_scans table with protocol relationship
+                query = session.query(ValidatorScan, ValidatorAddress, Protocol).join(
+                    ValidatorAddress, ValidatorScan.validator_address_id == ValidatorAddress.id
+                ).join(
+                    Protocol, ValidatorAddress.protocol_id == Protocol.id
+                ).filter(
+                    ValidatorScan.failed == False,
+                    ValidatorScan.scan_results.isnot(None)
+                )
                 
                 if protocol:
-                    # Try to match protocol in scan results
-                    query += " AND (scan_results->>'source' ILIKE :protocol OR scan_results->'protocol_scan'->>'scan_type' ILIKE :protocol)"
-                    params['protocol'] = f'%{protocol}%'
+                    # Filter by protocol name
+                    query = query.filter(Protocol.name == protocol)
                 
-                query += " ORDER BY created_at DESC LIMIT :limit"
-                params['limit'] = limit
-                
-                scans = session.execute(text(query), params).fetchall()
+                # Order by creation date and limit results
+                scans = query.order_by(ValidatorScan.created_at.desc()).limit(limit).all()
                 
                 scan_data = []
-                for scan in scans:
+                for scan, validator_address, protocol_obj in scans:
                     scan_results = scan.scan_results
                     
-                    # Extract protocol information from scan_results
-                    source = scan_results.get('source', 'unknown')
-                    protocol_scan = scan_results.get('protocol_scan', {})
-                    scan_type = protocol_scan.get('scan_type', source)
-                    
-                    # Determine detected protocol from scan data
-                    detected_protocol = self._infer_protocol_from_scan(scan_results)
+                    # Extract protocol information from the relationship
+                    protocol_name = protocol_obj.name
                     
                     # Calculate a simple confidence score based on scan completeness
                     confidence = self._calculate_scan_confidence(scan_results)
@@ -682,26 +665,26 @@ class ScanDataSignatureLearner(SignatureLearner):
                     if confidence >= min_confidence:
                         scan_record = {
                             'hostname': scan.ip_address,
-                            'detected_protocol': detected_protocol,
+                            'detected_protocol': protocol_name,
                             'confidence_score': confidence,
                             'scan_completed_at': scan.created_at,
                             'discovery_id': scan.id,
-                            'source': source,
-                            'scan_type': scan_type,
+                            'protocol_name': protocol_name,
+                            'scan_type': f'{protocol_name}_scan',
                             'network_scan_data': self._extract_network_data(scan_results),
                             'probe_results': self._extract_probe_data(scan_results)
                         }
                         
                         scan_data.append(scan_record)
                 
-                self.logger.info(f"Extracted {len(scan_data)} scan records from validator_scans table")
+                self.logger.info(f"Extracted {len(scan_data)} scan records from validator_scans table for protocol: {protocol or 'all'}")
                 return scan_data
                 
         except Exception as e:
             self.logger.error(f"Failed to extract scan data: {e}")
             return []
     
-    def _convert_discovery_to_labeled_data(self, scan_record: Dict[str, Any], source: str) -> LabeledScanData:
+    def _convert_discovery_to_labeled_data(self, scan_record: Dict[str, Any], protocol: str) -> LabeledScanData:
         """Convert a host discovery record to labeled training data"""
         # Build scan_data structure expected by the parent class
         nmap_data = scan_record['network_scan_data']
@@ -725,7 +708,7 @@ class ScanDataSignatureLearner(SignatureLearner):
             true_protocol=scan_record['detected_protocol'],
             scan_data=scan_data,
             confidence=scan_record['confidence_score'],
-            source=source,
+            source=protocol,  # Use protocol name as source
             timestamp=scan_record['scan_completed_at']
         )
     
@@ -798,7 +781,7 @@ class ScanDataSignatureLearner(SignatureLearner):
         
         return True
     
-    def _update_protocol_signatures_database(self, signatures: Dict[str, Any], source: str) -> Dict[str, Any]:
+    def _update_protocol_signatures_database(self, signatures: Dict[str, Any], protocol: str) -> Dict[str, Any]:
         """Update protocol signatures in the database"""
         from core.database import get_db_session, Protocol, ProtocolSignature
         from sqlalchemy import text
@@ -870,20 +853,24 @@ class ScanDataSignatureLearner(SignatureLearner):
                             update_results['created'].append(protocol_name)
                             self.logger.info(f"✅ Created new signature for {protocol_name}")
                         
-                        # Save to training data manager for tracking
-                        self.training_manager.add_labeled_example(
-                            hostname=f"learned_from_scans_{protocol_name}",
-                            true_protocol=protocol_name,
-                            scan_data={
-                                'learning_metadata': {
-                                    'examples_count': signature_data.get('examples_count', 0),
-                                    'confidence_score': signature_data.get('confidence_score', 0.0),
-                                    'source': source
-                                }
-                            },
-                            confidence=signature_data.get('confidence_score', 0.0),
-                            source=source
-                        )
+                        # Save to training data manager for tracking (simplified to avoid serialization issues)
+                        try:
+                            self.training_manager.add_labeled_example(
+                                hostname=f"learned_from_scans_{protocol_name}",
+                                true_protocol=protocol_name,
+                                scan_data={
+                                    'learning_metadata': {
+                                        'examples_count': int(signature_data.get('examples_count', 0)),
+                                        'confidence_score': float(signature_data.get('confidence_score', 0.0)),
+                                        'protocol': str(protocol)
+                                    }
+                                },
+                                confidence=float(signature_data.get('confidence_score', 0.0)),
+                                source=str(protocol)
+                            )
+                        except Exception as training_error:
+                            self.logger.warning(f"Failed to save training data for {protocol_name}: {training_error}")
+                            # Continue processing even if training data save fails
                         
                     except Exception as e:
                         error_msg = f"Failed to update {protocol_name}: {e}"
@@ -897,15 +884,15 @@ class ScanDataSignatureLearner(SignatureLearner):
             self.logger.error(f"Database update failed: {e}")
             return {'updated': [], 'created': [], 'errors': [str(e)]}
     
-    def _start_learning_session(self, source: str, protocol: str = None, 
+    def _start_learning_session(self, protocol: str, filter_protocol: str = None, 
                               min_confidence: float = 0.7, max_examples: int = 1000) -> str:
         """Start a learning session for tracking"""
-        session_id = f"scan_learning_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{source}"
+        session_id = f"scan_learning_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{protocol}"
         
         self.training_manager.save_training_session(session_id, {
             'session_type': 'scan_data_learning',
-            'source': source,
-            'protocol_filter': protocol,
+            'protocol': protocol,
+            'protocol_filter': filter_protocol,
             'min_confidence': min_confidence,
             'max_examples': max_examples,
             'status': 'started',
@@ -1082,7 +1069,7 @@ class ScanDataSignatureLearner(SignatureLearner):
             return '/'
 
 # Add new methods to the existing SignatureLearner class
-def learn_from_existing_scans(self, protocol: str = None, source: str = None, 
+def learn_from_existing_scans(self, protocol: str = None, 
                             min_confidence: float = 0.7, max_examples: int = 1000) -> Dict[str, Any]:
     """
     Learn signatures from existing scan data (convenience method)
@@ -1090,7 +1077,7 @@ def learn_from_existing_scans(self, protocol: str = None, source: str = None,
     This method creates a ScanDataSignatureLearner and uses it to learn from existing scans.
     """
     scan_learner = ScanDataSignatureLearner(self.existing_signatures)
-    return scan_learner.learn_from_scans(protocol, source, min_confidence, max_examples)
+    return scan_learner.learn_from_scans(protocol, min_confidence, max_examples)
 
 # Monkey patch the method onto SignatureLearner
 SignatureLearner.learn_from_existing_scans = learn_from_existing_scans
