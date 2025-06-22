@@ -79,7 +79,8 @@ def run_single_stage(
     protocol_filter: Optional[str] = None,
     debug: bool = False,
     force_rescore: bool = False,
-    host: Optional[str] = None
+    host: Optional[str] = None,
+    scan_id: Optional[int] = None
 ) -> None:
     """
     Run a single pipeline stage.
@@ -92,6 +93,7 @@ def run_single_stage(
         protocol_filter: Protocol filter for scanning (e.g., 'filecoin', 'sui')
         debug: Enable debug logging for scanners
         host: Host/IP address for network topology discovery (required for discovery stage)
+        scan_id: Scan ID for stages that require it (e.g., publish)
     """
     print(f"🎯 Running single stage: {stage}")
     if debug:
@@ -131,8 +133,13 @@ def run_single_stage(
             print(f"✅ Scoring completed: {len(results)} results scored")
             
         elif stage == 'publish':
+            # Publish stage requires scan_id argument
+            if not scan_id:
+                print("❌ Publish stage requires --scan-id argument")
+                print("   Example: pgdn --stage publish --scan-id 123")
+                sys.exit(1)
             orchestrator = create_orchestrator(config)
-            success = orchestrator.run_single_stage(stage, agent_name)
+            success = orchestrator.run_publish_stage(agent_name or 'PublisherAgent', scan_id=scan_id)
             status = "Success" if success else "Failed"
             print(f"✅ Publishing completed: {status}")
             
@@ -271,7 +278,7 @@ Examples:
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
   pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
-  pgdn --stage publish              # Run only publishing
+  pgdn --stage publish --scan-id 123   # Publish results for specific scan ID
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
   pgdn --stage report --force-report # Generate reports for all scans (even if already processed)
@@ -409,7 +416,7 @@ Examples:
     parser.add_argument(
         '--scan-id',
         type=int,
-        help='Specific scan ID to generate report for (if not provided, will run for all unprocessed scans)'
+        help='Specific scan ID to generate report for (if not provided, will run for all unprocessed scans). Required for publish stage.'
     )
     
     parser.add_argument(
@@ -1452,7 +1459,8 @@ def main():
                     args.protocol,
                     args.debug,
                     args.force_rescore,
-                    args.host
+                    args.host,
+                    args.scan_id
                 )
         else:
             # Run full pipeline

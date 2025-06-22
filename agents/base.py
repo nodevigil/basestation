@@ -167,6 +167,30 @@ class PublishAgent(BaseAgent):
         """
         pass
     
-    def run(self, processed_results: List[Dict[str, Any]], *args, **kwargs) -> bool:
+    def execute(self, processed_results: Optional[List[Dict[str, Any]]] = None, scan_id: Optional[int] = None, *args, **kwargs) -> bool:
+        """
+        Execute result publishing.
+        
+        Args:
+            processed_results: Processed scan results (for legacy compatibility)
+            scan_id: Specific scan ID to publish results for
+            
+        Returns:
+            True if publishing succeeded, False otherwise
+        """
+        if scan_id is not None:
+            # New scan_id based approach - delegate to subclass
+            return self.run(scan_id=scan_id, *args, **kwargs)
+        elif processed_results is not None:
+            # Legacy approach - use processed_results
+            return self.publish_results(processed_results)
+        else:
+            raise ValueError("Either processed_results or scan_id must be provided")
+    
+    def run(self, processed_results: Optional[List[Dict[str, Any]]] = None, *args, **kwargs) -> bool:
         """Execute result publishing."""
-        return self.publish_results(processed_results)
+        if processed_results is not None:
+            return self.publish_results(processed_results)
+        else:
+            # Subclasses should override this for scan_id based publishing
+            raise NotImplementedError("Subclass must implement run method for scan_id based publishing")

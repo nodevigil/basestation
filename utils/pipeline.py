@@ -256,7 +256,8 @@ class PipelineOrchestrator:
     def run_publish_stage(
         self,
         agent_name: str = "PublisherAgent",
-        processed_results: Optional[List[Dict[str, Any]]] = None
+        processed_results: Optional[List[Dict[str, Any]]] = None,
+        scan_id: Optional[int] = None
     ) -> bool:
         """
         Run the publishing stage.
@@ -264,6 +265,7 @@ class PipelineOrchestrator:
         Args:
             agent_name: Name of publish agent to use
             processed_results: Results to publish. If None, loads from database.
+            scan_id: Specific scan ID to publish results for
             
         Returns:
             True if publishing succeeded, False otherwise
@@ -277,7 +279,10 @@ class PipelineOrchestrator:
                 raise Exception(f"Failed to create publish agent: {agent_name}")
             
             # Run publishing
-            success = agent.execute(processed_results)
+            if scan_id is not None:
+                success = agent.execute(scan_id=scan_id)
+            else:
+                success = agent.execute(processed_results)
             
             if success:
                 self.logger.info("📤 Publishing stage completed successfully")
