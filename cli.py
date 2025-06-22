@@ -80,7 +80,9 @@ def run_single_stage(
     debug: bool = False,
     force_rescore: bool = False,
     host: Optional[str] = None,
-    scan_id: Optional[int] = None
+    scan_id: Optional[int] = None,
+    publish_ledger: bool = False,
+    publish_report: bool = False
 ) -> None:
     """
     Run a single pipeline stage.
@@ -94,6 +96,8 @@ def run_single_stage(
         debug: Enable debug logging for scanners
         host: Host/IP address for network topology discovery (required for discovery stage)
         scan_id: Scan ID for stages that require it (e.g., publish)
+        publish_ledger: Publish only to blockchain ledger
+        publish_report: Publish only reports
     """
     print(f"🎯 Running single stage: {stage}")
     if debug:
@@ -138,8 +142,25 @@ def run_single_stage(
                 print("❌ Publish stage requires --scan-id argument")
                 print("   Example: pgdn --stage publish --scan-id 123")
                 sys.exit(1)
+            
+            # Determine which specific publish agent to use
+            if publish_ledger and publish_report:
+                print("❌ Cannot specify both --publish-ledger and --publish-report")
+                print("   Use --publish-ledger first, then --publish-report")
+                sys.exit(1)
+            elif publish_ledger:
+                agent_name = 'PublishLedgerAgent'
+                print(f"🎯 Publishing to blockchain ledger for scan {scan_id}")
+            elif publish_report:
+                agent_name = 'PublishReportAgent'
+                print(f"🎯 Publishing reports for scan {scan_id}")
+            else:
+                # Default behavior - use proxy agent that handles both
+                agent_name = agent_name or 'PublisherAgent'
+                print(f"🎯 Publishing (ledger + reports) for scan {scan_id}")
+            
             orchestrator = create_orchestrator(config)
-            success = orchestrator.run_publish_stage(agent_name or 'PublisherAgent', scan_id=scan_id)
+            success = orchestrator.run_publish_stage(agent_name, scan_id=scan_id)
             status = "Success" if success else "Failed"
             print(f"✅ Publishing completed: {status}")
             
@@ -278,7 +299,9 @@ Examples:
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
   pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
-  pgdn --stage publish --scan-id 123   # Publish results for specific scan ID
+  pgdn --stage publish --scan-id 123   # Publish results for specific scan ID (both ledger and report)
+  pgdn --stage publish --scan-id 123 --publish-ledger  # Publish only to blockchain ledger
+  pgdn --stage publish --scan-id 123 --publish-report  # Publish only reports (requires ledger to be published first)
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
   pgdn --stage report --force-report # Generate reports for all scans (even if already processed)
@@ -463,6 +486,19 @@ Examples:
         '--auto-save-report',
         action='store_true',
         help='Auto-save report with timestamp filename'
+    )
+    
+    # Publish stage arguments
+    parser.add_argument(
+        '--publish-ledger',
+        action='store_true',
+        help='Publish scan results to blockchain ledger (use with --stage publish)'
+    )
+    
+    parser.add_argument(
+        '--publish-report',
+        action='store_true',
+        help='Publish scan reports to configured destinations (use with --stage publish, requires ledger to be published first)'
     )
     
     parser.add_argument(
@@ -1460,7 +1496,9 @@ def main():
                     args.debug,
                     args.force_rescore,
                     args.host,
-                    args.scan_id
+                    args.scan_id,
+                    args.publish_ledger,
+                    args.publish_report
                 )
         else:
             # Run full pipeline

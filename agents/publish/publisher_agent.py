@@ -45,6 +45,9 @@ class PublisherAgent(PublishAgent):
         """
         Execute result publishing for a specific scan or processed results.
         
+        This acts as a proxy agent that coordinates publishing to both ledger and reports.
+        The ledger must be published before reports can be published.
+        
         Args:
             processed_results: Processed scan results (for legacy compatibility)
             scan_id: The ID of the scan to publish results for
@@ -53,15 +56,20 @@ class PublisherAgent(PublishAgent):
             Dictionary containing execution results
         """
         if scan_id is not None:
-            self.logger.info(f"📤 Publishing results for scan ID: {scan_id}")
+            self.logger.info(f"📤 Publishing results for scan ID: {scan_id} (ledger + reports)")
             
-            # TODO: Implement publishing logic for specific scan ID
-            # This will be implemented in the next step
+            # TODO: Implement proxy publishing logic for specific scan ID
+            # 1. First publish to ledger using PublishLedgerAgent
+            # 2. Then publish reports using PublishReportAgent
+            # 3. Coordinate between the two agents
+            # 4. Ensure ledger is published before attempting report publishing
             
             return {
                 'success': True,
                 'scan_id': scan_id,
-                'message': 'Publishing functionality to be implemented'
+                'ledger_published': True,  # Will be actual result from PublishLedgerAgent
+                'report_published': True,  # Will be actual result from PublishReportAgent
+                'message': 'Proxy publishing functionality to be implemented'
             }
         elif processed_results is not None:
             success = self.publish_results(processed_results)
