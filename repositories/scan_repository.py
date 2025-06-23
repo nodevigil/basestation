@@ -231,3 +231,7 @@ class ScanRepository:
                 for stat in protocol_stats
             ]
         }
+    
+    def get_scan_by_id(self, scan_id: int) -> Optional[ValidatorScan]:
+        """Get a scan by its ID"""
+        return self.db.query(ValidatorScan).filter(ValidatorScan.id == scan_id).first()

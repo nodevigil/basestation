@@ -251,6 +251,71 @@ class LedgerRepository:
                 )
             ).order_by(LedgerPublishLog.attempt_timestamp).all()
     
+    def is_scan_published(self, scan_id: int) -> bool:
+        """
+        Check if a scan has been successfully published to the ledger.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            True if scan has been successfully published, False otherwise
+        """
+        with self.db_config.get_session() as session:
+            successful_log = session.query(LedgerPublishLog).filter(
+                and_(
+                    LedgerPublishLog.scan_id == scan_id,
+                    LedgerPublishLog.success == True
+                )
+            ).first()
+            return successful_log is not None
+    
+    def get_scan_publish_status(self, scan_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get the publish status for a specific scan.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            Dictionary with publish status information or None if never attempted
+        """
+        with self.db_config.get_session() as session:
+            # Get the most recent successful publish log
+            successful_log = session.query(LedgerPublishLog).filter(
+                and_(
+                    LedgerPublishLog.scan_id == scan_id,
+                    LedgerPublishLog.success == True
+                )
+            ).order_by(desc(LedgerPublishLog.attempt_timestamp)).first()
+            
+            if successful_log:
+                return {
+                    'published': True,
+                    'transaction_hash': successful_log.transaction_hash,
+                    'summary_hash': successful_log.summary_hash,
+                    'publish_timestamp': successful_log.attempt_timestamp,
+                    'confirmed': successful_log.transaction_confirmed,
+                    'block_number': successful_log.block_number,
+                    'trust_score': successful_log.trust_score
+                }
+            
+            # Check if there were any failed attempts
+            failed_logs = session.query(LedgerPublishLog).filter(
+                LedgerPublishLog.scan_id == scan_id
+            ).order_by(desc(LedgerPublishLog.attempt_timestamp)).all()
+            
+            if failed_logs:
+                latest_attempt = failed_logs[0]
+                return {
+                    'published': False,
+                    'last_attempt': latest_attempt.attempt_timestamp,
+                    'last_error': latest_attempt.error_message,
+                    'attempt_count': len(failed_logs)
+                }
+            
+            return None
+    
     def mark_transaction_confirmed(self, 
                                   transaction_hash: str, 
                                   block_number: Optional[int] = None,
@@ -278,4 +343,69 @@ class LedgerRepository:
                 session.commit()
                 session.refresh(log_entry)
                 return log_entry
+            return None
+        
+    def is_scan_published(self, scan_id: int) -> bool:
+        """
+        Check if a scan has been successfully published to the ledger.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            True if scan has been successfully published, False otherwise
+        """
+        with self.db_config.get_session() as session:
+            successful_log = session.query(LedgerPublishLog).filter(
+                and_(
+                    LedgerPublishLog.scan_id == scan_id,
+                    LedgerPublishLog.success == True
+                )
+            ).first()
+            return successful_log is not None
+    
+    def get_scan_publish_status(self, scan_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get the publish status for a specific scan.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            Dictionary with publish status information or None if never attempted
+        """
+        with self.db_config.get_session() as session:
+            # Get the most recent successful publish log
+            successful_log = session.query(LedgerPublishLog).filter(
+                and_(
+                    LedgerPublishLog.scan_id == scan_id,
+                    LedgerPublishLog.success == True
+                )
+            ).order_by(desc(LedgerPublishLog.attempt_timestamp)).first()
+            
+            if successful_log:
+                return {
+                    'published': True,
+                    'transaction_hash': successful_log.transaction_hash,
+                    'summary_hash': successful_log.summary_hash,
+                    'publish_timestamp': successful_log.attempt_timestamp,
+                    'confirmed': successful_log.transaction_confirmed,
+                    'block_number': successful_log.block_number,
+                    'trust_score': successful_log.trust_score
+                }
+            
+            # Check if there were any failed attempts
+            failed_logs = session.query(LedgerPublishLog).filter(
+                LedgerPublishLog.scan_id == scan_id
+            ).order_by(desc(LedgerPublishLog.attempt_timestamp)).all()
+            
+            if failed_logs:
+                latest_attempt = failed_logs[0]
+                return {
+                    'published': False,
+                    'last_attempt': latest_attempt.attempt_timestamp,
+                    'last_error': latest_attempt.error_message,
+                    'attempt_count': len(failed_logs)
+                }
+            
             return None

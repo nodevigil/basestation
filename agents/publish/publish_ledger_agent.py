@@ -335,27 +335,43 @@ class PublishLedgerAgent(PublishAgent):
     def _get_scan_results_from_db(self, scan_id: int) -> Optional[Dict[str, Any]]:
         """Retrieve scan results from database."""
         try:
-            # TODO: Implement database query to get scan results
-            # This should connect to your database and retrieve the scan results
-            # For now, return a placeholder structure
+            from repositories.scan_repository import ScanRepository
             
             self.logger.info(f"Retrieving scan {scan_id} from database")
             
-            # Placeholder - replace with actual database query
-            scan_result = {
-                'scan_id': scan_id,
-                'host_uid': f'host_{scan_id}',
-                'scan_time': int(time.time()),
-                'trust_score': 75,  # Default score
-                'vulnerabilities': [],
-                'open_ports': [22, 80, 443],
-                'services': ['ssh', 'http', 'https'],
-                'ssl_info': {'valid': True, 'expires': '2025-12-31'},
-                'scan_type': 'full_scan'
-            }
-            
-            return scan_result
-            
+            with ScanRepository() as scan_repo:
+                scan = scan_repo.get_scan_by_id(scan_id)
+                
+                if not scan:
+                    self.logger.error(f"Scan {scan_id} not found in database")
+                    return None
+                
+                if scan.failed:
+                    self.logger.warning(f"Scan {scan_id} is marked as failed")
+                    return None
+                
+                # Convert database scan to format expected by ledger
+                scan_result = {
+                    'scan_id': scan.id,
+                    'host_uid': f'validator_{scan.validator_address_id}',
+                    'validator_id': f'validator_{scan.validator_address_id}',
+                    'scan_time': int(scan.scan_date.timestamp()) if scan.scan_date else int(time.time()),
+                    'timestamp': int(scan.scan_date.timestamp()) if scan.scan_date else int(time.time()),
+                    'trust_score': scan.score or 0,
+                    'ip_address': scan.ip_address,
+                    'scan_hash': scan.scan_hash,
+                    'scan_results': scan.scan_results or {},
+                    'vulnerabilities': scan.scan_results.get('vulnerabilities', []) if scan.scan_results else [],
+                    'open_ports': scan.scan_results.get('open_ports', []) if scan.scan_results else [],
+                    'services': scan.scan_results.get('services', []) if scan.scan_results else [],
+                    'ssl_info': scan.scan_results.get('ssl_info', {}) if scan.scan_results else {},
+                    'scan_type': scan.scan_results.get('scan_type', 'validator_scan') if scan.scan_results else 'validator_scan',
+                    'version': scan.version
+                }
+                
+                self.logger.info(f"Retrieved scan {scan_id}: validator_id={scan.validator_address_id}, score={scan.score}")
+                return scan_result
+                
         except Exception as e:
             self.logger.error(f"Error retrieving scan {scan_id} from database: {e}")
             return None
@@ -363,12 +379,11 @@ class PublishLedgerAgent(PublishAgent):
     def _update_scan_with_ledger_info(self, scan_id: int, tx_hash: str, summary_hash: str) -> bool:
         """Update scan record with ledger transaction details."""
         try:
-            # TODO: Implement database update to store ledger transaction info
-            self.logger.info(f"Updating scan {scan_id} with ledger info: {tx_hash}")
+            # The ledger information is already stored in the ledger_publish_logs table
+            # This method could be used to update the scan record itself if needed
+            self.logger.info(f"Scan {scan_id} ledger info recorded: tx_hash={tx_hash[:8]}...")
             
-            # Placeholder - replace with actual database update
-            # UPDATE scans SET ledger_tx_hash = ?, summary_hash = ?, ledger_published = TRUE WHERE id = ?
-            
+            # For now, just log the success - the ledger repository handles the persistence
             return True
             
         except Exception as e:
@@ -799,6 +814,22 @@ class PublishLedgerAgent(PublishAgent):
         self.logger.info(f"📚 Publishing scan {scan_id} results to blockchain ledger")
         
         try:
+            # Check if scan is already published to ledger
+            if self.ledger_repo.is_scan_published(scan_id):
+                publish_status = self.ledger_repo.get_scan_publish_status(scan_id)
+                self.logger.info(f"📚 Scan {scan_id} already published to ledger")
+                return {
+                    'success': True,
+                    'scan_id': scan_id,
+                    'already_published': True,
+                    'ledger_published': True,
+                    'transaction_hash': publish_status.get('transaction_hash'),
+                    'summary_hash': publish_status.get('summary_hash'),
+                    'block_number': publish_status.get('block_number'),
+                    'confirmed': publish_status.get('confirmed', False),
+                    'message': 'Scan already published to blockchain ledger'
+                }
+            
             # Check blockchain connection
             if not self.w3 or not self.contract:
                 return {
