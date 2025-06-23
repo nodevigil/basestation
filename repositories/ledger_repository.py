@@ -409,3 +409,36 @@ class LedgerRepository:
                 }
             
             return None
+        
+    def get_failed_attempts_for_scan(self, scan_id: int) -> List[LedgerPublishLog]:
+        """
+        Get all failed publish attempts for a specific scan.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            List of failed LedgerPublishLog entries for the scan
+        """
+        with self.db_config.get_session() as session:
+            return session.query(LedgerPublishLog).filter(
+                and_(
+                    LedgerPublishLog.scan_id == scan_id,
+                    LedgerPublishLog.success == False
+                )
+            ).order_by(desc(LedgerPublishLog.attempt_timestamp)).all()
+    
+    def get_scan_retry_count(self, scan_id: int) -> int:
+        """
+        Get the total number of publish attempts (successful and failed) for a scan.
+        
+        Args:
+            scan_id: ID of the scan to check
+            
+        Returns:
+            Total number of publish attempts
+        """
+        with self.db_config.get_session() as session:
+            return session.query(LedgerPublishLog).filter(
+                LedgerPublishLog.scan_id == scan_id
+            ).count()

@@ -599,7 +599,8 @@ class PublishLedgerAgent(PublishAgent):
                 except Exception as e:
                     self.logger.warning(f"Transaction sent but confirmation failed: {e}")
                     
-                    # Log confirmation failure
+                    # Log confirmation failure but keep success=True since transaction was sent
+                    # The transaction may still be valid and confirmed later
                     if log_entry:
                         self.ledger_repo.update_publish_log(log_entry.id, 
                             error_message=f"Confirmation failed: {str(e)}",
@@ -614,6 +615,7 @@ class PublishLedgerAgent(PublishAgent):
                 
             if log_entry:
                 self.ledger_repo.update_publish_log(log_entry.id, 
+                    success=False,
                     error_message=error_msg,
                     error_type='ContractLogicError'
                 )
@@ -626,6 +628,7 @@ class PublishLedgerAgent(PublishAgent):
             if log_entry:
                 processing_duration = datetime.utcnow() - processing_start
                 self.ledger_repo.update_publish_log(log_entry.id, 
+                    success=False,
                     error_message=error_msg,
                     error_type=type(e).__name__,
                     processing_duration_ms=int(processing_duration.total_seconds() * 1000)
@@ -695,6 +698,13 @@ class PublishLedgerAgent(PublishAgent):
                     'confirmed': publish_status.get('confirmed', False),
                     'message': 'Scan already published to blockchain ledger'
                 }
+            
+            # Log any previous failed attempts
+            failed_attempts = self.ledger_repo.get_failed_attempts_for_scan(scan_id)
+            if failed_attempts:
+                self.logger.info(f"📚 Scan {scan_id} has {len(failed_attempts)} previous failed attempt(s), retrying...")
+                latest_failure = failed_attempts[0]
+                self.logger.info(f"📚 Last failure: {latest_failure.error_message} ({latest_failure.attempt_timestamp})")
             
             # Check blockchain connection
             if not self.w3 or not self.contract:
