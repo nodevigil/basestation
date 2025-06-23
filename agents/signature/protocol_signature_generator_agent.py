@@ -18,9 +18,9 @@ from datetime import datetime, timezone
 from collections import Counter
 
 from agents.base import ProcessAgent
-from core.config import Config
-from core.database import get_db_session, ValidatorScan
-from core.database import Protocol, ProtocolSignature
+from pgdn.core.config import Config
+from pgdn.core.database import get_db_session, ValidatorScan
+from pgdn.core.database import Protocol, ProtocolSignature
 
 
 class ProtocolSignatureGeneratorAgent(ProcessAgent):

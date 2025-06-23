@@ -13,7 +13,7 @@ from typing import Dict, List, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from agents.discovery.discovery_agent import DiscoveryAgent
-from core.database import get_db_session
+from pgdn.core.database import get_db_session
 from sqlalchemy import text
 
 class TestDiscoveryWithRealData(unittest.TestCase):

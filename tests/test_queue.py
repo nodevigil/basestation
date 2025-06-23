@@ -14,8 +14,8 @@ sys.path.insert(0, project_root)
 def test_queue_manager():
     """Test the queue manager functionality."""
     try:
-        from utils.queue_manager import create_queue_manager
-        from core.config import Config
+        from pgdn.utils.queue_manager import create_queue_manager
+        from pgdn.core.config import Config
         
         print("🧪 Testing Queue Manager...")
         

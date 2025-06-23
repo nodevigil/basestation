@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgdn"
+version = "1.0.0"
+description = "PGDN - Agentic DePIN Infrastructure Scanner"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "DePIN Team"},
+]
+keywords = ["depin", "infrastructure", "scanner", "security", "blockchain"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Networking :: Monitoring",
+]
+
+# Dependencies will be read from requirements.txt
+dynamic = ["dependencies"]
+
+[project.scripts]
+pgdn = "pgdn_entry:main"
+
+[project.urls]
+Homepage = "https://github.com/your-org/pgdn"
+Repository = "https://github.com/your-org/pgdn"
+Documentation = "https://github.com/your-org/pgdn/docs"
+Issues = "https://github.com/your-org/pgdn/issues"
+
+[tool.setuptools]
+packages = ["pgdn", "core", "utils", "agents", "models", "services", "tasks", "tests"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.package-data]
+pgdn = ["*.json", "*.yml", "*.yaml"]
+core = ["*.json"]
+"*" = ["*.md", "*.txt", "*.ini"]

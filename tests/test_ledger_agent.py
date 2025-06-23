@@ -23,9 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ['DATABASE_URL'] = 'postgresql://simon@localhost/test_depin'
 
 from agents.publish.publish_ledger_agent import PublishLedgerAgent, DePINLedgerError
-from repositories.ledger_repository import LedgerRepository
-from models.ledger import LedgerPublishLog, LedgerBatch, LedgerConnectionLog
-from core.config import Config
+from pgdn.repositories.ledger_repository import LedgerRepository
+from pgdn.models.ledger import LedgerPublishLog, LedgerBatch, LedgerConnectionLog
+from pgdn.core.config import Config
 
 
 class TestLedgerRepository(unittest.TestCase):

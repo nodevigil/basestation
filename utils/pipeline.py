@@ -7,9 +7,9 @@ from datetime import datetime
 from enum import Enum
 
 from agents.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
-from utils.agent_registry import get_agent_registry
-from core.config import Config
-from core.logging import get_logger
+from pgdn.utils.agent_registry import get_agent_registry
+from pgdn.core.config import Config
+from pgdn.core.logging import get_logger
 
 
 class PipelineMode(Enum):
@@ -386,7 +386,7 @@ class PipelineOrchestrator:
             
             # For signature generation, we need scan results as input
             # Get recent scan results from database that haven't been processed for signatures
-            from core.database import get_db_session, ValidatorScan
+            from pgdn.core.database import get_db_session, ValidatorScan
             scan_results = []
             
             with get_db_session() as session:

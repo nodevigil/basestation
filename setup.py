@@ -11,13 +11,13 @@ def read_requirements():
 
 setup(
     name="pgdn",
-    version="1.0.0",
+    version="1.0.1",
     description="PGDN - Agentic DePIN Infrastructure Scanner",
     long_description="A comprehensive infrastructure scanner for DePIN networks with agentic architecture for reconnaissance, scanning, processing, and publishing security analysis results.",
     author="DePIN Team",
     author_email="",
     url="",
-    packages=find_packages(),
+    packages=find_packages(exclude=['core*', 'memory*', 'agents*', 'utils*', 'repositories*', 'models*', 'scanning*', 'storage*', 'web_probes*', 'services*', 'tasks*', 'tools*']),
     py_modules=['cli', 'pgdn_entry'],
     install_requires=read_requirements(),
     entry_points={

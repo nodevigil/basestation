@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from agents.base import ProcessAgent
-from core.config import Config
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.config import Config
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from sqlalchemy import text
 
 

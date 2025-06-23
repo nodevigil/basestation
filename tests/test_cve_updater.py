@@ -10,8 +10,8 @@ from pathlib import Path
 # Add the parent directory to the Python path so we can import modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.cve_updater import CVEUpdater
-from core.logging import setup_logging
+from pgdn.utils.cve_updater import CVEUpdater
+from pgdn.core.logging import setup_logging
 
 def test_cve_updater():
     """Test the CVE updater functionality."""

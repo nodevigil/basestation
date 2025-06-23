@@ -11,10 +11,10 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from agents.base import ScanAgent
-from core.database import get_db_session, ValidatorAddress, ValidatorScan, SCANNER_VERSION
-from core.config import Config
-from core.web_probe_runner import run_web_probes
-from scanning.scanner import Scanner
+from pgdn.core.database import get_db_session, ValidatorAddress, ValidatorScan, SCANNER_VERSION
+from pgdn.core.config import Config
+from pgdn.core.web_probe_runner import run_web_probes
+from pgdn.scanning.scanner import Scanner
 
 
 class ProtocolScannerRegistry:
@@ -28,20 +28,20 @@ class ProtocolScannerRegistry:
     def _register_scanners(self):
         """Register available protocol-specific scanners."""
         try:
-            from scanning.sui_scanner import SuiSpecificScanner
+            from pgdn.scanning.sui_scanner import SuiSpecificScanner
             self._scanners['sui'] = SuiSpecificScanner
         except ImportError:
             pass
         
         try:
-            from scanning.filecoin_scanner import FilecoinSpecificScanner
+            from pgdn.scanning.filecoin_scanner import FilecoinSpecificScanner
             self._scanners['filecoin'] = FilecoinSpecificScanner
         except ImportError:
             pass
         
         # Add more protocol scanners as needed
         # try:
-        #     from scanning.ethereum_scanner import EthereumSpecificScanner
+        #     from pgdn.scanning.ethereum_scanner import EthereumSpecificScanner
         #     self._scanners['ethereum'] = EthereumSpecificScanner
         # except ImportError:
         #     pass
@@ -311,7 +311,7 @@ class NodeScannerAgent(ScanAgent):
             # Run web probes on detected HTTP/HTTPS services (same logic as WhatWeb)
             web_probe_results = {}
             if generic_result and 'nmap' in generic_result:
-                from scanning.scanner import Scanner
+                from pgdn.scanning.scanner import Scanner
                 web_ports = Scanner.get_web_ports_and_schemes(generic_result['nmap'])
                 for port, scheme in web_ports:
                     self.logger.info(f"🌐 Running web probes on {scheme}://{address}:{port}")

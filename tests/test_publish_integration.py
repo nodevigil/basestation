@@ -46,7 +46,7 @@ def test_walrus_not_in_default_config():
     """Test that Walrus is not in default publishing destinations."""
     print("🧪 Testing Walrus not in default config")
     
-    from core.config import Config
+    from pgdn.core.config import Config
     config = Config()
     
     # Check if PUBLISHING_DESTINATIONS exists and what it contains
@@ -78,7 +78,7 @@ def test_publisher_agent_only_does_ledger():
     print("🧪 Testing PublisherAgent only does ledger")
     
     from agents.publish.publisher_agent import PublisherAgent
-    from core.config import Config
+    from pgdn.core.config import Config
     import inspect
     
     config = Config()

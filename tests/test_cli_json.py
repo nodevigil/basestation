@@ -26,7 +26,7 @@ from cli import (
     show_signature_stats,
     update_signature_flags
 )
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class TestCLIJSONOutput:

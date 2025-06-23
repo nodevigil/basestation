@@ -11,9 +11,9 @@ os.environ['USE_DOCKER_CONFIG'] = 'true'  # Required for DATABASE_URL to be used
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from core.database import get_db_session
-from models.ledger import Base as LedgerBase
-from models.validator import Base as ValidatorBase
+from pgdn.core.database import get_db_session
+from pgdn.models.ledger import Base as LedgerBase
+from pgdn.models.validator import Base as ValidatorBase
 
 
 @pytest.fixture(scope="function", autouse=True)

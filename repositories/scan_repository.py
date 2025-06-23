@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from models.validator import ValidatorScan, ValidatorAddress
+from pgdn.models.validator import ValidatorScan, ValidatorAddress
 from database import SessionLocal
-from core.database import SCANNER_VERSION
+from pgdn.core.database import SCANNER_VERSION
 from typing import List, Optional
 from datetime import datetime
 
