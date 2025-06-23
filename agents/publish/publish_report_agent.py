@@ -8,7 +8,10 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from agents.base import PublishAgent
 from core.config import Config
-from storage.walrus_provider import WalrusStorageProvider, WalrusStorageProviderError
+
+# Lazy import for Walrus provider - only import when actually needed
+WalrusStorageProvider = None
+WalrusStorageProviderError = None
 
 
 class PublishReportAgent(PublishAgent):
@@ -44,18 +47,31 @@ class PublishReportAgent(PublishAgent):
     
     def _init_walrus_provider(self):
         """Initialize Walrus storage provider if API key is available."""
+        global WalrusStorageProvider, WalrusStorageProviderError
+        
         try:
+            # Lazy import Walrus provider only when actually needed
+            if WalrusStorageProvider is None:
+                try:
+                    from storage.walrus_provider import WalrusStorageProvider, WalrusStorageProviderError
+                except ImportError as e:
+                    self.logger.info(f"ℹ️ Walrus storage provider not available: {e}")
+                    return
+            
             walrus_api_key = os.getenv('WALRUS_API_KEY')
             walrus_api_url = os.getenv('WALRUS_API_URL', 'https://publisher-devnet.walrus.space')
             
-            if walrus_api_key:
+            if walrus_api_key and WalrusStorageProvider is not None:
                 self.walrus_provider = WalrusStorageProvider(
                     api_url=walrus_api_url,
                     api_key=walrus_api_key
                 )
                 self.logger.info(f"✅ Walrus storage provider initialized: {walrus_api_url}")
             else:
-                self.logger.warning("⚠️ WALRUS_API_KEY not found, Walrus publishing disabled")
+                if WalrusStorageProvider is None:
+                    self.logger.info("ℹ️ Walrus storage provider not available")
+                else:
+                    self.logger.warning("⚠️ WALRUS_API_KEY not found, Walrus publishing disabled")
                 
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize Walrus provider: {e}")
@@ -189,7 +205,8 @@ class PublishReportAgent(PublishAgent):
             self.logger.info(f"✅ Report published to Walrus: {walrus_hash}")
             return walrus_hash
             
-        except WalrusStorageProviderError as e:
+        except Exception as e:
+            # Handle both WalrusStorageProviderError and other exceptions
             self.logger.error(f"❌ Failed to publish to Walrus: {e}")
             return None
     
@@ -425,7 +442,8 @@ class PublishReportAgent(PublishAgent):
             self.logger.info(f"✅ Retrieved report from Walrus: {walrus_hash}")
             return report
             
-        except WalrusStorageProviderError as e:
+        except Exception as e:
+            # Handle both WalrusStorageProviderError and other exceptions
             self.logger.error(f"❌ Failed to retrieve report from Walrus: {e}")
             return None
     
@@ -445,6 +463,7 @@ class PublishReportAgent(PublishAgent):
             self.logger.info(f"📋 Found {len(hashes)} published reports in Walrus")
             return hashes
             
-        except WalrusStorageProviderError as e:
+        except Exception as e:
+            # Handle both WalrusStorageProviderError and other exceptions
             self.logger.error(f"❌ Failed to list published reports: {e}")
             return []

@@ -82,8 +82,7 @@ def run_single_stage(
     host: Optional[str] = None,
     scan_id: Optional[int] = None,
     publish_ledger: bool = False,
-    publish_report: bool = False,
-    publish_walrus: bool = False
+    publish_report: bool = False
 ) -> None:
     """
     Run a single pipeline stage.
@@ -145,9 +144,9 @@ def run_single_stage(
                 sys.exit(1)
             
             # Determine which specific publish agent to use
-            if sum([publish_ledger, publish_report, publish_walrus]) > 1:
+            if sum([publish_ledger, publish_report]) > 1:
                 print("❌ Cannot specify multiple publish flags simultaneously")
-                print("   Use one of: --publish-ledger, --publish-report, or --publish-walrus")
+                print("   Use one of: --publish-ledger or --publish-report")
                 sys.exit(1)
             elif publish_ledger:
                 agent_name = 'PublishLedgerAgent'
@@ -155,9 +154,6 @@ def run_single_stage(
             elif publish_report:
                 agent_name = 'PublishReportAgent'
                 print(f"🎯 Publishing reports for scan {scan_id}")
-            elif publish_walrus:
-                agent_name = 'PublishReportAgent'
-                print(f"🎯 Publishing reports to Walrus storage for scan {scan_id}")
             else:
                 # Default behavior - only publish to ledger (reports require explicit flag)
                 agent_name = 'PublishLedgerAgent'
@@ -305,8 +301,7 @@ Examples:
   pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
   pgdn --stage publish --scan-id 123   # Publish to blockchain ledger only (default behavior)
   pgdn --stage publish --scan-id 123 --publish-ledger  # Publish only to blockchain ledger (explicit)
-  pgdn --stage publish --scan-id 123 --publish-report  # Publish reports to local files (requires ledger to be published first)
-  pgdn --stage publish --scan-id 123 --publish-walrus  # Publish reports to Walrus storage (requires ledger to be published first)
+  pgdn --stage publish --scan-id 123 --publish-report  # Publish reports to local files and Walrus storage (requires ledger to be published first)
   pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
   pgdn --stage report --scan-id 123 # Generate report for specific scan ID
   pgdn --stage report --force-report # Generate reports for all scans (even if already processed)
@@ -503,13 +498,7 @@ Examples:
     parser.add_argument(
         '--publish-report',
         action='store_true',
-        help='Publish scan reports to configured destinations (use with --stage publish, requires ledger to be published first)'
-    )
-    
-    parser.add_argument(
-        '--publish-walrus',
-        action='store_true',
-        help='Publish scan reports specifically to Walrus storage (use with --stage publish, requires ledger to be published first)'
+        help='Publish scan reports to local files and Walrus storage (use with --stage publish, requires ledger to be published first)'
     )
     
     parser.add_argument(
@@ -1509,8 +1498,7 @@ def main():
                     args.host,
                     args.scan_id,
                     args.publish_ledger,
-                    args.publish_report,
-                    args.publish_walrus
+                    args.publish_report
                 )
         else:
             # Run full pipeline
