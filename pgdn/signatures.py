@@ -37,7 +37,7 @@ class SignatureManager:
             dict: Signature learning results
         """
         try:
-            from agents.signature.signature_learning_agent import SignatureLearningAgent
+            from pgdn.agent_modules.signature.signature_learning_agent import SignatureLearningAgent
             
             learning_agent = SignatureLearningAgent()
             
@@ -85,7 +85,7 @@ class SignatureManager:
             dict: Flag update results
         """
         try:
-            from agents.signature.signature_flag_manager import SignatureFlagManager
+            from pgdn.agent_modules.signature.signature_flag_manager import SignatureFlagManager
             
             flag_manager = SignatureFlagManager()
             
@@ -125,7 +125,7 @@ class SignatureManager:
             dict: Mark operation results
         """
         try:
-            from agents.signature.signature_flag_manager import SignatureFlagManager
+            from pgdn.agent_modules.signature.signature_flag_manager import SignatureFlagManager
             
             flag_manager = SignatureFlagManager()
             
@@ -162,7 +162,7 @@ class SignatureManager:
             dict: Signature statistics
         """
         try:
-            from agents.signature.signature_flag_manager import SignatureFlagManager
+            from pgdn.agent_modules.signature.signature_flag_manager import SignatureFlagManager
             
             flag_manager = SignatureFlagManager()
             

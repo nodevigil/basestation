@@ -46,7 +46,7 @@ class Scanner:
             dict: Scan results including success status, resolved IP, and scan data
         """
         try:
-            from agents.scan.node_scanner_agent import NodeScannerAgent
+            from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
             
             # Resolve hostname to IP if needed
             try:
@@ -108,7 +108,7 @@ class Scanner:
             dict: Scan results including success status and scan data
         """
         try:
-            from agents.scan.node_scanner_agent import NodeScannerAgent
+            from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
             
             scanner_agent = NodeScannerAgent(self.config, 
                                            protocol_filter=self.protocol_filter, 

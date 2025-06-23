@@ -3,7 +3,7 @@ Publisher agent for outputting final results to various destinations.
 """
 
 from typing import Optional, Dict, Any, List
-from agents.base import PublishAgent
+from pgdn.agent_modules.base import PublishAgent
 from pgdn.core.config import Config
 
 
@@ -60,7 +60,7 @@ class PublisherAgent(PublishAgent):
             
             try:
                 # Import agents
-                from agents.publish.publish_ledger_agent import PublishLedgerAgent
+                from pgdn.agent_modules.publish.publish_ledger_agent import PublishLedgerAgent
                 
                 # Initialize ledger agent
                 ledger_agent = PublishLedgerAgent(self.config)
@@ -106,7 +106,7 @@ class PublisherAgent(PublishAgent):
             Dictionary containing detailed publication results
         """
         try:
-            from agents.publish.publish_ledger_agent import PublishLedgerAgent
+            from pgdn.agent_modules.publish.publish_ledger_agent import PublishLedgerAgent
             
             ledger_agent = PublishLedgerAgent(self.config)
             ledger_result = ledger_agent.execute(scan_id=scan_id)
@@ -115,7 +115,7 @@ class PublisherAgent(PublishAgent):
             report_error = None
             
             try:
-                from agents.publish.publish_report_agent import PublishReportAgent
+                from pgdn.agent_modules.publish.publish_report_agent import PublishReportAgent
                 
                 report_agent = PublishReportAgent(self.config)
                 report_result = report_agent.execute(scan_id=scan_id)

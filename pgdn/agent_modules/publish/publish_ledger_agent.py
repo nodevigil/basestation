@@ -13,7 +13,7 @@ from web3.exceptions import ContractLogicError, TransactionNotFound
 from eth_account import Account
 from datetime import datetime
 
-from agents.base import PublishAgent
+from pgdn.agent_modules.base import PublishAgent
 from pgdn.core.config import Config
 from pgdn.repositories.ledger_repository import LedgerRepository
 

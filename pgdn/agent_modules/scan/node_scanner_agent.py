@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from agents.base import ScanAgent
+from pgdn.agent_modules.base import ScanAgent
 from pgdn.core.database import get_db_session, ValidatorAddress, ValidatorScan, SCANNER_VERSION
 from pgdn.core.config import Config
 from pgdn.core.web_probe_runner import run_web_probes

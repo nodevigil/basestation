@@ -24,7 +24,7 @@ from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
 from enum import Enum
 
-from agents.base import ProcessAgent
+from pgdn.agent_modules.base import ProcessAgent
 from pgdn.core.config import Config
 from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from sqlalchemy import text

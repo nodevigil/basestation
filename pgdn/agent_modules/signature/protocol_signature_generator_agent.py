@@ -17,7 +17,7 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 from datetime import datetime, timezone
 from collections import Counter
 
-from agents.base import ProcessAgent
+from pgdn.agent_modules.base import ProcessAgent
 from pgdn.core.config import Config
 from pgdn.core.database import get_db_session, ValidatorScan
 from pgdn.core.database import Protocol, ProtocolSignature

@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from enum import Enum
 
-from agents.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
+from pgdn.agent_modules.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
 from pgdn.utils.agent_registry import get_agent_registry
 from pgdn.core.config import Config
 from pgdn.core.logging import get_logger

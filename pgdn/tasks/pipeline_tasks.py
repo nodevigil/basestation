@@ -107,7 +107,7 @@ def run_single_stage_task(
             
         elif stage == 'scan':
             # For scanning, use the scanner agent directly to support protocol filtering
-            from agents.scan.node_scanner_agent import NodeScannerAgent
+            from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
             scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
             results = scanner_agent.scan_nodes()
             
@@ -181,7 +181,7 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
         import socket
         
         logger.info(f"Scanning target: {target}")

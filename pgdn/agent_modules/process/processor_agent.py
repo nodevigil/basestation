@@ -8,10 +8,10 @@ from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-from agents.base import ProcessAgent
+from pgdn.agent_modules.base import ProcessAgent
 from pgdn.core.database import get_db_session, ValidatorScan
 from pgdn.core.config import Config
-from agents.score.scoring_agent import ScoringAgent
+from pgdn.agent_modules.score.scoring_agent import ScoringAgent
 
 
 class ProcessorAgent(ProcessAgent):

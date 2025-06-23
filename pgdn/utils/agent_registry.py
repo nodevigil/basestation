@@ -7,7 +7,7 @@ import os
 from typing import Dict, List, Type, Optional, Any
 from pathlib import Path
 
-from agents.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
+from pgdn.agent_modules.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
 from pgdn.core.logging import get_logger
 
 

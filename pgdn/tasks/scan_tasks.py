@@ -39,7 +39,7 @@ def batch_scan_nodes_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
         
         logger.info(f"Batch scanning {len(node_batch)} nodes")
         
@@ -91,7 +91,7 @@ def scan_single_node_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
         
         logger.info(f"Scanning single node: {node_data.get('address', 'unknown')}")
         
@@ -149,7 +149,7 @@ def parallel_target_scans_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
         
         logger.info(f"Parallel scanning {len(targets)} targets with max_concurrent={max_concurrent}")
         

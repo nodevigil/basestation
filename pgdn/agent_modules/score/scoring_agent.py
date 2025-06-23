@@ -9,7 +9,7 @@ import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from agents.base import ProcessAgent
+from pgdn.agent_modules.base import ProcessAgent
 from pgdn.core.config import Config
 
 class DefaultTrustScorer:

@@ -8,7 +8,7 @@ import socket
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from agents.base import ReconAgent
+from pgdn.agent_modules.base import ReconAgent
 from pgdn.core.database import get_db_session, ValidatorAddress, Protocol, ProtocolSignature
 from pgdn.core.config import Config
 

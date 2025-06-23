@@ -6,7 +6,7 @@ import json
 import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from agents.base import PublishAgent
+from pgdn.agent_modules.base import PublishAgent
 from pgdn.core.config import Config
 
 # Lazy import for Walrus provider - only import when actually needed
