@@ -238,7 +238,7 @@ docker-compose.override.yml
 # Alembic migration backups (keep versions folder but ignore backup files)
 alembic/versions/*.bak
 
-sites.md
+docs/sites.md
 config.json
 scan_result_*.json
 security_report*.json

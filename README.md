@@ -1198,6 +1198,12 @@ Comprehensive documentation is available in the `docs/` folder:
 - **[Docker Setup](docs/DOCKER_README.md)** - Containerized development environment
 - **[Database Setup](docs/DATABASE_CONNECTION_STANDARDIZATION.md)** - Database configuration guide
 
+### Library Usage (Python API)
+- **[Library README](docs/LIBRARY_README.md)** - Complete library installation and usage guide
+- **[Library API Documentation](docs/LIBRARY_API.md)** - Python API reference and examples
+- **[Library Architecture](docs/LIBRARY_ARCHITECTURE.md)** - Library design and structure
+- **[Installation Guide](docs/INSTALLATION_GUIDE.md)** - Multiple installation methods
+
 ### Advanced Features  
 - **[External Scorer Integration](docs/EXTERNAL_SCORER_GUIDE.md)** - Complete guide to custom scoring libraries
 - **[Scoring Agent Refactoring](docs/SCORING_REFACTORING_COMPLETE.md)** - Technical implementation details
