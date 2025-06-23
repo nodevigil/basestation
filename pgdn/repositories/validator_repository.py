@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pgdn.models.validator import ValidatorAddress
 from pgdn.core.database import Protocol  # Import Protocol from pgdn.core.database
-from database import SessionLocal, get_db
+from pgdn.core.database import SessionLocal, get_db
 from typing import List, Optional
 from datetime import datetime
 

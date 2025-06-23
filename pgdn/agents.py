@@ -8,7 +8,7 @@ This module abstracts agent operations from CLI concerns.
 from typing import Dict, Any
 from datetime import datetime
 
-from utils.agent_registry import get_agent_registry
+from pgdn.utils.agent_registry import get_agent_registry
 
 
 class AgentManager:

@@ -8,7 +8,7 @@ This module abstracts CVE operations from CLI concerns.
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from utils.cve_updater import update_cves_database, get_cve_stats
+from pgdn.utils.cve_updater import update_cves_database, get_cve_stats
 
 
 class CVEManager:
@@ -145,7 +145,7 @@ class CVEManager:
             dict: Scheduler start results
         """
         try:
-            from utils.cve_scheduler import start_cve_scheduler
+            from pgdn.utils.cve_scheduler import start_cve_scheduler
             
             success = start_cve_scheduler(update_time)
             
