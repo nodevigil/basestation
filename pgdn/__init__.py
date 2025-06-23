@@ -23,7 +23,7 @@ from .reports import ReportManager
 from .cve import CVEManager
 from .signatures import SignatureManager
 from .queue import QueueManager
-from .agents import AgentManager
+from .agents import AgentManager  # This imports from agents.py, not agents/__init__.py
 from .parallel import ParallelOperations
 
 __all__ = [
