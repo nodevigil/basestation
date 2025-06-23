@@ -221,7 +221,7 @@ class PublishLedgerAgent(PublishAgent):
             
             # If no ABI file found, fall back to minimal ABI
             self.logger.warning("ABI file not found at contracts/ledger/abi.json, using minimal ABI")
-            return self._get_minimal_abi()
+            raise DePINLedgerError("ABI file not found at contracts/ledger/abi.json and no ABI could be loaded")
             
         except json.JSONDecodeError as e:
             self.logger.error(f"Invalid JSON in ABI file: {e}")
@@ -244,38 +244,6 @@ class PublishLedgerAgent(PublishAgent):
                 return str(value)
         
         return default
-    
-    def _get_minimal_abi(self) -> List[Dict]:
-        """Return minimal ABI for basic contract interaction."""
-        return [
-            {
-                "inputs": [
-                    {"internalType": "string", "name": "hostUid", "type": "string"},
-                    {"internalType": "uint256", "name": "scanTime", "type": "uint256"},
-                    {"internalType": "bytes32", "name": "summaryHash", "type": "bytes32"},
-                    {"internalType": "uint16", "name": "score", "type": "uint16"},
-                    {"internalType": "string", "name": "reportPointer", "type": "string"}
-                ],
-                "name": "publishScanSummary",
-                "outputs": [],
-                "stateMutability": "nonpayable",
-                "type": "function"
-            },
-            {
-                "inputs": [{"internalType": "address", "name": "", "type": "address"}],
-                "name": "authorizedPublishers",
-                "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-                "stateMutability": "view",
-                "type": "function"
-            },
-            {
-                "inputs": [],
-                "name": "owner",
-                "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-                "stateMutability": "view",
-                "type": "function"
-            }
-        ]
     
     def _send_transaction(self, function_call, gas_limit: Optional[int] = None) -> str:
         """Send a transaction to the contract."""
