@@ -167,8 +167,10 @@ def parallel_target_scans_task(
                     logger.info(f"Starting scan for {target}")
                     
                     # Create mock node entry
+                    import uuid
                     mock_node = {
                         'id': 0,
+                        'uuid': str(uuid.uuid4()),  # Add UUID for scan results
                         'address': target,
                         'source': 'parallel_scan',
                         'name': f'Parallel scan of {target}'
