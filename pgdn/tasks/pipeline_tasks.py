@@ -193,8 +193,10 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
             raise ValueError(f"DNS resolution failed for {target}")
         
         # Create a mock node entry for the scanner agent
+        import uuid
         mock_node = {
             'id': 0,
+            'uuid': str(uuid.uuid4()),  # Add UUID for scan results
             'address': target,
             'source': 'manual_scan',
             'name': f'Direct scan of {target}'

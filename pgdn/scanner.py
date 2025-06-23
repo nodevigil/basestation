@@ -60,8 +60,10 @@ class Scanner:
                 }
             
             # Create a mock node entry for the scanner agent
+            import uuid
             mock_node = {
                 'id': 0,
+                'uuid': str(uuid.uuid4()),  # Add UUID for scan results
                 'address': target,
                 'source': 'manual_scan',
                 'name': f'Direct scan of {target}'
