@@ -105,7 +105,7 @@ class PublishLedgerAgent(PublishAgent):
             })
             
             # Load gas parameters
-            self.default_gas_limit = int(self._get_config_value('GAS_LIMIT', '2000000'))
+            self.default_gas_limit = int(self._get_config_value('GAS_LIMIT', '10000000'))  # 10M default for zkSync Era
             self.default_gas_price = self.w3.to_wei(self._get_config_value('GAS_PRICE_GWEI', '0.25'), 'gwei')
             
             # Get account balance
@@ -118,14 +118,34 @@ class PublishLedgerAgent(PublishAgent):
             except:
                 pass
             
-            # Check account permissions
+            # Check if account is contract owner (primary authorization)
             try:
-                self.is_publisher = self.contract.functions.authorizedPublishers(self.account.address).call()
+                contract_owner = self.contract.functions.owner().call()
+                self.is_owner = self.account.address.lower() == contract_owner.lower()
+                
+                if self.is_owner:
+                    self.logger.info(f"📊 Connected as contract owner: {self.account.address}")
+                    self.is_publisher = True  # Owner is always a publisher
+                else:
+                    self.logger.info(f"📊 Connected as regular account: {self.account.address}")
+                    # Check explicit publisher authorization
+                    self.is_publisher = self.contract.functions.authorizedPublishers(self.account.address).call()
+                
                 connection_data['is_authorized_publisher'] = self.is_publisher
-                self.logger.info(f"📊 Connected to ledger as {'authorized' if self.is_publisher else 'unauthorized'} publisher")
-            except:
-                self.logger.warning("Could not check publisher authorization")
+                
+                self.logger.info(f"📊 Authorization status: {'✅ AUTHORIZED' if self.is_publisher else '❌ NOT AUTHORIZED'}")
+                
+                # Log authorization details
+                if not self.is_publisher and not self.is_owner:
+                    self.logger.warning(f"⚠️ Address {self.account.address} is NOT authorized to publish")
+                    self.logger.warning(f"💡 Contract owner is: {contract_owner}")
+                    self.logger.warning(f"💡 Contact owner to authorize your address or use owner's private key")
+                        
+            except Exception as auth_error:
+                self.logger.warning(f"Could not check authorization: {auth_error}")
+                self.logger.debug(f"🔍 Authorization check exception: {type(auth_error).__name__}: {str(auth_error)}")
                 self.is_publisher = False
+                self.is_owner = False
             
             # Get contract info
             try:
@@ -139,6 +159,15 @@ class PublishLedgerAgent(PublishAgent):
                         'reputation_threshold': contract_info[4],
                         'active_hosts': contract_info[5]
                     })
+                    
+                    # Log cooldown info
+                    cooldown = contract_info[3]
+                    if cooldown > 0:
+                        self.logger.info(f"⏰ Publish cooldown is {cooldown} seconds")
+                        self.logger.info(f"💡 Consider calling setPublishCooldown(0) as owner to disable rate limiting")
+                    else:
+                        self.logger.info(f"✅ Publish cooldown is disabled")
+                        
             except:
                 pass
             
@@ -153,6 +182,7 @@ class PublishLedgerAgent(PublishAgent):
             self.w3 = None
             self.contract = None
             self.is_publisher = False
+            self.is_owner = False
             
             connection_data.update({
                 'error_message': str(e),
@@ -237,57 +267,102 @@ class PublishLedgerAgent(PublishAgent):
                 "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
                 "stateMutability": "view",
                 "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "owner",
+                "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+                "stateMutability": "view",
+                "type": "function"
             }
         ]
     
     def _send_transaction(self, function_call, gas_limit: Optional[int] = None) -> str:
         """Send a transaction to the contract."""
+        self.logger.debug(f"🔍 Preparing to send transaction")
+        
         try:
             # Get current nonce
             nonce = self.w3.eth.get_transaction_count(self.account.address, 'pending')
+            self.logger.debug(f"🔍 Account nonce: {nonce}")
+            
+            # Estimate gas if not provided
+            if gas_limit is None:
+                try:
+                    estimated_gas = function_call.estimate_gas({'from': self.account.address})
+                    # Add 20% buffer to estimated gas
+                    gas_limit = int(estimated_gas * 1.2)
+                    self.logger.debug(f"🔍 Estimated gas: {estimated_gas}, using with buffer: {gas_limit}")
+                except Exception as estimate_error:
+                    self.logger.warning(f"Gas estimation failed: {estimate_error}, using default")
+                    gas_limit = self.default_gas_limit
             
             # Build transaction
-            transaction = function_call.build_transaction({
+            transaction_params = {
                 'from': self.account.address,
                 'nonce': nonce,
-                'gas': gas_limit or self.default_gas_limit,
+                'gas': gas_limit,
                 'gasPrice': self.default_gas_price,
-            })
+            }
+            
+            transaction = function_call.build_transaction(transaction_params)
             
             # Sign and send transaction
             signed_txn = self.account.sign_transaction(transaction)
+            
             # Handle both old and new web3 versions
             raw_transaction = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
             if raw_transaction is None:
                 raise DePINLedgerError("Could not get raw transaction from signed transaction")
             
             tx_hash = self.w3.eth.send_raw_transaction(raw_transaction)
+            tx_hash_hex = tx_hash.hex()
             
-            return tx_hash.hex()
+            self.logger.info(f"✅ Transaction sent successfully: {tx_hash_hex}")
+            return tx_hash_hex
             
         except Exception as e:
+            self.logger.error(f"❌ Transaction failed: {e}")
             raise DePINLedgerError(f"Transaction failed: {str(e)}")
     
     def _wait_for_transaction(self, tx_hash: str, timeout: int = 120) -> Dict[str, Any]:
         """Wait for transaction confirmation."""
+        self.logger.debug(f"🔍 Waiting for transaction confirmation: {tx_hash}")
+        
         try:
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=timeout)
             
             if receipt.status == 0:
+                self.logger.error(f"❌ Transaction failed with status 0: {tx_hash}")
                 raise DePINLedgerError(f"Transaction failed: {tx_hash}")
-                
+            
+            self.logger.info(f"✅ Transaction confirmed successfully: {tx_hash}")
             return dict(receipt)
             
-        except TransactionNotFound:
+        except TransactionNotFound as e:
+            self.logger.error(f"❌ Transaction not found: {tx_hash}")
             raise DePINLedgerError(f"Transaction not found: {tx_hash}")
         except Exception as e:
+            self.logger.error(f"❌ Transaction confirmation failed: {e}")
             raise DePINLedgerError(f"Transaction confirmation failed: {str(e)}")
     
     def _generate_summary_hash(self, scan_data: Dict[str, Any]) -> str:
-        """Generate a deterministic hash for scan summary data."""
-        # Create deterministic JSON string
-        json_str = json.dumps(scan_data, sort_keys=True, separators=(',', ':'))
-        hash_bytes = hashlib.sha256(json_str.encode('utf-8')).digest()
+        """Generate a deterministic hash for scan summary data using the same format as JavaScript."""
+        # Create summary data in the same format as the JavaScript version
+        summary_data = {
+            'hostUid': scan_data.get('host_uid', ''),
+            'scanTime': scan_data.get('scan_time', 0),
+            'score': scan_data.get('trust_score', 0),
+            'reportPointer': scan_data.get('report_pointer', ''),
+            'testData': False  # Mark as real data, not test data
+        }
+        
+        # Convert to JSON string with same format as JavaScript JSON.stringify
+        json_str = json.dumps(summary_data, sort_keys=True, separators=(',', ':'))
+        
+        # Generate hash using web3's keccak (same as ethers.keccak256)
+        hash_bytes = self.w3.keccak(text=json_str)
+        
         return '0x' + hash_bytes.hex()
     
     def _format_scan_for_ledger(self, scan_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -350,13 +425,26 @@ class PublishLedgerAgent(PublishAgent):
                     self.logger.warning(f"Scan {scan_id} is marked as failed")
                     return None
                 
+                # Use current time for ledger publishing instead of original scan date
+                # This prevents issues with old scans being published with timestamps too far in the past
+                current_time = int(time.time())
+                original_scan_time = int(scan.scan_date.timestamp()) if scan.scan_date else current_time
+                
+                # Log the time difference for debugging
+                if scan.scan_date:
+                    time_diff = current_time - original_scan_time
+                    self.logger.info(f"Scan {scan_id} original date: {scan.scan_date}, age: {time_diff} seconds")
+                    if time_diff > 86400:  # More than 1 day old
+                        self.logger.info(f"Using current time for ledger publishing (scan is {time_diff/86400:.1f} days old)")
+                
                 # Convert database scan to format expected by ledger
                 scan_result = {
                     'scan_id': scan.id,
                     'host_uid': f'validator_{scan.validator_address_id}',
                     'validator_id': f'validator_{scan.validator_address_id}',
-                    'scan_time': int(scan.scan_date.timestamp()) if scan.scan_date else int(time.time()),
-                    'timestamp': int(scan.scan_date.timestamp()) if scan.scan_date else int(time.time()),
+                    'scan_time': current_time,  # Use current time for publishing
+                    'original_scan_time': original_scan_time,  # Keep original for reference
+                    'timestamp': current_time,  # Use current time for publishing
                     'trust_score': scan.score or 0,
                     'ip_address': scan.ip_address,
                     'scan_hash': scan.scan_hash,
@@ -404,7 +492,7 @@ class PublishLedgerAgent(PublishAgent):
         if not self.w3 or not self.contract:
             raise DePINLedgerError("Blockchain connection not initialized")
         
-        if not self.is_publisher:
+        if not self.is_publisher and not self.is_owner:
             raise DePINLedgerError("Account not authorized to publish to ledger")
         
         processing_start = datetime.utcnow()
@@ -414,7 +502,7 @@ class PublishLedgerAgent(PublishAgent):
         log_data = {
             'scan_id': scan_id,
             'publishing_agent': self.agent_name,
-            'agent_version': '1.0.0',  # Could be made configurable
+            'agent_version': '1.0.0',
             'blockchain_network': 'zkSync Era Sepolia',
             'rpc_url': self.rpc_url,
             'contract_address': self.contract_address,
@@ -453,6 +541,8 @@ class PublishLedgerAgent(PublishAgent):
                 ledger_data['report_pointer']
             )
             
+            self.logger.info(f"🔍 About to call publishScanSummary with: host='{ledger_data['host_uid']}', time={ledger_data['scan_time']}, score={ledger_data['score']}")
+            
             # Send transaction
             tx_hash = self._send_transaction(function_call)
             
@@ -480,6 +570,8 @@ class PublishLedgerAgent(PublishAgent):
                 'confirmed': False,
                 'log_id': log_entry.id if log_entry else None
             }
+            
+            self.logger.info(f"Scan {scan_id} ledger info recorded: tx_hash={tx_hash[:10]}...")
             
             # Wait for confirmation if requested
             if wait_for_confirmation:
@@ -518,6 +610,8 @@ class PublishLedgerAgent(PublishAgent):
             
         except ContractLogicError as e:
             error_msg = f"Contract error: {str(e)}"
+            self.logger.error(f"❌ Contract logic error: {error_msg}")
+                
             if log_entry:
                 self.ledger_repo.update_publish_log(log_entry.id, 
                     error_message=error_msg,
@@ -527,6 +621,8 @@ class PublishLedgerAgent(PublishAgent):
             
         except Exception as e:
             error_msg = f"Publication failed: {str(e)}"
+            self.logger.error(f"❌ Publication failed: {error_msg}")
+                
             if log_entry:
                 processing_duration = datetime.utcnow() - processing_start
                 self.ledger_repo.update_publish_log(log_entry.id, 
@@ -535,224 +631,6 @@ class PublishLedgerAgent(PublishAgent):
                     processing_duration_ms=int(processing_duration.total_seconds() * 1000)
                 )
             raise DePINLedgerError(error_msg)
-    
-    def publish_batch_scans(self, scan_results: List[Dict[str, Any]], wait_for_confirmation: bool = True) -> Dict[str, Any]:
-        """
-        Publish multiple scan results in a single batch transaction (V3 feature).
-        
-        Args:
-            scan_results: List of scan result dictionaries
-            wait_for_confirmation: Whether to wait for transaction confirmation
-            
-        Returns:
-            Dictionary containing batch publication results
-        """
-        if not self.w3 or not self.contract:
-            raise DePINLedgerError("Blockchain connection not initialized")
-        
-        if not self.is_publisher:
-            raise DePINLedgerError("Account not authorized to publish to ledger")
-        
-        if not scan_results:
-            raise DePINLedgerError("No scan results provided")
-        
-        if len(scan_results) > 50:
-            raise DePINLedgerError("Batch too large (max 50 scans)")
-        
-        processing_start = datetime.utcnow()
-        
-        # Create batch log entry
-        batch_log_data = {
-            'batch_size': len(scan_results),
-            'blockchain_network': 'zkSync Era Sepolia',
-            'contract_address': self.contract_address,
-            'publisher_address': self.account.address,
-            'success': False,
-            'confirmed': False
-        }
-        
-        batch_log = None
-        individual_logs = []
-        
-        try:
-            # Check if contract supports batch operations
-            if not hasattr(self.contract.functions, 'batchPublishScans'):
-                # Fallback to individual publications
-                return self._publish_individual_scans(scan_results, wait_for_confirmation)
-            
-            # Create batch log
-            batch_log = self.ledger_repo.create_batch_log(**batch_log_data)
-            
-            # Format all scans for batch submission and create individual logs
-            batch_requests = []
-            for scan_result in scan_results:
-                ledger_data = self._format_scan_for_ledger(scan_result)
-                summary_hash_bytes = bytes.fromhex(ledger_data['summary_hash'][2:])
-                
-                # Create individual log entry for each scan in the batch
-                individual_log_data = {
-                    'scan_id': scan_result.get('scan_id'),
-                    'publishing_agent': self.agent_name,
-                    'blockchain_network': 'zkSync Era Sepolia',
-                    'rpc_url': self.rpc_url,
-                    'contract_address': self.contract_address,
-                    'publisher_address': self.account.address,
-                    'is_batch': True,
-                    'batch_id': batch_log.id,
-                    'host_uid': ledger_data['host_uid'],
-                    'scan_time': ledger_data['scan_time'],
-                    'summary_hash': ledger_data['summary_hash'],
-                    'trust_score': ledger_data['score'],
-                    'report_pointer': ledger_data['report_pointer'],
-                    'success': False,
-                    'transaction_confirmed': False
-                }
-                
-                individual_log = self.ledger_repo.create_publish_log(**individual_log_data)
-                individual_logs.append(individual_log)
-                
-                batch_requests.append((
-                    ledger_data['host_uid'],
-                    ledger_data['scan_time'],
-                    summary_hash_bytes,
-                    ledger_data['score'],
-                    ledger_data['report_pointer']
-                ))
-            
-            # Submit batch transaction
-            function_call = self.contract.functions.batchPublishScans(batch_requests)
-            tx_hash = self._send_transaction(function_call, gas_limit=self.default_gas_limit * 2)
-            
-            # Calculate processing duration
-            processing_duration = datetime.utcnow() - processing_start
-            processing_duration_ms = int(processing_duration.total_seconds() * 1000)
-            
-            # Update batch log
-            batch_update_data = {
-                'success': True,
-                'transaction_hash': tx_hash,
-                'gas_price_gwei': float(self.w3.from_wei(self.default_gas_price, 'gwei')),
-                'processing_duration_ms': processing_duration_ms,
-                'successful_publishes': len(scan_results)
-            }
-            
-            self.ledger_repo.update_batch_log(batch_log.id, **batch_update_data)
-            
-            # Update individual logs
-            for log in individual_logs:
-                self.ledger_repo.update_publish_log(log.id, 
-                    success=True,
-                    transaction_hash=tx_hash,
-                    processing_duration_ms=processing_duration_ms
-                )
-            
-            result = {
-                'success': True,
-                'transaction_hash': tx_hash,
-                'batch_size': len(scan_results),
-                'batch_id': 0,
-                'confirmed': False,
-                'batch_log_id': batch_log.id,
-                'individual_log_ids': [log.id for log in individual_logs]
-            }
-            
-            # Wait for confirmation if requested
-            if wait_for_confirmation:
-                try:
-                    receipt = self._wait_for_transaction(tx_hash)
-                    result['confirmed'] = True
-                    result['block_number'] = receipt['blockNumber']
-                    result['gas_used'] = receipt['gasUsed']
-                    
-                    # Try to extract batch ID from events
-                    blockchain_batch_id = 0
-                    for log_entry in receipt['logs']:
-                        try:
-                            if hasattr(self.contract.events, 'BatchScansPublished'):
-                                decoded = self.contract.events.BatchScansPublished().processLog(log_entry)
-                                blockchain_batch_id = decoded['args']['batchId']
-                                result['batch_id'] = blockchain_batch_id
-                                break
-                        except:
-                            continue
-                    
-                    # Update batch log with confirmation details
-                    confirmation_duration = datetime.utcnow() - processing_start
-                    batch_confirmation_data = {
-                        'confirmed': True,
-                        'block_number': receipt['blockNumber'],
-                        'gas_used': receipt['gasUsed'],
-                        'blockchain_batch_id': blockchain_batch_id,
-                        'confirmation_duration_ms': int(confirmation_duration.total_seconds() * 1000)
-                    }
-                    
-                    self.ledger_repo.update_batch_log(batch_log.id, **batch_confirmation_data)
-                    
-                    # Update individual logs
-                    for log in individual_logs:
-                        self.ledger_repo.update_publish_log(log.id, 
-                            transaction_confirmed=True,
-                            confirmation_timestamp=datetime.utcnow(),
-                            block_number=receipt['blockNumber'],
-                            gas_used=receipt['gasUsed'],
-                            confirmation_duration_ms=int(confirmation_duration.total_seconds() * 1000)
-                        )
-                        
-                except Exception as e:
-                    self.logger.warning(f"Batch transaction sent but confirmation failed: {e}")
-                    
-                    # Log confirmation failure
-                    if batch_log:
-                        self.ledger_repo.update_batch_log(batch_log.id, 
-                            error_message=f"Confirmation failed: {str(e)}"
-                        )
-            
-            return result
-            
-        except Exception as e:
-            error_msg = f"Batch publication failed: {str(e)}"
-            
-            # Update batch log with error
-            if batch_log:
-                processing_duration = datetime.utcnow() - processing_start
-                self.ledger_repo.update_batch_log(batch_log.id, 
-                    error_message=error_msg,
-                    processing_duration_ms=int(processing_duration.total_seconds() * 1000),
-                    failed_publishes=len(scan_results)
-                )
-            
-            # Update individual logs with error
-            for log in individual_logs:
-                self.ledger_repo.update_publish_log(log.id, 
-                    error_message=error_msg,
-                    error_type=type(e).__name__
-                )
-            
-            raise DePINLedgerError(error_msg)
-    
-    def _publish_individual_scans(self, scan_results: List[Dict[str, Any]], wait_for_confirmation: bool) -> Dict[str, Any]:
-        """Fallback method to publish scans individually when batch is not available."""
-        results = []
-        success_count = 0
-        
-        for i, scan_result in enumerate(scan_results):
-            try:
-                result = self.publish_single_scan(scan_result, wait_for_confirmation=False)
-                results.append(result)
-                success_count += 1
-                self.logger.info(f"Published scan {i+1}/{len(scan_results)}")
-            except Exception as e:
-                self.logger.error(f"Failed to publish scan {i+1}: {e}")
-                results.append({'success': False, 'error': str(e)})
-        
-        return {
-            'success': success_count == len(scan_results),
-            'total_scans': len(scan_results),
-            'successful_scans': success_count,
-            'failed_scans': len(scan_results) - success_count,
-            'individual_results': results,
-            'method': 'individual_fallback'
-        }
     
     def publish_results(self, processed_results: List[Dict[str, Any]]) -> bool:
         """
@@ -771,18 +649,7 @@ class PublishLedgerAgent(PublishAgent):
                 self.logger.warning("No results to publish")
                 return True
             
-            # Use batch publishing if available and multiple results
-            if len(processed_results) > 1:
-                try:
-                    result = self.publish_batch_scans(processed_results)
-                    success = result.get('success', False)
-                    if success:
-                        self.logger.info(f"✅ Successfully published batch of {len(processed_results)} scans")
-                        return True
-                except Exception as e:
-                    self.logger.warning(f"Batch publishing failed, falling back to individual: {e}")
-            
-            # Fallback to individual publishing
+            # Publish individual scans
             success_count = 0
             for scan_result in processed_results:
                 try:
@@ -825,13 +692,13 @@ class PublishLedgerAgent(PublishAgent):
                     'ledger_published': True,
                     'transaction_hash': publish_status.get('transaction_hash'),
                     'summary_hash': publish_status.get('summary_hash'),
-                    'block_number': publish_status.get('block_number'),
                     'confirmed': publish_status.get('confirmed', False),
                     'message': 'Scan already published to blockchain ledger'
                 }
             
             # Check blockchain connection
             if not self.w3 or not self.contract:
+                self.logger.error(f"❌ Blockchain connection not initialized")
                 return {
                     'success': False,
                     'scan_id': scan_id,
@@ -839,7 +706,8 @@ class PublishLedgerAgent(PublishAgent):
                     'message': 'Failed to connect to blockchain network'
                 }
             
-            if not self.is_publisher:
+            if not self.is_publisher and not self.is_owner:
+                self.logger.error(f"❌ Account not authorized to publish: {self.account.address}")
                 return {
                     'success': False,
                     'scan_id': scan_id,
@@ -848,8 +716,10 @@ class PublishLedgerAgent(PublishAgent):
                 }
             
             # Retrieve scan results from database
+            self.logger.info(f"Retrieving scan {scan_id} from database")
             scan_result = self._get_scan_results_from_db(scan_id)
             if not scan_result:
+                self.logger.error(f"❌ Could not retrieve scan {scan_id} from database")
                 return {
                     'success': False,
                     'scan_id': scan_id,
@@ -857,10 +727,13 @@ class PublishLedgerAgent(PublishAgent):
                     'message': f'Could not retrieve scan {scan_id} from database'
                 }
             
+            self.logger.info(f"Retrieved scan {scan_id}: validator_id={scan_result.get('validator_id')}, score={scan_result.get('trust_score')}")
+            
             # Publish to blockchain ledger
             ledger_result = self.publish_single_scan(scan_result, wait_for_confirmation=True)
             
             if ledger_result.get('success'):
+                self.logger.info(f"✅ Ledger publication successful for scan {scan_id}")
                 # Update scan record with ledger transaction details
                 self._update_scan_with_ledger_info(
                     scan_id, 
@@ -879,6 +752,7 @@ class PublishLedgerAgent(PublishAgent):
                     'message': 'Successfully published to blockchain ledger'
                 }
             else:
+                self.logger.error(f"❌ Ledger publication failed for scan {scan_id}: {ledger_result}")
                 return {
                     'success': False,
                     'scan_id': scan_id,
@@ -957,6 +831,7 @@ class PublishLedgerAgent(PublishAgent):
                 'balance_wei': balance,
                 'balance_eth': float(self.w3.from_wei(balance, 'ether')),
                 'is_publisher': self.is_publisher,
+                'is_owner': getattr(self, 'is_owner', False),
                 'contract_info': contract_info
             }
             
