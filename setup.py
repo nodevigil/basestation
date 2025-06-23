@@ -10,8 +10,8 @@ def read_requirements():
         return [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
 setup(
-    name="basestation",
-    version="1.0.0",
+    name="pgdn",
+    version="1.0.1",
     description="PGDN - Agentic DePIN Infrastructure Scanner",
     long_description="A comprehensive infrastructure scanner for DePIN networks with agentic architecture for reconnaissance, scanning, processing, and publishing security analysis results.",
     author="DePIN Team",
