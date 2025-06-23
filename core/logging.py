@@ -5,7 +5,7 @@ Centralized logging configuration for the DePIN infrastructure scanner.
 import logging
 import sys
 from typing import Optional
-from core.config import LoggingConfig
+from pgdn.core.config import LoggingConfig
 
 
 class LoggingManager:

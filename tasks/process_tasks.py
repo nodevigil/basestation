@@ -31,9 +31,9 @@ def batch_process_results_task(
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -42,7 +42,7 @@ def batch_process_results_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from utils.pipeline import create_orchestrator
+        from pgdn.utils.pipeline import create_orchestrator
         
         logger.info(f"Batch processing {len(results_batch)} results")
         
@@ -84,9 +84,9 @@ def score_results_task(
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -95,7 +95,7 @@ def score_results_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from utils.pipeline import create_orchestrator
+        from pgdn.utils.pipeline import create_orchestrator
         
         logger.info("Running scoring stage")
         

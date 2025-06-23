@@ -14,8 +14,8 @@ from eth_account import Account
 from datetime import datetime
 
 from agents.base import PublishAgent
-from core.config import Config
-from repositories.ledger_repository import LedgerRepository
+from pgdn.core.config import Config
+from pgdn.repositories.ledger_repository import LedgerRepository
 
 # Try to load .env file if python-dotenv is available
 try:
@@ -378,7 +378,7 @@ class PublishLedgerAgent(PublishAgent):
     def _get_scan_results_from_db(self, scan_id: int) -> Optional[Dict[str, Any]]:
         """Retrieve scan results from database."""
         try:
-            from repositories.scan_repository import ScanRepository
+            from pgdn.repositories.scan_repository import ScanRepository
             
             self.logger.info(f"Retrieving scan {scan_id} from database")
             

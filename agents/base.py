@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import logging
 from datetime import datetime
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class BaseAgent(ABC):

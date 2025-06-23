@@ -9,8 +9,8 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 
 from agents.base import ProcessAgent
-from core.database import get_db_session, ValidatorScan
-from core.config import Config
+from pgdn.core.database import get_db_session, ValidatorScan
+from pgdn.core.config import Config
 from agents.score.scoring_agent import ScoringAgent
 
 

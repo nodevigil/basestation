@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from agents.publish.publisher_agent import PublisherAgent
 from agents.publish.publish_ledger_agent import PublishLedgerAgent
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class TestPublishBehavior:

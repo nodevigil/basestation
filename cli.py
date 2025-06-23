@@ -19,7 +19,7 @@ from pgdn import (
     SignatureManager, QueueManager, AgentManager, ParallelOperations
 )
 from pgdn.scanner import load_targets_from_file
-from core.config import Config
+from pgdn.core.config import Config
 
 
 def setup_environment_cli(config: Config) -> None:

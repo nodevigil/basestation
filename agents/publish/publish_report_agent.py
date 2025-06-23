@@ -7,7 +7,7 @@ import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from agents.base import PublishAgent
-from core.config import Config
+from pgdn.core.config import Config
 
 # Lazy import for Walrus provider - only import when actually needed
 WalrusStorageProvider = None
@@ -61,7 +61,7 @@ class PublishReportAgent(PublishAgent):
             if WalrusStorageProvider is None:
                 try:
                     self.logger.debug("📦 Importing WalrusStorageProvider")
-                    from storage.walrus_provider import WalrusStorageProvider, WalrusStorageProviderError
+                    from pgdn.storage.walrus_provider import WalrusStorageProvider, WalrusStorageProviderError
                     self.logger.debug("✅ WalrusStorageProvider imported successfully")
                 except ImportError as e:
                     self.logger.info(f"ℹ️ Walrus storage provider not available: {e}")
@@ -405,7 +405,7 @@ class PublishReportAgent(PublishAgent):
         try:
             # Check if ledger has been published first - reports should only be published after ledger
             # TODO: Temporarily bypassing ledger check for testing
-            # from repositories.ledger_repository import LedgerRepository
+            # from pgdn.repositories.ledger_repository import LedgerRepository
             # ledger_repo = LedgerRepository()
             
             # if not ledger_repo.is_scan_published(scan_id):

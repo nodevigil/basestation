@@ -8,7 +8,7 @@ from typing import Dict, List, Type, Optional, Any
 from pathlib import Path
 
 from agents.base import BaseAgent, ReconAgent, ScanAgent, ProcessAgent, PublishAgent
-from core.logging import get_logger
+from pgdn.core.logging import get_logger
 
 
 class AgentRegistry:

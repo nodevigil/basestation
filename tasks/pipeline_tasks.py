@@ -26,10 +26,10 @@ def run_full_pipeline_task(self, config_dict: Dict[str, Any], recon_agents: Opti
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
-        from utils.pipeline import create_orchestrator
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
+        from pgdn.utils.pipeline import create_orchestrator
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -83,10 +83,10 @@ def run_single_stage_task(
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
-        from utils.pipeline import create_orchestrator
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
+        from pgdn.utils.pipeline import create_orchestrator
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -170,9 +170,9 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
         
         # Load configuration
         config = Config(config_overrides=config_dict)

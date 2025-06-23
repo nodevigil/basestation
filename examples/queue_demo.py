@@ -25,8 +25,8 @@ def demonstrate_queue_usage():
     
     # Check if we can import required modules
     try:
-        from utils.queue_manager import create_queue_manager
-        from core.config import Config
+        from pgdn.utils.queue_manager import create_queue_manager
+        from pgdn.core.config import Config
         print("✅ Queue modules imported successfully")
     except ImportError as e:
         print(f"❌ Import failed: {e}")

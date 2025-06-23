@@ -6,9 +6,9 @@ Quick test script to verify Sui scanner functionality.
 import sys
 sys.path.append('.')
 
-from scanning.sui_scanner import SuiSpecificScanner
-from core.logging import setup_logging
-from core.config import Config
+from pgdn.scanning.sui_scanner import SuiSpecificScanner
+from pgdn.core.logging import setup_logging
+from pgdn.core.config import Config
 
 # Setup logging
 config = Config()

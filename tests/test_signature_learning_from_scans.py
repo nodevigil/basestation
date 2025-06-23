@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
 from agents.discovery.signature_learner import SignatureLearner, LabeledScanData, ScanDataSignatureLearner
-from core.database import get_db_session, HostDiscovery, NetworkScanData, ProtocolProbeResult, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, HostDiscovery, NetworkScanData, ProtocolProbeResult, Protocol, ProtocolSignature
 from sqlalchemy import text
 
 

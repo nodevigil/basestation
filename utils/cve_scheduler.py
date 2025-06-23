@@ -7,8 +7,8 @@ import time
 import threading
 from datetime import datetime
 from typing import Optional
-from core.logging import get_logger
-from utils.cve_updater import update_cves_database
+from pgdn.core.logging import get_logger
+from pgdn.utils.cve_updater import update_cves_database
 
 logger = get_logger(__name__)
 

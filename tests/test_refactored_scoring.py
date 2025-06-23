@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from agents.score.scoring_agent import ScoringAgent, DefaultTrustScorer
-from core.config import Config
+from pgdn.core.config import Config
 
 
 def test_default_trust_scorer():

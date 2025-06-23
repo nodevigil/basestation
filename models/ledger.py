@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 
-from models.validator import Base
+from pgdn.models.validator import Base
 
 
 class LedgerPublishLog(Base):

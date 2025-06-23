@@ -9,7 +9,7 @@ import signal
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from agents.discovery.discovery_agent import DiscoveryAgent
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from sqlalchemy import text
 
 def test_signature_matching_from_db():
@@ -21,7 +21,7 @@ def test_signature_matching_from_db():
         # First, check database state
         print("🗄️ Checking database state...")
         with get_db_session() as session:
-            from core.database import Protocol, ProtocolSignature
+            from pgdn.core.database import Protocol, ProtocolSignature
             
             protocol_count = session.query(Protocol).count()
             signature_count = session.query(ProtocolSignature).count()

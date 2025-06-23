@@ -11,7 +11,7 @@ import concurrent.futures
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class Scanner:

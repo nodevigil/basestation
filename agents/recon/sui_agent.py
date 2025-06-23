@@ -9,8 +9,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ReconAgent
-from core.database import get_db_session, ValidatorAddress, Protocol, ProtocolSignature
-from core.config import Config
+from pgdn.core.database import get_db_session, ValidatorAddress, Protocol, ProtocolSignature
+from pgdn.core.config import Config
 
 
 class SuiReconAgent(ReconAgent):

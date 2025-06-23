@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from sqlalchemy import text
 
 

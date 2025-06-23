@@ -9,8 +9,8 @@ from datetime import datetime
 
 from celery import group, chain, chord
 from celery.result import AsyncResult, GroupResult
-from core.config import Config
-from core.logging import setup_logging
+from pgdn.core.config import Config
+from pgdn.core.logging import setup_logging
 
 import logging
 logger = logging.getLogger(__name__)
@@ -32,14 +32,14 @@ class QueueManager:
         self.config_dict = config.to_dict()
         
         # Import tasks after config is set
-        from tasks.pipeline_tasks import (
+        from pgdn.tasks.pipeline_tasks import (
             run_full_pipeline_task, 
             run_single_stage_task, 
             scan_target_task
         )
-        from tasks.scan_tasks import batch_scan_nodes_task, scan_single_node_task, parallel_target_scans_task
-        from tasks.process_tasks import batch_process_results_task, score_results_task
-        from tasks.report_tasks import generate_report_task, batch_generate_reports_task
+        from pgdn.tasks.scan_tasks import batch_scan_nodes_task, scan_single_node_task, parallel_target_scans_task
+        from pgdn.tasks.process_tasks import batch_process_results_task, score_results_task
+        from pgdn.tasks.report_tasks import generate_report_task, batch_generate_reports_task
         
         # Store task references
         self.tasks = {

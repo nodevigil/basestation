@@ -2,9 +2,9 @@
 Service for handling scan result saving and management
 """
 
-from repositories.scan_repository import ScanRepository
-from storage.history import HistoryStore
-from core.database import SCANNER_VERSION
+from pgdn.repositories.scan_repository import ScanRepository
+from pgdn.storage.history import HistoryStore
+from pgdn.core.database import SCANNER_VERSION
 import logging
 
 

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from models.validator import ValidatorAddress
-from core.database import Protocol  # Import Protocol from core.database
+from pgdn.models.validator import ValidatorAddress
+from pgdn.core.database import Protocol  # Import Protocol from pgdn.core.database
 from database import SessionLocal, get_db
 from typing import List, Optional
 from datetime import datetime

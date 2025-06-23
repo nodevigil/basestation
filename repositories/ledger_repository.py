@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
 from datetime import datetime, timedelta
 
-from models.ledger import LedgerPublishLog, LedgerBatch, LedgerConnectionLog
+from pgdn.models.ledger import LedgerPublishLog, LedgerBatch, LedgerConnectionLog
 from db_config import DatabaseConfig
 
 

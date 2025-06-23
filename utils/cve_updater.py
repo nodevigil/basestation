@@ -14,9 +14,9 @@ from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 
 import httpx
-from core.logging import get_logger
-from core.database import DatabaseManager
-from repositories.cve_repository import CVERepository
+from pgdn.core.logging import get_logger
+from pgdn.core.database import DatabaseManager
+from pgdn.repositories.cve_repository import CVERepository
 
 logger = get_logger(__name__)
 

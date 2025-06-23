@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker, relationship, Session
 from datetime import datetime
 from typing import Optional, Generator
 from contextlib import contextmanager
-from core.config import DatabaseConfig
+from pgdn.core.config import DatabaseConfig
 
 # Current scanner version - update this when scanner logic changes
 SCANNER_VERSION = "v0.1"

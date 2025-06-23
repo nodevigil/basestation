@@ -8,7 +8,7 @@ This module provides a simple way for recon agents to:
 """
 
 from typing import Optional
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 
 
 def get_protocol_for_recon(protocol_name: str) -> Optional[int]:

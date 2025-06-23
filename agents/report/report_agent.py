@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ProcessAgent
-from core.config import Config
+from pgdn.core.config import Config
 
 class DefaultReportGenerator:
     """
@@ -1114,7 +1114,7 @@ class ReportAgent(ProcessAgent):
             List of scan results to generate reports for
         """
         try:
-            from core.database import get_db_session, ValidatorScan, ValidatorScanReport
+            from pgdn.core.database import get_db_session, ValidatorScan, ValidatorScanReport
             
             with get_db_session() as session:
                 # Base query for successful scans
@@ -1176,7 +1176,7 @@ class ReportAgent(ProcessAgent):
             Saved report data with database info, or None if failed
         """
         try:
-            from core.database import get_db_session, ValidatorScanReport
+            from pgdn.core.database import get_db_session, ValidatorScanReport
             import uuid as uuid_lib
             
             # Extract key metrics from the report

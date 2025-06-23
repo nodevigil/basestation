@@ -8,8 +8,8 @@ This module abstracts the business logic from CLI concerns.
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from core.config import Config
-from utils.pipeline import create_orchestrator
+from pgdn.core.config import Config
+from pgdn.utils.pipeline import create_orchestrator
 
 
 class PipelineOrchestrator:

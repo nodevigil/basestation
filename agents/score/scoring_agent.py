@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from agents.base import ProcessAgent
-from core.config import Config
+from pgdn.core.config import Config
 
 class DefaultTrustScorer:
     """
@@ -410,7 +410,7 @@ class ScoringAgent(ProcessAgent):
             List of scan results to score
         """
         try:
-            from core.database import get_db_session, ValidatorScan
+            from pgdn.core.database import get_db_session, ValidatorScan
             
             with get_db_session() as session:
                 query = session.query(ValidatorScan).filter(ValidatorScan.failed == False)
@@ -447,7 +447,7 @@ class ScoringAgent(ProcessAgent):
             scored_results: List of results with trust scores
         """
         try:
-            from core.database import get_db_session, ValidatorScan
+            from pgdn.core.database import get_db_session, ValidatorScan
             
             with get_db_session() as session:
                 updated_count = 0

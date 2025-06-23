@@ -8,7 +8,7 @@ This module abstracts report logic from CLI concerns.
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class ReportManager:
@@ -33,7 +33,7 @@ class ReportManager:
     def orchestrator(self):
         """Lazy-load the orchestrator."""
         if self._orchestrator is None:
-            from utils.pipeline import create_orchestrator
+            from pgdn.utils.pipeline import create_orchestrator
             self._orchestrator = create_orchestrator(self.config)
         return self._orchestrator
     

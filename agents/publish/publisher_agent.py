@@ -4,7 +4,7 @@ Publisher agent for outputting final results to various destinations.
 
 from typing import Optional, Dict, Any, List
 from agents.base import PublishAgent
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class PublisherAgent(PublishAgent):

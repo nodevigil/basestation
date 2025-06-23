@@ -17,7 +17,7 @@ from pgdn import (
     PipelineOrchestrator, Scanner, ReportManager, CVEManager, 
     SignatureManager, QueueManager, AgentManager
 )
-from core.config import Config
+from pgdn.core.config import Config
 
 
 def example_basic_scanning():

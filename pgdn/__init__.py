@@ -16,7 +16,7 @@ Main Entry Points:
 __version__ = "1.0.0"
 
 # Import main public interfaces
-from .core import ApplicationCore, load_config, setup_environment, initialize_application
+from .application_core import ApplicationCore, load_config, setup_environment, initialize_application
 from .pipeline import PipelineOrchestrator
 from .scanner import Scanner
 from .reports import ReportManager

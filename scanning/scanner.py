@@ -1,11 +1,11 @@
 import socket
 import ssl
 import httpx
-from tools.nmap import nmap_scan
-from tools.whatweb import whatweb_scan
-from tools.ssltester import ssl_test
-from tools.docker import DockerExposureChecker
-from utils.cve_updater import search_cves_for_banner
+from pgdn.tools.nmap import nmap_scan
+from pgdn.tools.whatweb import whatweb_scan
+from pgdn.tools.ssltester import ssl_test
+from pgdn.tools.docker import DockerExposureChecker
+from pgdn.utils.cve_updater import search_cves_for_banner
 
 class Scanner:
     ## TODO add more known vulnerabilities and their CVEs

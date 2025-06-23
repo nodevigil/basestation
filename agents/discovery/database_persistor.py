@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Optional
 from datetime import datetime
 from sqlalchemy import text
-from core.database import get_db_session
+from pgdn.core.database import get_db_session
 
 
 class DatabaseResultPersister:

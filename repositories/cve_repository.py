@@ -6,8 +6,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
-from core.database import CVERecord, CVEUpdateLog, DatabaseManager
-from core.logging import get_logger
+from pgdn.core.database import CVERecord, CVEUpdateLog, DatabaseManager
+from pgdn.core.logging import get_logger
 
 logger = get_logger(__name__)
 

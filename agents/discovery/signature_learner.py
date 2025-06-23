@@ -631,7 +631,7 @@ class ScanDataSignatureLearner(SignatureLearner):
     def _extract_scan_data_from_database(self, protocol: str = None, min_confidence: float = 0.7, 
                                        limit: int = 1000) -> List[Dict[str, Any]]:
         """Extract scan data from validator_scans table by protocol relationship"""
-        from core.database import get_db_session, ValidatorScan, ValidatorAddress, Protocol
+        from pgdn.core.database import get_db_session, ValidatorScan, ValidatorAddress, Protocol
         
         try:
             with get_db_session() as session:
@@ -714,7 +714,7 @@ class ScanDataSignatureLearner(SignatureLearner):
     
     def _ensure_signature_uniqueness(self, learned_signatures: Dict[str, Any]) -> Dict[str, Any]:
         """Ensure learned signatures are unique across the database"""
-        from core.database import get_db_session, ProtocolSignature, Protocol
+        from pgdn.core.database import get_db_session, ProtocolSignature, Protocol
         from sqlalchemy import text
         
         unique_signatures = {}
@@ -783,7 +783,7 @@ class ScanDataSignatureLearner(SignatureLearner):
     
     def _update_protocol_signatures_database(self, signatures: Dict[str, Any], protocol: str) -> Dict[str, Any]:
         """Update protocol signatures in the database"""
-        from core.database import get_db_session, Protocol, ProtocolSignature
+        from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
         from sqlalchemy import text
         
         update_results = {'updated': [], 'created': [], 'errors': []}

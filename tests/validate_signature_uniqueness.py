@@ -17,7 +17,7 @@ import hashlib
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from agents.signature.protocol_signature_generator_agent import ProtocolSignatureGeneratorAgent
 from agents.discovery.signature_learner import ScanDataSignatureLearner
 

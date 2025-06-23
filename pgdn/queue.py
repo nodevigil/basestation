@@ -8,7 +8,7 @@ This module abstracts queue operations from CLI concerns.
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from core.config import Config
+from pgdn.core.config import Config
 
 
 class QueueManager:
@@ -33,7 +33,7 @@ class QueueManager:
     def queue_manager(self):
         """Lazy-load the queue manager."""
         if self._queue_manager is None:
-            from utils.queue_manager import create_queue_manager
+            from pgdn.utils.queue_manager import create_queue_manager
             self._queue_manager = create_queue_manager(self.config)
         return self._queue_manager
     

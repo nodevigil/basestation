@@ -15,7 +15,7 @@ from typing import Dict, List, Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from agents.discovery.discovery_agent import DiscoveryAgent, HighPerformanceBinaryMatcher
-from core.database import get_db_session, Protocol, ProtocolSignature
+from pgdn.core.database import get_db_session, Protocol, ProtocolSignature
 from sqlalchemy import text
 
 # Configure test database

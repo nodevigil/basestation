@@ -2,14 +2,14 @@
 Models package for the DePIN project.
 """
 
-from models.validator import (
+from pgdn.models.validator import (
     Base,
     ValidatorAddress,
     ValidatorScan,
     ValidatorScanReport
 )
 
-from models.ledger import (
+from pgdn.models.ledger import (
     LedgerPublishLog,
     LedgerBatch,
     LedgerConnectionLog

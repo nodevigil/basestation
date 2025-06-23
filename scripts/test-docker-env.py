@@ -76,8 +76,8 @@ def test_database_connection():
     print("🗄️  Testing database connection...")
     
     try:
-        from core.config import Config
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.database import create_tables
         
         config = Config()
         print(f"  📡 Database URL: {config.database.url}")

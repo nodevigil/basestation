@@ -12,10 +12,10 @@ import os
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.database import get_db_session
-from core.config import Config
-from services.scan_service import ScanService
-from models.validator import ValidatorScan
+from pgdn.core.database import get_db_session
+from pgdn.core.config import Config
+from pgdn.services.scan_service import ScanService
+from pgdn.models.validator import ValidatorScan
 
 def example_signature_tracking():
     """

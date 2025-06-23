@@ -31,9 +31,9 @@ def generate_report_task(
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -42,7 +42,7 @@ def generate_report_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from utils.pipeline import create_orchestrator
+        from pgdn.utils.pipeline import create_orchestrator
         
         logger.info("Generating security analysis report")
         
@@ -89,9 +89,9 @@ def batch_generate_reports_task(
     """
     try:
         # Import here to avoid circular imports
-        from core.config import Config
-        from core.logging import setup_logging
-        from core.database import create_tables
+        from pgdn.core.config import Config
+        from pgdn.core.logging import setup_logging
+        from pgdn.core.database import create_tables
         
         # Load configuration
         config = Config(config_overrides=config_dict)
@@ -100,7 +100,7 @@ def batch_generate_reports_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from utils.pipeline import create_orchestrator
+        from pgdn.utils.pipeline import create_orchestrator
         
         logger.info(f"Generating reports for {len(scan_ids)} scans")
         

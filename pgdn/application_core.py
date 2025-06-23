@@ -10,9 +10,9 @@ import os
 import json
 from typing import Optional
 
-from core.config import Config
-from core.logging import setup_logging
-from core.database import create_tables
+from pgdn.core.config import Config
+from pgdn.core.logging import setup_logging
+from pgdn.core.database import create_tables
 
 
 class ApplicationCore:

@@ -8,7 +8,7 @@ This module abstracts parallel processing logic from CLI concerns.
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from core.config import Config
+from pgdn.core.config import Config
 from .scanner import Scanner
 from .queue import QueueManager
 
