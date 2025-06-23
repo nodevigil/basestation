@@ -1,8 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pgdn.models.validator import ValidatorScan, ValidatorAddress
-from pgdn.core.database import SessionLocal
-from pgdn.core.database import SCANNER_VERSION
+from pgdn.core.database import get_database_manager, SCANNER_VERSION
 from typing import List, Optional
 from datetime import datetime
 
@@ -10,8 +9,13 @@ class ScanRepository:
     """Repository for managing validator scans"""
     
     def __init__(self, db: Session = None):
-        self.db = db or SessionLocal()
-        self._should_close = db is None
+        if db:
+            self.db = db
+            self._should_close = False
+        else:
+            db_manager = get_database_manager()
+            self.db = db_manager.get_session()
+            self._should_close = True
     
     def __enter__(self):
         return self
