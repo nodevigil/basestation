@@ -222,6 +222,41 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
         )
     
     elif stage == 'scan':
+        # Parse scanner selection options
+        enabled_scanners = args.scanners
+        enabled_external_tools = args.external_tools
+        
+        # Handle scan type shortcuts
+        if args.type:
+            if args.type == 'nmap':
+                enabled_scanners = []
+                enabled_external_tools = ['nmap']
+            elif args.type == 'geo':
+                enabled_scanners = ['geo']
+                enabled_external_tools = []
+            elif args.type == 'generic':
+                enabled_scanners = ['generic']
+                enabled_external_tools = []
+            elif args.type == 'web':
+                enabled_scanners = ['web']
+                enabled_external_tools = []
+            elif args.type == 'vulnerability':
+                enabled_scanners = ['vulnerability']
+                enabled_external_tools = []
+            elif args.type == 'ssl':
+                enabled_scanners = []
+                enabled_external_tools = ['ssl_test']
+            elif args.type == 'docker':
+                enabled_scanners = []
+                enabled_external_tools = ['docker_exposure']
+            elif args.type == 'whatweb':
+                enabled_scanners = []
+                enabled_external_tools = ['whatweb']
+            elif args.type == 'full':
+                # Use default configuration (don't override)
+                enabled_scanners = None
+                enabled_external_tools = None
+        
         # Check if target scanning with org_id requirement
         if args.target:
             if not args.org_id:
@@ -230,11 +265,23 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
                     "error": "Target scanning requires --org-id argument",
                     "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
                 }
-            scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
+            scanner = Scanner(
+                config, 
+                protocol_filter=args.protocol, 
+                debug=args.debug,
+                enabled_scanners=enabled_scanners,
+                enabled_external_tools=enabled_external_tools
+            )
             return scanner.scan_target(args.target, org_id=args.org_id, scan_level=args.scan_level)
         else:
             # Database scanning
-            scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
+            scanner = Scanner(
+                config, 
+                protocol_filter=args.protocol, 
+                debug=args.debug,
+                enabled_scanners=enabled_scanners,
+                enabled_external_tools=enabled_external_tools
+            )
             return scanner.scan_nodes_from_database(org_id=args.org_id, scan_level=args.scan_level)
     
     elif stage == 'process':
@@ -624,6 +671,22 @@ Examples:
   pgdn --stage scan --protocol filecoin --debug # Scan with debug logging
   pgdn --stage scan --protocol sui  # Scan only Sui nodes
   pgdn --stage process              # Run only processing
+
+  # Scanner Type Selection (for testing and debugging)
+  pgdn --stage scan --target example.com --org-id myorg --type nmap           # Only run nmap scan
+  pgdn --stage scan --target example.com --org-id myorg --type geo            # Only run GeoIP lookup
+  pgdn --stage scan --target example.com --org-id myorg --type web            # Only run web analysis
+  pgdn --stage scan --target example.com --org-id myorg --type vulnerability  # Only run vulnerability scan
+  pgdn --stage scan --target example.com --org-id myorg --type ssl            # Only run SSL/TLS test
+  pgdn --stage scan --target example.com --org-id myorg --type docker         # Only check Docker exposure
+  pgdn --stage scan --target example.com --org-id myorg --type whatweb        # Only run web tech fingerprinting
+  pgdn --stage scan --target example.com --org-id myorg --type full           # Run all scanners (default)
+  pgdn --stage scan --target example.com --org-id myorg --debug --type nmap   # Debug nmap issues
+  
+  # Advanced scanner control (for developers)
+  pgdn --stage scan --target example.com --org-id myorg --scanners generic web
+  pgdn --stage scan --target example.com --org-id myorg --external-tools nmap whatweb
+  pgdn --stage scan --target example.com --org-id myorg --scanners geo --external-tools nmap
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
   pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
@@ -724,6 +787,26 @@ Examples:
         choices=[1, 2, 3],
         default=1,
         help='Scan level: 1 (basic), 2 (standard with geo), 3 (comprehensive with advanced analysis)'
+    )
+    
+    parser.add_argument(
+        '--type',
+        choices=['nmap', 'geo', 'generic', 'web', 'vulnerability', 'ssl', 'docker', 'whatweb', 'full'],
+        help='Scan type to run. Available: nmap (port scan only), geo (GeoIP only), generic (basic port scan), web (HTTP analysis), vulnerability (CVE lookup), ssl (SSL/TLS test), docker (Docker exposure check), whatweb (web tech fingerprinting), full (all scanners and tools - default)'
+    )
+    
+    parser.add_argument(
+        '--scanners',
+        nargs='*',
+        choices=['generic', 'web', 'vulnerability', 'geo', 'sui', 'filecoin'],
+        help='Advanced: Specific scanner modules to run (space-separated). Use --type for common scan types instead.'
+    )
+    
+    parser.add_argument(
+        '--external-tools',
+        nargs='*',
+        choices=['nmap', 'whatweb', 'ssl_test', 'docker_exposure'],
+        help='Advanced: Specific external tools to run (space-separated). Use --type for common scan types instead.'
     )
     
     parser.add_argument(

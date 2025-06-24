@@ -22,7 +22,8 @@ class Scanner:
     or running bulk scanning operations, independent of CLI concerns.
     """
     
-    def __init__(self, config: Config, protocol_filter: Optional[str] = None, debug: bool = False):
+    def __init__(self, config: Config, protocol_filter: Optional[str] = None, debug: bool = False, 
+                 enabled_scanners: Optional[List[str]] = None, enabled_external_tools: Optional[List[str]] = None):
         """
         Initialize the scanner.
         
@@ -30,10 +31,14 @@ class Scanner:
             config: Configuration instance
             protocol_filter: Optional protocol filter (e.g., 'filecoin', 'sui')
             debug: Enable debug logging
+            enabled_scanners: List of specific scanners to run (overrides config)
+            enabled_external_tools: List of specific external tools to run (overrides config)
         """
         self.config = config
         self.protocol_filter = protocol_filter
         self.debug = debug
+        self.enabled_scanners = enabled_scanners
+        self.enabled_external_tools = enabled_external_tools
     
     def scan_target(self, target: str, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
@@ -130,6 +135,21 @@ class Scanner:
                 'scanners': scanning_config.scanners
             }
             
+            # Override enabled scanners if specified
+            if self.enabled_scanners is not None:
+                scan_config['orchestrator'] = dict(scan_config.get('orchestrator', {}))
+                scan_config['orchestrator']['enabled_scanners'] = self.enabled_scanners
+            
+            # Override external tools if specified
+            if self.enabled_external_tools is not None:
+                scan_config['orchestrator'] = dict(scan_config.get('orchestrator', {}))
+                if not self.enabled_external_tools:  # Empty list means disable external tools
+                    scan_config['orchestrator']['use_external_tools'] = False
+                    scan_config['orchestrator']['enabled_external_tools'] = []
+                else:
+                    scan_config['orchestrator']['use_external_tools'] = True
+                    scan_config['orchestrator']['enabled_external_tools'] = self.enabled_external_tools
+            
             # Create scan orchestrator with configuration
             orchestrator = ScanOrchestrator(scan_config)
             
@@ -215,6 +235,22 @@ class Scanner:
                     'orchestrator': scanning_config.orchestrator,
                     'scanners': scanning_config.scanners
                 }
+                
+                # Override enabled scanners if specified
+                if self.enabled_scanners is not None:
+                    scan_config['orchestrator'] = dict(scan_config.get('orchestrator', {}))
+                    scan_config['orchestrator']['enabled_scanners'] = self.enabled_scanners
+                
+                # Override external tools if specified
+                if self.enabled_external_tools is not None:
+                    scan_config['orchestrator'] = dict(scan_config.get('orchestrator', {}))
+                    if not self.enabled_external_tools:  # Empty list means disable external tools
+                        scan_config['orchestrator']['use_external_tools'] = False
+                        scan_config['orchestrator']['enabled_external_tools'] = []
+                    else:
+                        scan_config['orchestrator']['use_external_tools'] = True
+                        scan_config['orchestrator']['enabled_external_tools'] = self.enabled_external_tools
+                
                 orchestrator = ScanOrchestrator(scan_config)
                 
                 # Scan each node
