@@ -36,7 +36,8 @@ class ParallelOperations:
                           protocol_filter: Optional[str] = None,
                           debug: bool = False,
                           use_queue: bool = False,
-                          wait_for_completion: bool = False) -> Dict[str, Any]:
+                          wait_for_completion: bool = False,
+                          org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run parallel scans for multiple targets.
         
@@ -47,6 +48,7 @@ class ParallelOperations:
             debug: Enable debug logging
             use_queue: Whether to use queue for background processing
             wait_for_completion: Whether to wait for queued tasks to complete
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Parallel scan results
@@ -63,7 +65,7 @@ class ParallelOperations:
                 # Use queue for parallel processing
                 queue_manager = QueueManager(self.config)
                 result = queue_manager.queue_parallel_scans(
-                    targets, max_parallel, protocol_filter, debug
+                    targets, max_parallel, protocol_filter, debug, org_id=org_id
                 )
                 
                 if wait_for_completion and result.get('success'):
@@ -76,7 +78,7 @@ class ParallelOperations:
             else:
                 # Direct parallel execution
                 scanner = Scanner(self.config, protocol_filter=protocol_filter, debug=debug)
-                return scanner.scan_parallel_targets(targets, max_parallel)
+                return scanner.scan_parallel_targets(targets, max_parallel, org_id=org_id)
                 
         except Exception as e:
             return {

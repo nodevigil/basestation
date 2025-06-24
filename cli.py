@@ -201,12 +201,79 @@ def print_agents_result(result: Dict[str, Any]) -> None:
     print("  pgdn --stage recon --recon-agents SuiReconAgent")
 
 
-def run_full_pipeline_command(config: Config, args) -> Dict[str, Any]:
-    """Run full pipeline command."""
-    # Check if queue mode is requested
-    if getattr(args, 'queue', False):
-        return run_queue_command(config, args)
+def execute_command(config: Config, args) -> Dict[str, Any]:
+    """
+    Unified command execution that handles all execution modes.
     
+    This unified approach replaces the separate run_full_pipeline_command and 
+    run_single_stage_command functions, reducing complexity and duplication by:
+    - Centralizing execution mode determination (direct, queue, parallel)
+    - Eliminating duplicate queue/parallel checks across multiple functions
+    - Providing a single entry point for all command execution
+    - Maintaining clean separation between execution strategies
+    
+    Args:
+        config: Configuration instance
+        args: Parsed command line arguments
+        
+    Returns:
+        Dict containing execution results
+    """
+    # Determine execution mode
+    execution_mode = _determine_execution_mode(args)
+    
+    # Route to appropriate execution handler
+    if execution_mode == 'queue':
+        return _execute_via_queue(config, args)
+    elif execution_mode == 'parallel':
+        return _execute_via_parallel(config, args)
+    else:
+        return _execute_direct(config, args)
+
+
+def _determine_execution_mode(args) -> str:
+    """Determine the execution mode based on arguments."""
+    # Parallel operations take precedence (they can use queue internally)
+    if any([args.parallel_targets, args.target_file, args.parallel_stages]):
+        return 'parallel'
+    elif getattr(args, 'queue', False):
+        return 'queue'
+    else:
+        return 'direct'
+
+
+def _execute_via_queue(config: Config, args) -> Dict[str, Any]:
+    """Execute command via queue/background processing."""
+    return run_queue_command(config, args)
+
+
+def _execute_via_parallel(config: Config, args) -> Dict[str, Any]:
+    """Execute command via parallel processing."""
+    return run_parallel_command(config, args)
+
+
+def _execute_direct(config: Config, args) -> Dict[str, Any]:
+    """Execute command directly (synchronous)."""
+    # Handle CVE commands
+    if args.update_cves or args.start_cve_scheduler:
+        return run_cve_command(args)
+    
+    # Handle signature commands
+    elif any([args.learn_signatures_from_scans, args.update_signature_flags, 
+             args.mark_signature_created, args.show_signature_stats]):
+        return run_signature_command(args)
+    
+    # Handle stage-based commands
+    elif args.stage:
+        return _execute_single_stage(config, args)
+    
+    # Default: full pipeline
+    else:
+        return _execute_full_pipeline(config, args)
+
+
+def _execute_full_pipeline(config: Config, args) -> Dict[str, Any]:
+    """Execute full pipeline directly."""
     orchestrator = PipelineOrchestrator(config)
     return orchestrator.run_full_pipeline(
         recon_agents=args.recon_agents,
@@ -214,13 +281,9 @@ def run_full_pipeline_command(config: Config, args) -> Dict[str, Any]:
     )
 
 
-def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
-    """Run single stage command."""
+def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
+    """Execute single stage directly."""
     stage = args.stage
-    
-    # Check if queue mode is requested
-    if getattr(args, 'queue', False):
-        return run_queue_command(config, args)
     
     if stage == 'recon':
         orchestrator = PipelineOrchestrator(config)
@@ -389,7 +452,6 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
             "error": f"Unknown stage: {stage}"
         }
 
-
 def run_queue_command(config: Config, args) -> Dict[str, Any]:
     """Run queue-related commands."""
     queue_manager = QueueManager(config)
@@ -405,6 +467,23 @@ def run_queue_command(config: Config, args) -> Dict[str, Any]:
             "success": True,
             "message": "Task status listing requires additional task tracking implementation",
             "suggestion": "Use --task-id <id> to check specific task status"
+        }
+    
+    elif args.update_cves or args.start_cve_scheduler:
+        # Queue CVE commands
+        return {
+            "success": False,
+            "error": "CVE commands do not support queueing",
+            "suggestion": "Run CVE commands directly without --queue flag"
+        }
+    
+    elif any([args.learn_signatures_from_scans, args.update_signature_flags, 
+             args.mark_signature_created, args.show_signature_stats]):
+        # Queue signature commands
+        return {
+            "success": False,
+            "error": "Signature commands do not support queueing",
+            "suggestion": "Run signature commands directly without --queue flag"
         }
     
     elif args.target:
@@ -591,34 +670,23 @@ def main():
         # Route to appropriate command handler
         result = None
         
+        # Commands that can be queued should go through unified execution
         if args.list_agents:
             result = run_list_agents_command()
         
-        elif args.update_cves:
-            result = run_cve_command(args)
-        
-        elif args.start_cve_scheduler:
-            result = run_cve_command(args)
-        
-        elif any([args.learn_signatures_from_scans, args.update_signature_flags, 
-                 args.mark_signature_created, args.show_signature_stats]):
-            result = run_signature_command(args)
-        
         elif args.task_id or args.cancel_task or args.list_tasks:
+            # Queue management commands (cannot be queued themselves)
             result = run_queue_command(config, args)
         
-        elif args.parallel_targets or args.target_file or args.parallel_stages:
-            result = run_parallel_command(config, args)
-        
-        elif args.stage:
-            result = run_single_stage_command(config, args)
-        
-        elif args.queue:
-            result = run_queue_command(config, args)
+        elif any([args.update_cves, args.start_cve_scheduler, 
+                 args.learn_signatures_from_scans, args.update_signature_flags, 
+                 args.mark_signature_created, args.show_signature_stats]):
+            # These commands support queueing - route through unified execution
+            result = execute_command(config, args)
         
         else:
-            # Default: run full pipeline
-            result = run_full_pipeline_command(config, args)
+            # Default: use unified command execution (handles stages, targets, full pipeline, etc.)
+            result = execute_command(config, args)
         
         # Print results
         if result:

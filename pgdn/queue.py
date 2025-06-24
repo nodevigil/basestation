@@ -183,7 +183,8 @@ class QueueManager:
                            targets: List[str],
                            max_parallel: int = 5,
                            protocol_filter: Optional[str] = None,
-                           debug: bool = False) -> Dict[str, Any]:
+                           debug: bool = False,
+                           org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Queue parallel scans for multiple targets.
         
@@ -192,13 +193,14 @@ class QueueManager:
             max_parallel: Maximum parallel scans
             protocol_filter: Optional protocol filter
             debug: Enable debug logging
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Queue operation results including task IDs
         """
         try:
             result = self.queue_manager.queue_parallel_scans(
-                targets, max_parallel, protocol_filter, debug
+                targets, max_parallel, protocol_filter, debug, org_id=org_id
             )
             
             return {

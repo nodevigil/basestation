@@ -13,13 +13,14 @@ logger = get_task_logger(__name__)
 from celery_app import app
 
 @app.task(bind=True, name='tasks.pipeline.run_full_pipeline')
-def run_full_pipeline_task(self, config_dict: Dict[str, Any], recon_agents: Optional[List[str]] = None):
+def run_full_pipeline_task(self, config_dict: Dict[str, Any], recon_agents: Optional[List[str]] = None, org_id: Optional[str] = None):
     """
     Run the complete four-stage pipeline as a Celery task.
     
     Args:
         config_dict: Configuration dictionary
         recon_agents: Optional list of specific recon agents to run
+        org_id: Optional organization ID to filter agentic jobs
         
     Returns:
         Dict with execution results
@@ -40,7 +41,7 @@ def run_full_pipeline_task(self, config_dict: Dict[str, Any], recon_agents: Opti
         
         # Create orchestrator and run pipeline
         orchestrator = create_orchestrator(config)
-        results = orchestrator.run_full_pipeline(recon_agents=recon_agents)
+        results = orchestrator.run_full_pipeline(recon_agents=recon_agents, org_id=org_id)
         
         logger.info(f"Full pipeline completed successfully. Execution ID: {results.get('execution_id')}")
         return results
