@@ -113,12 +113,13 @@ class NodeScannerAgent(ScanAgent):
         content_json = json.dumps(hash_data, sort_keys=True)
         return hashlib.sha256(content_json.encode()).hexdigest()
     
-    def scan_nodes(self, nodes: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
+    def scan_nodes(self, nodes: Optional[List[Dict[str, Any]]] = None, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform security scans on network nodes.
         
         Args:
             nodes: Optional list of specific nodes to scan. If None, loads nodes needing scans.
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of scan results
@@ -171,8 +172,9 @@ class NodeScannerAgent(ScanAgent):
                 
                 # Apply protocol filter if specified
                 if self.protocol_filter:
-                    # Filter by source containing the protocol name
-                    query = query.filter(ValidatorAddress.source.like(f'{self.protocol_filter}%'))
+                    # Join with protocol table to filter by protocol name
+                    from pgdn.core.database import Protocol
+                    query = query.join(Protocol).filter(Protocol.name.like(f'{self.protocol_filter}%'))
                     self.logger.info(f"🔍 Filtering nodes by protocol: {self.protocol_filter}")
                 
                 validators_needing_scan = query.order_by(ValidatorAddress.created_at.desc()).all()
@@ -184,7 +186,7 @@ class NodeScannerAgent(ScanAgent):
                         'uuid': str(validator.uuid),  # Add UUID for scan results
                         'address': validator.address,
                         'name': validator.name,
-                        'source': validator.source
+                        'protocol_name': validator.protocol.name if validator.protocol else None
                     })
                 
                 return nodes

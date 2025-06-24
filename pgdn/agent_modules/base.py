@@ -113,12 +113,13 @@ class ScanAgent(BaseAgent):
     """Base class for scanning agents that perform security scans."""
     
     @abstractmethod
-    def scan_nodes(self, nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def scan_nodes(self, nodes: List[Dict[str, Any]], org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Perform security scans on network nodes.
         
         Args:
             nodes: List of nodes to scan
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of scan results
