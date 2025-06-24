@@ -14,7 +14,8 @@ from agents.base import ScanAgent
 from pgdn.core.database import get_db_session, ValidatorAddress, ValidatorScan, SCANNER_VERSION
 from pgdn.core.config import Config
 from pgdn.core.web_probe_runner import run_web_probes
-from pgdn.scanning.scanner import Scanner
+from pgdn.scanning.scan_orchestrator import ScanOrchestrator
+from pgdn.scanning.base_scanner import ScannerRegistry
 
 
 class ProtocolScannerRegistry:
@@ -85,7 +86,8 @@ class NodeScannerAgent(ScanAgent):
         self.debug = debug
         
         # Initialize scanners
-        self.generic_scanner = Scanner()
+        scanning_config = getattr(self.config, 'scanning', {})
+        self.scan_orchestrator = ScanOrchestrator(scanning_config)
         self.protocol_registry = ProtocolScannerRegistry(debug=debug)
         
         filter_msg = f" (filtering for {protocol_filter})" if protocol_filter else ""
@@ -288,8 +290,11 @@ class NodeScannerAgent(ScanAgent):
             
             self.logger.debug(f"🌍 Resolved {address} to IP: {ip_address}")
             
-            # Perform generic security scan
-            generic_result = self.generic_scanner.scan(ip_address)
+            # Perform generic security scan using new orchestrator
+            scan_result = self.scan_orchestrator.scan(ip_address)
+            
+            # Extract components for compatibility
+            generic_result = scan_result  # The orchestrator returns legacy format
             
             # Perform protocol-specific scans based on source
             protocol_result = None
@@ -313,8 +318,8 @@ class NodeScannerAgent(ScanAgent):
             # Run web probes on detected HTTP/HTTPS services (same logic as WhatWeb)
             web_probe_results = {}
             if generic_result and 'nmap' in generic_result:
-                from pgdn.scanning.scanner import Scanner
-                web_ports = Scanner.get_web_ports_and_schemes(generic_result['nmap'])
+                from pgdn.scanning.scan_orchestrator import ScanOrchestrator
+                web_ports = ScanOrchestrator.get_web_ports_and_schemes(generic_result['nmap'])
                 for port, scheme in web_ports:
                     self.logger.info(f"🌐 Running web probes on {scheme}://{address}:{port}")
                     try:
