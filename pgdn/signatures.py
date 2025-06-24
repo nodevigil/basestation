@@ -24,7 +24,8 @@ class SignatureManager:
     def learn_from_scans(self,
                         protocol: str,
                         min_confidence: float = 0.7,
-                        max_examples: int = 1000) -> Dict[str, Any]:
+                        max_examples: int = 1000,
+                        org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Learn improved protocol signatures from existing scan data.
         
@@ -32,6 +33,7 @@ class SignatureManager:
             protocol: Protocol name for signature learning (e.g., 'sui', 'filecoin', 'ethereum')
             min_confidence: Minimum confidence threshold for scans to include
             max_examples: Maximum examples to process per protocol
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Signature learning results
@@ -44,7 +46,8 @@ class SignatureManager:
             results = learning_agent.learn_signatures_from_scans(
                 protocol_name=protocol,
                 min_confidence=min_confidence,
-                max_examples=max_examples
+                max_examples=max_examples,
+                org_id=org_id
             )
             
             return {
@@ -74,7 +77,7 @@ class SignatureManager:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def update_signature_flags(self, protocol_filter: Optional[str] = None) -> Dict[str, Any]:
+    def update_signature_flags(self, protocol_filter: Optional[str] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Update signature_created flags for scans that have been processed.
         
@@ -114,7 +117,7 @@ class SignatureManager:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def mark_signature_created(self, scan_id: int) -> Dict[str, Any]:
+    def mark_signature_created(self, scan_id: int, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Mark a specific scan ID as having its signature created.
         
@@ -154,7 +157,7 @@ class SignatureManager:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def get_signature_statistics(self) -> Dict[str, Any]:
+    def get_signature_statistics(self, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Get statistics about signature creation status for scans.
         

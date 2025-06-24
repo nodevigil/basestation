@@ -204,7 +204,10 @@ def print_agents_result(result: Dict[str, Any]) -> None:
 def run_full_pipeline_command(config: Config, args) -> Dict[str, Any]:
     """Run full pipeline command."""
     orchestrator = PipelineOrchestrator(config)
-    return orchestrator.run_full_pipeline(recon_agents=args.recon_agents)
+    return orchestrator.run_full_pipeline(
+        recon_agents=args.recon_agents,
+        org_id=args.org_id
+    )
 
 
 def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
@@ -213,21 +216,28 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
     
     if stage == 'recon':
         orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_recon_stage(agent_names=args.recon_agents)
+        return orchestrator.run_recon_stage(
+            agent_names=args.recon_agents,
+            org_id=args.org_id
+        )
     
     elif stage == 'scan':
         scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-        return scanner.scan_nodes_from_database()
+        return scanner.scan_nodes_from_database(org_id=args.org_id)
     
     elif stage == 'process':
         orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_process_stage(agent_name=args.agent)
+        return orchestrator.run_process_stage(
+            agent_name=args.agent,
+            org_id=args.org_id
+        )
     
     elif stage == 'score':
         orchestrator = PipelineOrchestrator(config)
         return orchestrator.run_scoring_stage(
             agent_name=args.agent or 'ScoringAgent',
-            force_rescore=args.force_rescore
+            force_rescore=args.force_rescore,
+            org_id=args.org_id
         )
     
     elif stage == 'publish':
@@ -253,7 +263,11 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
             agent_name = 'PublishLedgerAgent'  # Default
         
         orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_publish_stage(agent_name, scan_id=args.scan_id)
+        return orchestrator.run_publish_stage(
+            agent_name, 
+            scan_id=args.scan_id,
+            org_id=args.org_id
+        )
     
     elif stage == 'report':
         report_manager = ReportManager(config)
@@ -266,12 +280,16 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
             auto_save=getattr(args, 'auto_save_report', False),
             email_report=getattr(args, 'report_email', False),
             recipient_email=getattr(args, 'recipient_email', None),
-            force_report=getattr(args, 'force_report', False)
+            force_report=getattr(args, 'force_report', False),
+            org_id=args.org_id
         )
     
     elif stage == 'signature':
         orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_signature_stage(agent_name=args.agent or 'ProtocolSignatureGeneratorAgent')
+        return orchestrator.run_signature_stage(
+            agent_name=args.agent or 'ProtocolSignatureGeneratorAgent',
+            org_id=args.org_id
+        )
     
     elif stage == 'discovery':
         if not args.host:
@@ -284,7 +302,8 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
         orchestrator = PipelineOrchestrator(config)
         return orchestrator.run_discovery_stage(
             agent_name=args.agent or 'DiscoveryAgent',
-            host=args.host
+            host=args.host,
+            org_id=args.org_id
         )
     
     else:
@@ -297,7 +316,7 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
 def run_target_scan_command(config: Config, args) -> Dict[str, Any]:
     """Run target scan command."""
     scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-    result = scanner.scan_target(args.scan_target)
+    result = scanner.scan_target(args.scan_target, org_id=args.org_id)
     
     # Save result if successful
     if result.get('success') and not args.json:
@@ -329,7 +348,11 @@ def run_queue_command(config: Config, args) -> Dict[str, Any]:
         }
     
     elif args.scan_target:
-        result = queue_manager.queue_target_scan(args.scan_target, args.debug)
+        result = queue_manager.queue_target_scan(
+            args.scan_target, 
+            args.debug,
+            org_id=args.org_id
+        )
         if args.wait_for_completion and result.get('success'):
             task_id = result['task_id']
             wait_result = queue_manager.wait_for_tasks(task_id, timeout=3600)
@@ -360,7 +383,8 @@ def run_queue_command(config: Config, args) -> Dict[str, Any]:
             getattr(args, 'force_rescore', False),
             getattr(args, 'host', None),
             report_options=report_options,
-            force=getattr(args, 'force', False)
+            force=getattr(args, 'force', False),
+            org_id=args.org_id
         )
         
         if args.wait_for_completion and result.get('success'):
@@ -372,7 +396,10 @@ def run_queue_command(config: Config, args) -> Dict[str, Any]:
     
     else:
         # Queue full pipeline
-        result = queue_manager.queue_full_pipeline(getattr(args, 'recon_agents', None))
+        result = queue_manager.queue_full_pipeline(
+            getattr(args, 'recon_agents', None),
+            org_id=args.org_id
+        )
         
         if args.wait_for_completion and result.get('success'):
             task_id = result['task_id']
@@ -412,7 +439,8 @@ def run_parallel_command(config: Config, args) -> Dict[str, Any]:
         force_rescore=args.force_rescore,
         host=args.host,
         use_queue=args.queue,
-        wait_for_completion=args.wait_for_completion
+        wait_for_completion=args.wait_for_completion,
+        org_id=args.org_id
     )
 
 
@@ -444,17 +472,24 @@ def run_signature_command(args) -> Dict[str, Any]:
         return signature_manager.learn_from_scans(
             protocol=args.signature_protocol,
             min_confidence=args.signature_learning_min_confidence,
-            max_examples=args.signature_learning_max_examples
+            max_examples=args.signature_learning_max_examples,
+            org_id=args.org_id
         )
     
     elif args.update_signature_flags:
-        return signature_manager.update_signature_flags(args.protocol_filter)
+        return signature_manager.update_signature_flags(
+            args.protocol_filter,
+            org_id=args.org_id
+        )
     
     elif args.mark_signature_created:
-        return signature_manager.mark_signature_created(args.mark_signature_created)
+        return signature_manager.mark_signature_created(
+            args.mark_signature_created,
+            org_id=args.org_id
+        )
     
     elif args.show_signature_stats:
-        return signature_manager.get_signature_statistics()
+        return signature_manager.get_signature_statistics(org_id=args.org_id)
     
     else:
         return {
@@ -585,11 +620,18 @@ Examples:
   pgdn --update-cves --initial-cves # Initial CVE database population
   pgdn --start-cve-scheduler        # Start daily CVE update scheduler
   
+  # Organization-specific Operations
+  pgdn --org-id myorg               # Run full pipeline for specific organization
+  pgdn --stage scan --org-id myorg  # Scan only nodes belonging to organization 'myorg'
+  pgdn --scan-target 139.84.148.36 --org-id myorg # Scan target and associate with organization
+  pgdn --stage report --org-id myorg # Generate reports only for organization's scans
+  
   # Queue Operations (Background Processing)
   pgdn --queue                      # Queue full pipeline for background processing
   pgdn --stage scan --queue         # Queue scan stage for background processing
   pgdn --scan-target 139.84.148.36 --queue # Queue target scan for background processing
   pgdn --queue --wait-for-completion # Queue job and wait for completion
+  pgdn --queue --org-id myorg       # Queue pipeline for specific organization
   pgdn --task-id abc123-def456      # Check status of queued task
   pgdn --cancel-task abc123-def456  # Cancel a queued task
   pgdn --list-tasks                 # List all active queued tasks
@@ -600,12 +642,14 @@ Examples:
   pgdn --target-file targets.txt --queue # Scan targets from file in parallel
   pgdn --parallel-stages recon scan --queue # Run multiple independent stages in parallel
   pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
+  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --org-id myorg # Parallel scans for specific organization
   
   # Signature Learning from Existing Scans
   pgdn --learn-signatures-from-scans --signature-protocol sui # Learn Sui signatures from existing scans
   pgdn --learn-signatures-from-scans --signature-protocol filecoin # Learn Filecoin signatures
   pgdn --learn-signatures-from-scans --signature-protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
   pgdn --learn-signatures-from-scans --signature-protocol sui --signature-learning-max-examples 500 # Limit examples
+  pgdn --learn-signatures-from-scans --signature-protocol sui --org-id myorg # Learn signatures for specific organization
         """
     )
     
@@ -613,6 +657,11 @@ Examples:
         '--json',
         action='store_true',
         help='Return results in JSON format instead of human-readable output'
+    )
+    
+    parser.add_argument(
+        '--org-id',
+        help='Organization ID to filter agentic jobs by organization'
     )
     
     parser.add_argument(

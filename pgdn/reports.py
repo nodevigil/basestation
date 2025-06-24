@@ -46,7 +46,8 @@ class ReportManager:
                        auto_save: bool = False,
                        email_report: bool = False,
                        recipient_email: Optional[str] = None,
-                       force_report: bool = False) -> Dict[str, Any]:
+                       force_report: bool = False,
+                       org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate a security analysis report.
         
@@ -60,6 +61,7 @@ class ReportManager:
             email_report: Generate email notification in report
             recipient_email: Recipient email address for notification
             force_report: Force generation even if scan already processed
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Report generation results
@@ -77,7 +79,7 @@ class ReportManager:
                 'force_report': force_report
             }
             
-            results = self.orchestrator.run_report_stage(agent_name, report_options)
+            results = self.orchestrator.run_report_stage(agent_name, report_options, org_id=org_id)
             
             return {
                 "success": True,
@@ -99,12 +101,13 @@ class ReportManager:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def generate_summary_report(self, scan_id: Optional[int] = None) -> Dict[str, Any]:
+    def generate_summary_report(self, scan_id: Optional[int] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate a summary report with default options.
         
         Args:
             scan_id: Optional specific scan ID to generate report for
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Report generation results
@@ -113,7 +116,8 @@ class ReportManager:
             agent_name='ReportAgent',
             scan_id=scan_id,
             report_format='summary',
-            auto_save=False
+            auto_save=False,
+            org_id=org_id
         )
     
     def generate_detailed_report(self, scan_id: Optional[int] = None, auto_save: bool = True) -> Dict[str, Any]:

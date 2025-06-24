@@ -37,18 +37,19 @@ class QueueManager:
             self._queue_manager = create_queue_manager(self.config)
         return self._queue_manager
     
-    def queue_full_pipeline(self, recon_agents: Optional[List[str]] = None) -> Dict[str, Any]:
+    def queue_full_pipeline(self, recon_agents: Optional[List[str]] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Queue a full pipeline for background processing.
         
         Args:
             recon_agents: Optional list of recon agents to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Queue operation results including task ID
         """
         try:
-            task_id = self.queue_manager.queue_full_pipeline(recon_agents)
+            task_id = self.queue_manager.queue_full_pipeline(recon_agents, org_id=org_id)
             
             return {
                 "success": True,
@@ -81,7 +82,8 @@ class QueueManager:
                           force_rescore: bool = False,
                           host: Optional[str] = None,
                           report_options: Optional[Dict[str, Any]] = None,
-                          force: bool = False) -> Dict[str, Any]:
+                          force: bool = False,
+                          org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Queue a single stage for background processing.
         
@@ -95,6 +97,7 @@ class QueueManager:
             host: Host for discovery stage
             report_options: Options for report stage
             force: Force operation
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Queue operation results including task ID
@@ -104,12 +107,12 @@ class QueueManager:
                 task_id = self.queue_manager.queue_single_stage(
                     stage, agent_name, recon_agents, protocol_filter,
                     debug, force_rescore, host, report_options=report_options,
-                    force=force
+                    force=force, org_id=org_id
                 )
             else:
                 task_id = self.queue_manager.queue_single_stage(
                     stage, agent_name, recon_agents, protocol_filter,
-                    debug, force_rescore, host, force=force
+                    debug, force_rescore, host, force=force, org_id=org_id
                 )
             
             return {
@@ -137,19 +140,20 @@ class QueueManager:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def queue_target_scan(self, target: str, debug: bool = False) -> Dict[str, Any]:
+    def queue_target_scan(self, target: str, debug: bool = False, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Queue a target scan for background processing.
         
         Args:
             target: Target to scan
             debug: Enable debug logging
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Queue operation results including task ID
         """
         try:
-            task_id = self.queue_manager.queue_target_scan(target, debug)
+            task_id = self.queue_manager.queue_target_scan(target, debug, org_id=org_id)
             
             return {
                 "success": True,
