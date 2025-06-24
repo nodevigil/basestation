@@ -25,41 +25,60 @@ class ScanOrchestrator:
         """
         self.config = config or {}
         self.scanner_registry = ScannerRegistry(config)
-        self.enabled_scanners = self.config.get('enabled_scanners', ['generic', 'web', 'vulnerability'])
-        self.use_external_tools = self.config.get('use_external_tools', True)
+        
+        # Get orchestrator-specific config
+        orchestrator_config = self.config.get('orchestrator', {})
+        self.enabled_scanners = orchestrator_config.get('enabled_scanners', ['generic', 'web', 'vulnerability'])
+        self.use_external_tools = orchestrator_config.get('use_external_tools', True)
         self.logger = get_logger(__name__)
     
-    def scan(self, target: str, ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive scan using multiple scanner types.
         
         Args:
             target: Target IP address or hostname
             ports: List of ports to scan
+            scan_level: Scan level (1-3, default: 1)
             **kwargs: Additional scan parameters
             
         Returns:
             Comprehensive scan results
         """
-        self.logger.info(f"Starting comprehensive scan of {target}")
+        self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level})")
         
         results = {
             "target": target,
+            "scan_level": scan_level,
             "scan_timestamp": kwargs.get('scan_timestamp'),
             "scan_results": {}
         }
         
-        # Run enabled scanners
+        # Run GeoIP enrichment for level 1 and above
+        if scan_level >= 1:
+            try:
+                from pgdn.scanning.geo_scanner import GeoScanner
+                geo_scanner = GeoScanner(self.config.get('scanners', {}).get('geo', {}))
+                self.logger.debug(f"Running GeoIP enrichment for {target}")
+                geo_result = geo_scanner.scan(target, **kwargs)
+                results["scan_results"]["geo"] = geo_result
+            except Exception as e:
+                self.logger.warning(f"GeoIP enrichment failed for {target}: {e}")
+                results["scan_results"]["geo"] = {"error": str(e)}
+        
+        # Run enabled scanners with scan_level parameter
         for scanner_type in self.enabled_scanners:
             try:
                 scanner = self.scanner_registry.get_scanner(scanner_type)
                 if scanner:
-                    self.logger.debug(f"Running {scanner_type} scanner")
-                    scan_result = scanner.scan(target, ports=ports, **kwargs)
+                    self.logger.debug(f"Running {scanner_type} scanner (level {scan_level})")
+                    scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
                     results["scan_results"][scanner_type] = scan_result
                 else:
                     self.logger.warning(f"Scanner {scanner_type} not available")
             except Exception as e:
                 self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
                 results["scan_results"][scanner_type] = {"error": str(e)}
         
         # Run external tools if enabled
@@ -184,6 +203,7 @@ class ScanOrchestrator:
             Legacy format scan results
         """
         target = results["target"]
+        scan_level = results.get("scan_level", 1)
         scan_results = results.get("scan_results", {})
         external_tools = results.get("external_tools", {})
         
@@ -191,10 +211,12 @@ class ScanOrchestrator:
         generic_results = scan_results.get("generic", {})
         web_results = scan_results.get("web", {})
         vuln_results = scan_results.get("vulnerability", {})
+        geo_results = scan_results.get("geo", {})
         
         # Build legacy format
         legacy = {
             "ip": target,
+            "scan_level": scan_level,
             "open_ports": generic_results.get("open_ports", []),
             "banners": generic_results.get("banners", {}),
             "tls": generic_results.get("tls", {}),
@@ -205,6 +227,17 @@ class ScanOrchestrator:
             "whatweb": external_tools.get("whatweb", {}),
             "ssl_test": external_tools.get("ssl_test", {})
         }
+        
+        # Add GeoIP data if available
+        if geo_results and not geo_results.get("error"):
+            legacy["geoip"] = {
+                "country_name": geo_results.get("country_name"),
+                "city_name": geo_results.get("city_name"),
+                "latitude": geo_results.get("latitude"),
+                "longitude": geo_results.get("longitude"),
+                "asn_number": geo_results.get("asn_number"),
+                "asn_organization": geo_results.get("asn_organization")
+            }
         
         return legacy
     

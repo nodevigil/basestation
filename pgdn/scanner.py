@@ -35,13 +35,14 @@ class Scanner:
         self.protocol_filter = protocol_filter
         self.debug = debug
     
-    def scan_target(self, target: str, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_target(self, target: str, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
         Scan a specific target (IP or hostname) with orchestration workflow.
         
         Args:
             target: IP address or hostname to scan
             org_id: Organization ID (required for orchestration)
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Scan results or workflow instructions
@@ -74,7 +75,7 @@ class Scanner:
             protocol = validation_result.get("protocol")
             
             # Proceed with actual scanning
-            scan_result = self._perform_scan(target, org_id, protocol, node_id)
+            scan_result = self._perform_scan(target, org_id, protocol, node_id, scan_level)
             
             # Update node status after scan
             if node_id:
@@ -93,7 +94,7 @@ class Scanner:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def _perform_scan(self, target: str, org_id: str, protocol: Optional[str], node_id: Optional[str]) -> Dict[str, Any]:
+    def _perform_scan(self, target: str, org_id: str, protocol: Optional[str], node_id: Optional[str], scan_level: int = 1) -> Dict[str, Any]:
         """
         Perform the actual scan using the new modular scanning system.
         
@@ -102,6 +103,7 @@ class Scanner:
             org_id: Organization ID
             protocol: Protocol name (if determined)
             node_id: Node UUID for tracking
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Scan results
@@ -127,9 +129,10 @@ class Scanner:
             # Create scan orchestrator with configuration
             orchestrator = ScanOrchestrator(scan_config)
             
-            # Perform the scan using the new modular system
+            # Perform the scan using the new modular system with scan_level
             scan_results = orchestrator.scan(
                 target=ip_address,
+                scan_level=scan_level,
                 scan_timestamp=datetime.now().isoformat()
             )
             
@@ -139,6 +142,7 @@ class Scanner:
                     "target": target,
                     "resolved_ip": ip_address,
                     "scan_result": scan_results,
+                    "scan_level": scan_level,
                     "timestamp": datetime.now().isoformat(),
                     "node_id": node_id,
                     "org_id": org_id,
@@ -163,12 +167,13 @@ class Scanner:
                 "node_id": node_id
             }
     
-    def scan_nodes_from_database(self, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_nodes_from_database(self, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
         Scan nodes discovered in the database using the new modular scanning system.
         
         Args:
             org_id: Optional organization ID to filter nodes
+            scan_level: Scan level (1-3, default: 1)
         
         Returns:
             dict: Scan results including success status and scan data
@@ -209,6 +214,7 @@ class Scanner:
                     try:
                         scan_result = orchestrator.scan(
                             target=node.target,
+                            scan_level=scan_level,
                             scan_timestamp=datetime.now().isoformat()
                         )
                         
@@ -217,6 +223,7 @@ class Scanner:
                             "target": node.target,
                             "protocol": node.protocol,
                             "scan_result": scan_result,
+                            "scan_level": scan_level,
                             "success": True
                         })
                         
@@ -240,6 +247,7 @@ class Scanner:
                 "stage": "scan",
                 "results": results,
                 "results_count": len(results),
+                "scan_level": scan_level,
                 "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
@@ -253,7 +261,7 @@ class Scanner:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
         Scan multiple targets in parallel.
         
@@ -261,6 +269,7 @@ class Scanner:
             targets: List of targets to scan
             max_parallel: Maximum number of parallel scans
             org_id: Optional organization ID to filter agentic jobs
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Parallel scan results
@@ -274,7 +283,7 @@ class Scanner:
         
         def scan_single_target(target):
             """Helper function for parallel execution."""
-            result = self.scan_target(target, org_id=org_id)
+            result = self.scan_target(target, org_id=org_id, scan_level=scan_level)
             return {
                 "target": target,
                 "success": result["success"],
@@ -314,6 +323,7 @@ class Scanner:
                 "successful": successful,
                 "total": len(targets),
                 "max_parallel": max_parallel,
+                "scan_level": scan_level,
                 "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }

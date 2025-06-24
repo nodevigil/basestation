@@ -114,23 +114,115 @@ class FilecoinSpecificScanner:
         
         return logger
     
-    def scan(self, ip_address: str) -> Dict[str, Any]:
+    def scan(self, ip_address: str, scan_level: int = 1) -> Dict[str, Any]:
         """
-        Perform Filecoin-specific scan with enhanced logging.
+        Perform Filecoin-specific scan based on scan level.
         
         Args:
             ip_address: Target IP address
+            scan_level: Scan level (1-3) determining aggressiveness
             
         Returns:
             Dictionary containing scan results
         """
-        self.logger.info(f"🔍 Starting Filecoin-specific scan for {ip_address}")
-        self.logger.debug(f"Scan configuration - timeout: {self.timeout}s, debug: {self.debug}")
+        self.logger.info(f"🔍 Starting Filecoin scan for {ip_address} at level {scan_level}")
         
+        if scan_level == 1:
+            return self._scan_level_1(ip_address)
+        elif scan_level == 2:
+            return self._scan_level_2(ip_address)
+        elif scan_level == 3:
+            return self._scan_level_3(ip_address)
+        else:
+            raise ValueError(f"Invalid scan_level: {scan_level}. Must be 1, 2, or 3.")
+    
+    def _scan_level_1(self, ip_address: str) -> Dict[str, Any]:
+        """Level 1: Basic node info and RPC auth check."""
+        self.logger.info(f"🔍 Level 1 Filecoin scan for {ip_address}")
         scan_start_time = datetime.utcnow()
         
         results = {
             'scan_type': 'filecoin_specific',
+            'scan_level': 1,
+            'target_ip': ip_address,
+            'lotus_api_exposed': False,
+            'node_info': None,
+            'lotus_auth_required': True,
+            'errors': []
+        }
+        
+        try:
+            # Basic Lotus API check
+            lotus_result = self._check_lotus_api_basic(ip_address)
+            results.update(lotus_result)
+            
+            scan_duration = (datetime.utcnow() - scan_start_time).total_seconds()
+            results['scan_duration'] = scan_duration
+            
+            self.logger.info(f"✅ Level 1 Filecoin scan completed for {ip_address} in {scan_duration:.2f}s")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Level 1 Filecoin scan failed for {ip_address}: {str(e)}")
+            results['errors'].append(f"Scan error: {str(e)}")
+            results['scan_duration'] = (datetime.utcnow() - scan_start_time).total_seconds()
+        
+        return results
+    
+    def _scan_level_2(self, ip_address: str) -> Dict[str, Any]:
+        """Level 2: Enhanced API checks and metrics detection."""
+        self.logger.info(f"🔍 Level 2 Filecoin scan for {ip_address}")
+        scan_start_time = datetime.utcnow()
+        
+        results = {
+            'scan_type': 'filecoin_specific',
+            'scan_level': 2,
+            'target_ip': ip_address,
+            'lotus_api_exposed': False,
+            'storage_api_exposed': False,
+            'market_api_exposed': False,
+            'metrics_exposed': False,
+            'node_info': None,
+            'lotus_auth_required': True,
+            'storage_auth_required': True,
+            'market_auth_required': True,
+            'errors': []
+        }
+        
+        try:
+            # Check all APIs
+            lotus_result = self._check_lotus_api(ip_address)
+            results.update(lotus_result)
+            
+            storage_result = self._check_storage_api(ip_address)
+            results.update(storage_result)
+            
+            market_result = self._check_market_api(ip_address)
+            results.update(market_result)
+            
+            # Check metrics
+            metrics_result = self._check_metrics_only(ip_address)
+            results.update(metrics_result)
+            
+            scan_duration = (datetime.utcnow() - scan_start_time).total_seconds()
+            results['scan_duration'] = scan_duration
+            
+            self.logger.info(f"✅ Level 2 Filecoin scan completed for {ip_address} in {scan_duration:.2f}s")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Level 2 Filecoin scan failed for {ip_address}: {str(e)}")
+            results['errors'].append(f"Scan error: {str(e)}")
+            results['scan_duration'] = (datetime.utcnow() - scan_start_time).total_seconds()
+        
+        return results
+    
+    def _scan_level_3(self, ip_address: str) -> Dict[str, Any]:
+        """Level 3: Deep protocol inspection with security analysis."""
+        self.logger.info(f"🔍 Level 3 Filecoin scan for {ip_address}")
+        scan_start_time = datetime.utcnow()
+        
+        results = {
+            'scan_type': 'filecoin_specific',
+            'scan_level': 3,
             'target_ip': ip_address,
             'lotus_api_exposed': False,
             'storage_api_exposed': False,
@@ -149,52 +241,108 @@ class FilecoinSpecificScanner:
         }
         
         try:
-            # Check Lotus API with enhanced security testing
-            self.logger.info(f"🪷 Checking Lotus API for {ip_address}")
-            self.logger.debug(f"Testing {len(self.lotus_api_ports)} ports: {self.lotus_api_ports}")
+            # Full scan from original implementation
             lotus_result = self._check_lotus_api(ip_address)
             results.update(lotus_result)
-            self.logger.info(f"🪷 Lotus API check complete - exposed: {lotus_result.get('lotus_api_exposed', False)}")
             
-            # Check Storage API with security validation
-            self.logger.info(f"💾 Checking Storage API for {ip_address}")
-            self.logger.debug(f"Testing {len(self.storage_api_ports)} ports: {self.storage_api_ports}")
             storage_result = self._check_storage_api(ip_address)
             results.update(storage_result)
-            self.logger.info(f"💾 Storage API check complete - exposed: {storage_result.get('storage_api_exposed', False)}")
             
-            # Check Market API with security checks
-            self.logger.info(f"🏪 Checking Market API for {ip_address}")
-            self.logger.debug(f"Testing {len(self.market_api_ports)} ports: {self.market_api_ports}")
             market_result = self._check_market_api(ip_address)
             results.update(market_result)
-            self.logger.info(f"🏪 Market API check complete - exposed: {market_result.get('market_api_exposed', False)}")
             
-            # Check P2P and other ports
-            self.logger.info(f"🌐 Checking network ports for {ip_address}")
-            self.logger.debug(f"Testing P2P ports: {self.p2p_ports}, metrics ports: {self.metrics_ports}")
             network_result = self._check_network_ports(ip_address)
             results.update(network_result)
-            self.logger.info(f"🌐 Network ports check complete - P2P open: {len(network_result.get('p2p_ports_open', []))}, metrics: {network_result.get('metrics_exposed', False)}")
             
-            # Perform security analysis
-            self.logger.info(f"🔒 Performing security analysis for {ip_address}")
+            # Security analysis
             security_result = self._perform_security_analysis(ip_address, results)
             results.update(security_result)
             
             scan_duration = (datetime.utcnow() - scan_start_time).total_seconds()
             results['scan_duration'] = scan_duration
             
-            self.logger.info(f"✅ Filecoin scan completed for {ip_address} in {scan_duration:.2f}s - Security Score: {security_result.get('security_score', 0)}/100")
-            self.logger.debug(f"Final scan results: {results}")
+            self.logger.info(f"✅ Level 3 Filecoin scan completed for {ip_address} in {scan_duration:.2f}s - Security Score: {security_result.get('security_score', 0)}/100")
             
         except Exception as e:
-            self.logger.error(f"❌ Filecoin scan failed for {ip_address}: {str(e)}")
-            self.logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+            self.logger.error(f"❌ Level 3 Filecoin scan failed for {ip_address}: {str(e)}")
             results['errors'].append(f"Scan error: {str(e)}")
             results['scan_duration'] = (datetime.utcnow() - scan_start_time).total_seconds()
         
         return results
+    
+    def _check_lotus_api_basic(self, ip_address: str) -> Dict[str, Any]:
+        """Basic Lotus API check for level 1 scan."""
+        result = {
+            'lotus_api_exposed': False,
+            'lotus_api_url': None,
+            'node_info': None,
+            'lotus_auth_required': True
+        }
+        
+        # Only check common ports for level 1
+        common_ports = [1234, 3453, 8080]
+        
+        for port in common_ports:
+            for scheme in ['http', 'https']:
+                url = f"{scheme}://{ip_address}:{port}/rpc/v0"
+                try:
+                    node_data = {
+                        "jsonrpc": "2.0",
+                        "method": "Filecoin.Version",
+                        "params": [],
+                        "id": 1
+                    }
+                    
+                    response = requests.post(
+                        url,
+                        json=node_data,
+                        timeout=self.timeout,
+                        headers={'Content-Type': 'application/json'},
+                        verify=False
+                    )
+                    
+                    if response.status_code == 200:
+                        try:
+                            data = response.json()
+                            if 'result' in data:
+                                result['lotus_api_exposed'] = True
+                                result['lotus_api_url'] = url
+                                result['node_info'] = data['result']
+                                result['lotus_auth_required'] = False
+                                return result
+                        except json.JSONDecodeError:
+                            pass
+                    elif response.status_code == 401:
+                        result['lotus_api_exposed'] = True
+                        result['lotus_api_url'] = url
+                        result['lotus_auth_required'] = True
+                        return result
+                        
+                except Exception:
+                    continue
+        
+        return result
+    
+    def _check_metrics_only(self, ip_address: str) -> Dict[str, Any]:
+        """Check only metrics endpoints for level 2 scan."""
+        result = {
+            'metrics_exposed': False,
+            'metrics_url': None
+        }
+        
+        for port in self.metrics_ports:
+            try:
+                for scheme in ['http', 'https']:
+                    url = f"{scheme}://{ip_address}:{port}/metrics"
+                    response = requests.get(url, timeout=self.timeout, verify=False)
+                    if response.status_code == 200 and 'prometheus' in response.text.lower():
+                        result['metrics_exposed'] = True
+                        result['metrics_url'] = url
+                        return result
+            except Exception:
+                continue
+        
+        return result
     
     def _check_lotus_api(self, ip_address: str) -> Dict[str, Any]:
         """Check for Lotus API endpoints with enhanced security testing."""

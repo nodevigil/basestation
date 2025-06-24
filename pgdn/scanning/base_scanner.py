@@ -79,6 +79,13 @@ class ScannerRegistry:
             self.logger.debug("Registered built-in VulnerabilityScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register VulnerabilityScanner: {e}")
+            
+        try:
+            from pgdn.scanning.geo_scanner import GeoScanner
+            self._scanners['geo'] = GeoScanner
+            self.logger.debug("Registered built-in GeoScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register GeoScanner: {e}")
     
     def _register_external_scanners(self):
         """Register external/protocol-specific scanners."""

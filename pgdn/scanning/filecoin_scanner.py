@@ -24,14 +24,16 @@ class FilecoinSpecificScanner:
     - SSL/TLS configuration analysis
     """
     
-    def __init__(self, timeout: int = 10, debug: bool = False):
+    def __init__(self, config=None, timeout: int = 10, debug: bool = False):
         """
         Initialize Filecoin scanner.
         
         Args:
+            config: Configuration instance (for orchestrator compatibility)
             timeout: Request timeout in seconds
             debug: Enable debug logging
         """
+        self.config = config
         self.timeout = timeout
         self.debug = debug
         self.logger = self._setup_logging()
@@ -114,17 +116,20 @@ class FilecoinSpecificScanner:
         
         return logger
     
-    def scan(self, ip_address: str) -> Dict[str, Any]:
+    def scan(self, ip_address: str, **kwargs) -> Dict[str, Any]:
         """
         Perform Filecoin-specific scan with enhanced logging.
         
         Args:
             ip_address: Target IP address
+            **kwargs: Additional scan parameters (including scan_level)
             
         Returns:
             Dictionary containing scan results
         """
-        self.logger.info(f"🔍 Starting Filecoin-specific scan for {ip_address}")
+        scan_level = kwargs.get('scan_level', 1)
+        
+        self.logger.info(f"🔍 Starting Filecoin-specific scan for {ip_address} (level {scan_level})")
         self.logger.debug(f"Scan configuration - timeout: {self.timeout}s, debug: {self.debug}")
         
         scan_start_time = datetime.utcnow()
@@ -132,6 +137,8 @@ class FilecoinSpecificScanner:
         results = {
             'scan_type': 'filecoin_specific',
             'target_ip': ip_address,
+            'scan_level': scan_level,
+            'scanner_type': 'filecoin',
             'lotus_api_exposed': False,
             'storage_api_exposed': False,
             'market_api_exposed': False,

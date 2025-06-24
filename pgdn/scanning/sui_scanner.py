@@ -6,16 +6,18 @@ class SuiSpecificScanner:
     Sui-specific scanner for custom checks (metrics, version, open RPC, debug endpoints).
     """
 
-    def __init__(self, rpc_ports=(9000, 443, 80), metrics_port=9184, timeout: int = 10, debug: bool = False):
+    def __init__(self, config=None, rpc_ports=(9000, 443, 80), metrics_port=9184, timeout: int = 10, debug: bool = False):
         """
         Initialize Sui scanner.
         
         Args:
+            config: Configuration instance (for orchestrator compatibility)
             rpc_ports: Ports to check for RPC endpoints
             metrics_port: Port to check for metrics
             timeout: Request timeout in seconds
             debug: Enable debug logging
         """
+        self.config = config
         self.rpc_ports = rpc_ports
         self.metrics_port = metrics_port
         self.timeout = timeout
@@ -158,14 +160,20 @@ class SuiSpecificScanner:
         self.logger.debug(f"❌ No version endpoints found for {ip}")
         return {"version_exposed": False}
 
-    def scan(self, ip):
+    def scan(self, ip, **kwargs):
         """
         Runs all Sui-specific checks on a given IP.
+        
+        Args:
+            ip: Target IP address
+            **kwargs: Additional scan parameters (including scan_level)
         """
-        self.logger.info(f"🚀 Starting Sui-specific scan for {ip}")
+        scan_level = kwargs.get('scan_level', 1)
+        
+        self.logger.info(f"🚀 Starting Sui-specific scan for {ip} (level {scan_level})")
         self.logger.debug(f"Scan configuration - timeout: {self.timeout}s, debug: {self.debug}")
         
-        result = {"ip": ip}
+        result = {"ip": ip, "scan_level": scan_level, "scanner_type": "sui"}
         result.update(self.check_metrics_endpoint(ip))
         result.update(self.check_rpc_endpoint(ip))
         result.update(self.check_version(ip))
