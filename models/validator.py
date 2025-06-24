@@ -7,6 +7,119 @@ import uuid
 
 Base = declarative_base()
 
+class Organization(Base):
+    """Organization model."""
+    __tablename__ = 'organizations'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), unique=True, nullable=False)
+    description = Column(String, nullable=True)
+    website = Column(String(255), nullable=True)
+    contact_email = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_by = Column(Integer, nullable=True)  # References users.id
+    
+    # Relationships
+    nodes = relationship("Node", back_populates="organization")
+    
+    def __repr__(self):
+        return f"<Organization(uuid='{self.uuid}', name='{self.name}', slug='{self.slug}')>"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'name': self.name,
+            'slug': self.slug,
+            'description': self.description,
+            'website': self.website,
+            'contact_email': self.contact_email,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_by': self.created_by,
+        }
+
+
+class Protocol(Base):
+    """Protocol model."""
+    __tablename__ = 'protocols'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    name = Column(String(50), unique=True, nullable=False)
+    display_name = Column(String(100), nullable=False)
+    category = Column(String(50), nullable=False)
+    ports = Column(JSON, nullable=False)
+    endpoints = Column(JSON, nullable=False)
+    banners = Column(JSON, nullable=False)
+    rpc_methods = Column(JSON, nullable=False)
+    metrics_keywords = Column(JSON, nullable=False)
+    http_paths = Column(JSON, nullable=False)
+    identification_hints = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    nodes = relationship("Node", back_populates="protocol")
+    
+    def __repr__(self):
+        return f"<Protocol(name='{self.name}', display_name='{self.display_name}')>"
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'uuid': str(self.uuid) if self.uuid else None,
+            'name': self.name,
+            'display_name': self.display_name,
+            'category': self.category,
+            'ports': self.ports,
+            'endpoints': self.endpoints,
+            'banners': self.banners,
+            'rpc_methods': self.rpc_methods,
+            'metrics_keywords': self.metrics_keywords,
+            'http_paths': self.http_paths,
+            'identification_hints': self.identification_hints,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Node(Base):
+    """Node metadata model for tracking discovered and scanned nodes."""
+    __tablename__ = 'nodes'
+    
+    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(String(36), ForeignKey('organizations.uuid'), nullable=False)  # Match organizations.uuid type
+    status = Column(String(50), nullable=False, default='new')  # new, discovered, scanned, error
+    protocol_id = Column(Integer, ForeignKey('protocols.id'), nullable=True)
+    meta = Column(JSON, nullable=True)  # Store IP, hostname, and other metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    organization = relationship("Organization", back_populates="nodes")
+    protocol = relationship("Protocol", back_populates="nodes")
+    
+    def __repr__(self):
+        return f"<Node(uuid='{self.uuid}', status='{self.status}', org_id='{self.org_id}')>"
+    
+    def to_dict(self):
+        return {
+            'uuid': str(self.uuid) if self.uuid else None,
+            'org_id': str(self.org_id) if self.org_id else None,
+            'status': self.status,
+            'protocol_id': self.protocol_id,
+            'meta': self.meta,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ValidatorAddress(Base):
     __tablename__ = 'validator_addresses'
 

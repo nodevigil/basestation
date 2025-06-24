@@ -1618,3 +1618,93 @@ class DiscoveryAgent(ProcessAgent):
         }
         
         return best_protocol, best_confidence, best_evidence, performance_metrics
+    
+    def discover_node(self, node_id: str, host: str) -> Dict[str, Any]:
+        """
+        Discover protocol for a specific node and update orchestration state.
+        
+        Args:
+            node_id: UUID of the node to update after discovery
+            host: Target hostname or IP address
+            
+        Returns:
+            Discovery result with orchestration update status
+        """
+        try:
+            self.logger.info(f"🔍 Starting protocol discovery for node {node_id} at {host}")
+            
+            # Perform the actual discovery
+            discovery_results = self.run(host=host, force=True)
+            
+            if not discovery_results:
+                return {
+                    "success": False,
+                    "error": "No discovery results returned",
+                    "node_id": node_id,
+                    "host": host
+                }
+            
+            # Get the primary discovery result
+            primary_result = discovery_results[0]
+            protocol = primary_result.get('protocol')
+            
+            if not protocol:
+                return {
+                    "success": False,
+                    "error": "No protocol identified during discovery",
+                    "node_id": node_id,
+                    "host": host,
+                    "discovery_result": primary_result
+                }
+            
+            # Update the node in orchestration service
+            try:
+                from services.node_orchestration import NodeOrchestrationService
+                orchestration = NodeOrchestrationService()
+                
+                update_result = orchestration.update_node_after_discovery(
+                    node_id=node_id,
+                    protocol_name=protocol
+                )
+                
+                if update_result.get("success"):
+                    return {
+                        "success": True,
+                        "message": f"Protocol {protocol} discovered and node updated",
+                        "node_id": node_id,
+                        "host": host,
+                        "protocol": protocol,
+                        "confidence": primary_result.get('confidence'),
+                        "discovery_result": primary_result,
+                        "orchestration_update": update_result
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Discovery succeeded but node update failed: {update_result.get('error')}",
+                        "node_id": node_id,
+                        "host": host,
+                        "protocol": protocol,
+                        "discovery_result": primary_result
+                    }
+                    
+            except ImportError:
+                # Fallback if orchestration service is not available
+                return {
+                    "success": True,
+                    "message": f"Protocol {protocol} discovered (orchestration service not available)",
+                    "node_id": node_id,
+                    "host": host,
+                    "protocol": protocol,
+                    "discovery_result": primary_result,
+                    "warning": "Node status not updated - orchestration service unavailable"
+                }
+                
+        except Exception as e:
+            self.logger.error(f"Discovery failed for node {node_id}: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Discovery failed: {str(e)}",
+                "node_id": node_id,
+                "host": host
+            }

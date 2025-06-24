@@ -110,18 +110,19 @@ class QueueManager:
         logger.info(f"Queued single stage '{stage}' task: {task.id}")
         return task.id
     
-    def queue_target_scan(self, target: str, debug: bool = False) -> str:
+    def queue_target_scan(self, target: str, debug: bool = False, org_id: Optional[str] = None) -> str:
         """
         Queue a target scan.
         
         Args:
             target: IP address or hostname to scan
             debug: Enable debug logging
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Task ID
         """
-        task = self.tasks['scan_target'].delay(self.config_dict, target, debug)
+        task = self.tasks['scan_target'].delay(self.config_dict, target, debug, org_id)
         logger.info(f"Queued target scan for {target}: {task.id}")
         return task.id
     
