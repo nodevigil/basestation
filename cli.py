@@ -203,6 +203,10 @@ def print_agents_result(result: Dict[str, Any]) -> None:
 
 def run_full_pipeline_command(config: Config, args) -> Dict[str, Any]:
     """Run full pipeline command."""
+    # Check if queue mode is requested
+    if getattr(args, 'queue', False):
+        return run_queue_command(config, args)
+    
     orchestrator = PipelineOrchestrator(config)
     return orchestrator.run_full_pipeline(
         recon_agents=args.recon_agents,
@@ -213,6 +217,10 @@ def run_full_pipeline_command(config: Config, args) -> Dict[str, Any]:
 def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
     """Run single stage command."""
     stage = args.stage
+    
+    # Check if queue mode is requested
+    if getattr(args, 'queue', False):
+        return run_queue_command(config, args)
     
     if stage == 'recon':
         orchestrator = PipelineOrchestrator(config)
@@ -599,14 +607,14 @@ def main():
         elif args.task_id or args.cancel_task or args.list_tasks:
             result = run_queue_command(config, args)
         
-        elif args.queue:
-            result = run_queue_command(config, args)
-        
         elif args.parallel_targets or args.target_file or args.parallel_stages:
             result = run_parallel_command(config, args)
         
         elif args.stage:
             result = run_single_stage_command(config, args)
+        
+        elif args.queue:
+            result = run_queue_command(config, args)
         
         else:
             # Default: run full pipeline
