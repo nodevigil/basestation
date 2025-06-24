@@ -32,7 +32,7 @@ class AgentRegistry:
     def _discover_agents(self) -> None:
         """Automatically discover and register agents from the agents directory."""
         try:
-            agents_dir = Path(__file__).parent.parent / "agents"
+            agents_dir = Path(__file__).parent.parent / "agent_modules"
             
             # Discover recon agents
             self._discover_agents_in_directory(
@@ -120,7 +120,7 @@ class AgentRegistry:
             
             try:
                 # Import module
-                module_name = f"agents.{directory.name}.{file_path.stem}"
+                module_name = f"pgdn.agent_modules.{directory.name}.{file_path.stem}"
                 module = importlib.import_module(module_name)
                 
                 # Find agent classes in module
