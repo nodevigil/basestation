@@ -257,32 +257,17 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
                 enabled_scanners = None
                 enabled_external_tools = None
         
-        # Check if target scanning with org_id requirement
-        if args.target:
-            if not args.org_id:
-                return {
-                    "success": False,
-                    "error": "Target scanning requires --org-id argument",
-                    "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
-                }
-            scanner = Scanner(
-                config, 
-                protocol_filter=args.protocol, 
-                debug=args.debug,
-                enabled_scanners=enabled_scanners,
-                enabled_external_tools=enabled_external_tools
-            )
-            return scanner.scan_target(args.target, org_id=args.org_id, scan_level=args.scan_level)
-        else:
-            # Database scanning
-            scanner = Scanner(
-                config, 
-                protocol_filter=args.protocol, 
-                debug=args.debug,
-                enabled_scanners=enabled_scanners,
-                enabled_external_tools=enabled_external_tools
-            )
-            return scanner.scan_nodes_from_database(org_id=args.org_id, scan_level=args.scan_level)
+        # Use new orchestration approach
+        orchestrator = PipelineOrchestrator(config)
+        return orchestrator.run_scan_stage(
+            target=args.target,
+            org_id=args.org_id,
+            scan_level=args.scan_level,
+            protocol_filter=args.protocol,
+            debug=args.debug,
+            enabled_scanners=enabled_scanners,
+            enabled_external_tools=enabled_external_tools
+        )
     
     elif stage == 'process':
         orchestrator = PipelineOrchestrator(config)
