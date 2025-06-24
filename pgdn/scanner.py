@@ -124,7 +124,11 @@ class Scanner:
                 }
             
             # Prepare scanning configuration
-            scan_config = getattr(self.config, 'scanning', {})
+            scanning_config = self.config.scanning
+            scan_config = {
+                'orchestrator': scanning_config.orchestrator,
+                'scanners': scanning_config.scanners
+            }
             
             # Create scan orchestrator with configuration
             orchestrator = ScanOrchestrator(scan_config)
@@ -206,7 +210,11 @@ class Scanner:
                     }
                 
                 # Prepare scanning configuration
-                scan_config = getattr(self.config, 'scanning', {})
+                scanning_config = self.config.scanning
+                scan_config = {
+                    'orchestrator': scanning_config.orchestrator,
+                    'scanners': scanning_config.scanners
+                }
                 orchestrator = ScanOrchestrator(scan_config)
                 
                 # Scan each node

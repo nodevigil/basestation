@@ -86,8 +86,12 @@ class NodeScannerAgent(ScanAgent):
         self.debug = debug
         
         # Initialize scanners
-        scanning_config = getattr(self.config, 'scanning', {})
-        self.scan_orchestrator = ScanOrchestrator(scanning_config)
+        scanning_config = self.config.scanning
+        scan_config = {
+            'orchestrator': scanning_config.orchestrator,
+            'scanners': scanning_config.scanners
+        }
+        self.scan_orchestrator = ScanOrchestrator(scan_config)
         self.protocol_registry = ProtocolScannerRegistry(debug=debug)
         
         filter_msg = f" (filtering for {protocol_filter})" if protocol_filter else ""

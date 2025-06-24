@@ -56,32 +56,59 @@ pgdn --stage discovery --host 192.168.1.1
 
 ## Scanning Operations
 
-### Target Scanning
+### Scan Levels
 
-Scan specific targets:
+PGDN supports three progressive scan levels:
 
 ```bash
-# Single target
-pgdn --scan-target 192.168.1.100
+# Level 1: Basic scanning (default)
+pgdn --stage scan --target 192.168.1.100 --org-id myorg
 
-# Multiple targets from file
-pgdn --scan-targets-file targets.txt
+# Level 2: Standard scanning with GeoIP enrichment
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
 
-# With protocol filter
-pgdn --scan-target 192.168.1.100 --protocol sui
+# Level 3: Comprehensive scanning with protocol analysis
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 3
 
-# Debug mode
-pgdn --scan-target 192.168.1.100 --debug
+# Protocol-specific Level 3 scanning
+pgdn --stage scan --protocol sui --scan-level 3
+pgdn --stage scan --protocol filecoin --scan-level 3
 ```
 
-### Parallel Scanning
+### Target Scanning
+
+Scan specific targets with different levels:
 
 ```bash
-# Parallel scanning with custom limit
-pgdn --scan-targets-file targets.txt --max-parallel 10
+# Basic Level 1 target scan
+pgdn --stage scan --target 192.168.1.100 --org-id myorg
 
-# Parallel stages
-pgdn --parallel-stages recon,scan --max-parallel 3
+# Level 2 with GeoIP context
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
+
+# Comprehensive Level 3 analysis
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 3
+
+# Debug mode with specific level
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2 --debug
+```
+
+### Database Scanning
+
+Scan nodes from database with scan levels:
+
+```bash
+# Level 1 database scan
+pgdn --stage scan --org-id myorg
+
+# Level 2 with GeoIP enrichment
+pgdn --stage scan --org-id myorg --scan-level 2
+
+# Level 3 comprehensive analysis
+pgdn --stage scan --org-id myorg --scan-level 3
+
+# Protocol-filtered Level 3 scanning
+pgdn --stage scan --protocol sui --org-id myorg --scan-level 3
 ```
 
 ## Report Generation
