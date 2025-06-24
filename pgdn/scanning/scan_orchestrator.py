@@ -4,6 +4,7 @@ This replaces the old scanner.py with a modular, configurable approach.
 """
 
 from typing import Dict, Any, List, Optional, Tuple
+import logging
 from pgdn.scanning.base_scanner import ScannerRegistry
 from pgdn.tools.nmap import nmap_scan
 from pgdn.tools.whatweb import whatweb_scan
@@ -30,6 +31,7 @@ class ScanOrchestrator:
         orchestrator_config = self.config.get('orchestrator', {})
         self.enabled_scanners = orchestrator_config.get('enabled_scanners', ['generic', 'web', 'vulnerability'])
         self.use_external_tools = orchestrator_config.get('use_external_tools', True)
+        self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
     
     def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
@@ -103,43 +105,55 @@ class ScanOrchestrator:
         external_results = {}
         
         # Nmap scan
-        try:
-            nmap_results = nmap_scan(target)
-            external_results["nmap"] = nmap_results
-        except Exception as e:
-            external_results["nmap"] = {"error": str(e)}
+        if 'nmap' in self.enabled_external_tools:
+            try:
+                self.logger.info(f"Running nmap scan for {target}")
+                nmap_results = nmap_scan(target)
+                external_results["nmap"] = nmap_results
+                self.logger.debug(f"Nmap results: {nmap_results}")
+            except Exception as e:
+                self.logger.error(f"Nmap scan failed for {target}: {e}")
+                external_results["nmap"] = {"error": str(e)}
         
         # WhatWeb scan (on detected web ports)
-        web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
-        whatweb_results = {}
-        for port, scheme in web_ports:
-            try:
-                result = whatweb_scan(target, port=port, scheme=scheme)
-                if result and (not isinstance(result, dict) or not result.get("error")):
-                    whatweb_results[f"{scheme}://{target}:{port}"] = result
-            except Exception as e:
-                self.logger.debug(f"WhatWeb scan failed for {target}:{port}: {e}")
-        
-        if whatweb_results:
-            external_results["whatweb"] = whatweb_results
+        if 'whatweb' in self.enabled_external_tools:
+            web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
+            whatweb_results = {}
+            for port, scheme in web_ports:
+                try:
+                    self.logger.debug(f"Running WhatWeb scan for {scheme}://{target}:{port}")
+                    result = whatweb_scan(target, port=port, scheme=scheme)
+                    if result and (not isinstance(result, dict) or not result.get("error")):
+                        whatweb_results[f"{scheme}://{target}:{port}"] = result
+                except Exception as e:
+                    self.logger.debug(f"WhatWeb scan failed for {target}:{port}: {e}")
+            
+            if whatweb_results:
+                external_results["whatweb"] = whatweb_results
         
         # SSL test
-        try:
-            ssl_results = ssl_test(target, port=443)
-            external_results["ssl_test"] = ssl_results
-        except Exception as e:
-            external_results["ssl_test"] = {"error": str(e)}
+        if 'ssl_test' in self.enabled_external_tools:
+            try:
+                self.logger.debug(f"Running SSL test for {target}")
+                ssl_results = ssl_test(target, port=443)
+                external_results["ssl_test"] = ssl_results
+            except Exception as e:
+                self.logger.debug(f"SSL test failed for {target}: {e}")
+                external_results["ssl_test"] = {"error": str(e)}
         
         # Docker exposure check
-        open_ports = self._extract_open_ports(scan_results)
-        if 2375 in open_ports:
-            try:
-                docker_exposure = DockerExposureChecker.check(target)
-                external_results["docker_exposure"] = docker_exposure
-            except Exception as e:
-                external_results["docker_exposure"] = {"error": str(e)}
-        else:
-            external_results["docker_exposure"] = {"exposed": False}
+        if 'docker_exposure' in self.enabled_external_tools:
+            open_ports = self._extract_open_ports(scan_results)
+            if 2375 in open_ports:
+                try:
+                    self.logger.debug(f"Running Docker exposure check for {target}")
+                    docker_exposure = DockerExposureChecker.check(target)
+                    external_results["docker_exposure"] = docker_exposure
+                except Exception as e:
+                    self.logger.debug(f"Docker exposure check failed for {target}: {e}")
+                    external_results["docker_exposure"] = {"error": str(e)}
+            else:
+                external_results["docker_exposure"] = {"exposed": False}
         
         return external_results
     
@@ -214,10 +228,19 @@ class ScanOrchestrator:
         geo_results = scan_results.get("geo", {})
         
         # Build legacy format
+        nmap_data = external_tools.get("nmap", {})
+        
+        # Extract open ports from nmap if available, otherwise from generic scanner
+        open_ports = []
+        if nmap_data and "ports" in nmap_data:
+            open_ports = [port_info["port"] for port_info in nmap_data["ports"] if port_info.get("state") == "open"]
+        else:
+            open_ports = generic_results.get("open_ports", [])
+        
         legacy = {
             "ip": target,
             "scan_level": scan_level,
-            "open_ports": generic_results.get("open_ports", []),
+            "open_ports": open_ports,
             "banners": generic_results.get("banners", {}),
             "tls": generic_results.get("tls", {}),
             "http_headers": self._extract_http_headers(web_results),
@@ -237,6 +260,16 @@ class ScanOrchestrator:
                 "longitude": geo_results.get("longitude"),
                 "asn_number": geo_results.get("asn_number"),
                 "asn_organization": geo_results.get("asn_organization")
+            }
+        
+        # Add debugging information if in debug mode  
+        if self.logger.isEnabledFor(logging.DEBUG):
+            legacy["_debug_info"] = {
+                "enabled_scanners": self.enabled_scanners,
+                "enabled_external_tools": self.enabled_external_tools,
+                "scan_results_keys": list(scan_results.keys()),
+                "external_tools_keys": list(external_tools.keys()),
+                "nmap_raw": nmap_data
             }
         
         return legacy

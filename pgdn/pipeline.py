@@ -97,6 +97,87 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
+    def run_scan_stage(
+        self, 
+        target: Optional[str] = None,
+        org_id: Optional[str] = None,
+        scan_level: int = 1,
+        protocol_filter: Optional[str] = None,
+        debug: bool = False,
+        enabled_scanners: Optional[List[str]] = None,
+        enabled_external_tools: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Run only the scanning stage with new orchestration approach.
+        
+        Args:
+            target: Optional specific target to scan (if provided, requires org_id)
+            org_id: Organization ID (required for target scanning)
+            scan_level: Scan level (1-3, default: 1)
+            protocol_filter: Optional protocol name filter
+            debug: Enable debug logging
+            enabled_scanners: Optional list of specific scanners to enable
+            enabled_external_tools: Optional list of specific external tools to enable
+            
+        Returns:
+            dict: Scan results
+        """
+        try:
+            # Use the new Scanner class with modular orchestration
+            from pgdn.scanner import Scanner
+            
+            scanner = Scanner(
+                self.config, 
+                protocol_filter=protocol_filter, 
+                debug=debug,
+                enabled_scanners=enabled_scanners,
+                enabled_external_tools=enabled_external_tools
+            )
+            
+            if target:
+                # Target scanning requires org_id
+                if not org_id:
+                    return {
+                        "success": False,
+                        "error": "Target scanning requires --org-id argument",
+                        "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
+                    }
+                
+                result = scanner.scan_target(target, org_id=org_id, scan_level=scan_level)
+                
+                # Wrap single target result in expected format
+                return {
+                    "success": result.get("success", False),
+                    "stage": "scan", 
+                    "operation": "target_scan",
+                    "target": target,
+                    "scan_level": scan_level,
+                    "scan_result": result,
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # Database scanning
+                result = scanner.scan_nodes_from_database(org_id=org_id, scan_level=scan_level)
+                
+                return {
+                    "success": result.get("success", False),
+                    "stage": "scan",
+                    "operation": "database_scan", 
+                    "results": result.get("results", []),
+                    "results_count": result.get("results_count", 0),
+                    "scan_level": scan_level,
+                    "protocol_filter": protocol_filter,
+                    "timestamp": datetime.now().isoformat()
+                }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "stage": "scan",
+                "error": f"Scanning stage failed: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }
+
     def run_process_stage(self, agent_name: Optional[str] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the processing stage.

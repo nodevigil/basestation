@@ -55,17 +55,18 @@ class QueueManager:
             'batch_generate_reports': batch_generate_reports_task,
         }
     
-    def queue_full_pipeline(self, recon_agents: Optional[List[str]] = None) -> str:
+    def queue_full_pipeline(self, recon_agents: Optional[List[str]] = None, org_id: Optional[str] = None) -> str:
         """
         Queue a full pipeline execution.
         
         Args:
             recon_agents: Optional list of specific recon agents to run
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Task ID
         """
-        task = self.tasks['run_full_pipeline'].delay(self.config_dict, recon_agents)
+        task = self.tasks['run_full_pipeline'].delay(self.config_dict, recon_agents, org_id)
         logger.info(f"Queued full pipeline task: {task.id}")
         return task.id
     
@@ -314,7 +315,8 @@ class QueueManager:
         targets: List[str], 
         max_parallel: int = 5,
         protocol_filter: Optional[str] = None,
-        debug: bool = False
+        debug: bool = False,
+        org_id: Optional[str] = None
     ) -> Dict[str, List[str]]:
         """
         Queue multiple scan targets in parallel.
@@ -324,6 +326,7 @@ class QueueManager:
             max_parallel: Maximum number of parallel scan tasks
             protocol_filter: Protocol filter for scanning
             debug: Enable debug logging
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Dictionary with task information
@@ -338,7 +341,7 @@ class QueueManager:
         
         # Queue individual target scans for maximum parallelism
         for target in targets:
-            task_id = self.queue_target_scan(target, debug)
+            task_id = self.queue_target_scan(target, debug, org_id=org_id)
             task_ids.append(task_id)
         
         logger.info(f"Queued {len(task_ids)} parallel scan tasks for {len(targets)} targets")

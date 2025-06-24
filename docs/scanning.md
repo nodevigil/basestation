@@ -419,3 +419,88 @@ The PGDN scanning system now provides:
 - **Comprehensive Testing**: Full test coverage across all functionality
 
 The system is production-ready and provides a solid foundation for future enhancements.
+
+## CLI Scan Type Selection
+
+For testing and debugging purposes, the CLI supports selective execution of specific scan components using the `--type` flag.
+
+### Available Scan Types
+
+```bash
+# Network and infrastructure scans
+pgdn --stage scan --target example.com --org-id myorg --type nmap           # External nmap tool only
+pgdn --stage scan --target example.com --org-id myorg --type generic       # Internal port scanner only
+pgdn --stage scan --target example.com --org-id myorg --type geo           # GeoIP lookup only
+
+# Service-specific scans  
+pgdn --stage scan --target example.com --org-id myorg --type web           # Web analysis only
+pgdn --stage scan --target example.com --org-id myorg --type whatweb       # Web tech fingerprinting only
+pgdn --stage scan --target example.com --org-id myorg --type ssl           # SSL/TLS analysis only
+
+# Security scans
+pgdn --stage scan --target example.com --org-id myorg --type vulnerability # CVE detection only
+pgdn --stage scan --target example.com --org-id myorg --type docker        # Docker exposure check only
+
+# Default behavior
+pgdn --stage scan --target example.com --org-id myorg --type full          # All scanners (default)
+```
+
+### Scan Type Reference
+
+| Type | Component | Use Case |
+|------|-----------|----------|
+| `nmap` | External nmap tool | Debug port scanning, verify network connectivity |
+| `generic` | GenericScanner module | Test internal scanning logic |
+| `geo` | GeoScanner module | Quick geographic lookups |
+| `web` | WebScanner module | Analyze HTTP/HTTPS services |
+| `whatweb` | WhatWeb external tool | Web technology fingerprinting |
+| `ssl` | SSL test external tool | Certificate and TLS analysis |
+| `vulnerability` | VulnerabilityScanner module | CVE lookup and assessment |
+| `docker` | Docker exposure checker | Docker API exposure detection |
+| `full` | All enabled components | Complete scanning (default) |
+
+### Debugging Examples
+
+**Port Scanning Issues**: Compare nmap vs internal scanner results
+```bash
+# Full nmap results (should show all ports)
+pgdn --stage scan --target example.com --org-id myorg --type nmap --debug
+
+# Internal scanner only (may show fewer ports due to fallback logic)
+pgdn --stage scan --target example.com --org-id myorg --type generic --debug
+```
+
+**Web Service Problems**: Isolate web-related scanning
+```bash
+# Web scanner module
+pgdn --stage scan --target example.com --org-id myorg --type web --debug
+
+# WhatWeb external tool
+pgdn --stage scan --target example.com --org-id myorg --type whatweb --debug
+```
+
+**Geographic Data**: Test GeoIP functionality
+```bash
+pgdn --stage scan --target 8.8.8.8 --org-id myorg --type geo
+```
+
+### Advanced Scanner Control
+
+For fine-grained control, use direct scanner and tool selection:
+
+```bash
+# Select specific scanner modules
+pgdn --stage scan --target example.com --org-id myorg --scanners generic web geo
+
+# Select specific external tools
+pgdn --stage scan --target example.com --org-id myorg --external-tools nmap whatweb
+
+# Combine modules and tools
+pgdn --stage scan --target example.com --org-id myorg --scanners vulnerability --external-tools nmap
+
+# Disable external tools completely
+pgdn --stage scan --target example.com --org-id myorg --external-tools
+```
+
+**Available Scanner Modules**: `generic`, `web`, `vulnerability`, `geo`, `sui`, `filecoin`  
+**Available External Tools**: `nmap`, `whatweb`, `ssl_test`, `docker_exposure`

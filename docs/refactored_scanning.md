@@ -196,3 +196,141 @@ The system maintains full backward compatibility:
 2. **Phase 2**: Update all calling code to use new interfaces
 3. **Phase 3**: Remove legacy compatibility layer
 4. **Phase 4**: Add advanced features (plugins, caching, etc.)
+
+## CLI Scan Types
+
+The PGDN CLI now supports selective scan type execution for testing and debugging purposes. This allows you to run specific scanners or external tools individually.
+
+### Scan Type Options
+
+Use the `--type` flag to specify which scan components to run:
+
+```bash
+# Available scan types
+pgdn --stage scan --target example.com --org-id myorg --type nmap
+pgdn --stage scan --target example.com --org-id myorg --type geo
+pgdn --stage scan --target example.com --org-id myorg --type generic
+pgdn --stage scan --target example.com --org-id myorg --type web
+pgdn --stage scan --target example.com --org-id myorg --type vulnerability
+pgdn --stage scan --target example.com --org-id myorg --type ssl
+pgdn --stage scan --target example.com --org-id myorg --type docker
+pgdn --stage scan --target example.com --org-id myorg --type whatweb
+pgdn --stage scan --target example.com --org-id myorg --type full  # Default behavior
+```
+
+### Scan Type Descriptions
+
+| Type | Description | What it runs |
+|------|-------------|--------------|
+| `nmap` | Network mapping only | External nmap tool only |
+| `geo` | GeoIP lookup only | GeoScanner only |
+| `generic` | Basic port scanning | GenericScanner only |
+| `web` | Web analysis only | WebScanner only |
+| `vulnerability` | CVE detection only | VulnerabilityScanner only |
+| `ssl` | SSL/TLS testing only | SSL test external tool only |
+| `docker` | Docker exposure check | Docker exposure checker only |
+| `whatweb` | Web technology fingerprinting | WhatWeb external tool only |
+| `full` | Complete scan | All enabled scanners and external tools (default) |
+
+### Advanced Scanner Selection
+
+For more granular control, you can also use the direct scanner selection options:
+
+```bash
+# Select specific scanners
+pgdn --stage scan --target example.com --org-id myorg --scanners generic web
+
+# Select specific external tools  
+pgdn --stage scan --target example.com --org-id myorg --external-tools nmap whatweb
+
+# Combine both
+pgdn --stage scan --target example.com --org-id myorg --scanners geo --external-tools nmap
+
+# Disable external tools completely
+pgdn --stage scan --target example.com --org-id myorg --external-tools
+```
+
+### Debugging Use Cases
+
+#### 1. **Port Scanning Issues**
+If you're seeing incorrect port results:
+```bash
+# Test nmap directly to see all ports
+pgdn --stage scan --target example.com --org-id myorg --type nmap --debug
+
+# Compare with generic scanner only
+pgdn --stage scan --target example.com --org-id myorg --type generic --debug
+```
+
+#### 2. **GeoIP Problems**
+Test geographic lookups in isolation:
+```bash
+pgdn --stage scan --target example.com --org-id myorg --type geo --debug
+```
+
+#### 3. **Web Service Detection**
+Debug web service fingerprinting:
+```bash
+# Test web scanner only
+pgdn --stage scan --target example.com --org-id myorg --type web --debug
+
+# Test WhatWeb tool only
+pgdn --stage scan --target example.com --org-id myorg --type whatweb --debug
+```
+
+#### 4. **SSL/TLS Issues**
+Isolate SSL certificate problems:
+```bash
+pgdn --stage scan --target example.com --org-id myorg --type ssl --debug
+```
+
+#### 5. **Vulnerability Detection**
+Test CVE lookup functionality:
+```bash
+pgdn --stage scan --target example.com --org-id myorg --type vulnerability --debug
+```
+
+### Example Output Comparison
+
+**Full scan** (default):
+```json
+{
+  "success": true,
+  "target": "example.com",
+  "scan_result": {
+    "open_ports": [22, 80, 443, 2375, 3306, 8080, 9000, 9184],
+    "geoip": {...},
+    "http_headers": {...},
+    "vulns": {...},
+    "nmap": {...}
+  }
+}
+```
+
+**Nmap only** (`--type nmap`):
+```json
+{
+  "success": true,
+  "target": "example.com", 
+  "scan_result": {
+    "open_ports": [22, 80, 443, 2375, 3306, 8080, 9000, 9184],
+    "nmap": {
+      "ports": [...]
+    }
+  }
+}
+```
+
+**Generic only** (`--type generic`):
+```json
+{
+  "success": true,
+  "target": "example.com",
+  "scan_result": {
+    "open_ports": [22, 80, 443, 2375, 3306],
+    "banners": {...}
+  }
+}
+```
+
+Notice how the nmap scan finds all 8 ports while the generic scanner only finds 5. This helps identify when fallback scanning is being used instead of full nmap.
