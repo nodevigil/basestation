@@ -37,14 +37,74 @@ class Scanner:
     
     def scan_target(self, target: str, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Scan a specific target (IP or hostname) directly.
+        Scan a specific target (IP or hostname) with orchestration workflow.
         
         Args:
             target: IP address or hostname to scan
-            org_id: Optional organization ID to filter agentic jobs
+            org_id: Organization ID (required for orchestration)
             
         Returns:
-            dict: Scan results including success status, resolved IP, and scan data
+            dict: Scan results or workflow instructions
+        """
+        # Organization ID is required for orchestration
+        if not org_id:
+            return {
+                "success": False,
+                "error": "Organization ID is required for target scanning",
+                "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
+            }
+        
+        try:
+            from services.node_orchestration import NodeOrchestrationService
+            
+            # Use orchestration service to validate request and determine workflow
+            orchestration = NodeOrchestrationService()
+            validation_result = orchestration.validate_scan_request(
+                org_id=org_id,
+                target=target,
+                protocol_filter=self.protocol_filter
+            )
+            
+            # If validation fails or discovery is required, return immediately
+            if not validation_result.get("success", False):
+                return validation_result
+            
+            # If we get here, we're ready to scan
+            node_id = validation_result.get("node_id")
+            protocol = validation_result.get("protocol")
+            
+            # Proceed with actual scanning
+            scan_result = self._perform_scan(target, org_id, protocol, node_id)
+            
+            # Update node status after scan
+            if node_id:
+                orchestration.update_node_after_scan(
+                    node_id=node_id,
+                    scan_successful=scan_result.get("success", False)
+                )
+            
+            return scan_result
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "target": target,
+                "error": f"Orchestration error: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def _perform_scan(self, target: str, org_id: str, protocol: Optional[str], node_id: Optional[str]) -> Dict[str, Any]:
+        """
+        Perform the actual scan using the existing scanning logic.
+        
+        Args:
+            target: IP address or hostname to scan
+            org_id: Organization ID
+            protocol: Protocol name (if determined)
+            node_id: Node UUID for tracking
+            
+        Returns:
+            dict: Scan results
         """
         try:
             from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
@@ -57,30 +117,37 @@ class Scanner:
                     "success": False,
                     "target": target,
                     "error": f"DNS resolution failed: {str(e)}",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "node_id": node_id
                 }
             
             # Create a mock node entry for the scanner agent
             import uuid
             
             # Determine source based on protocol filter
-            if self.protocol_filter:
+            if protocol:
+                source = f'{protocol}_manual_scan'
+                effective_protocol = protocol
+            elif self.protocol_filter:
                 source = f'{self.protocol_filter}_manual_scan'
+                effective_protocol = self.protocol_filter
             else:
                 source = 'manual_scan'
+                effective_protocol = None
             
             mock_node = {
                 'id': 0,
-                'uuid': str(uuid.uuid4()),  # Add UUID for scan results
+                'uuid': node_id or str(uuid.uuid4()),
                 'address': target,
                 'source': source,
                 'name': f'Direct scan of {target}',
-                'protocol_name': self.protocol_filter  # Add protocol info for consistency
+                'protocol_name': effective_protocol,
+                'org_id': org_id  # Add org_id for tracking
             }
             
             # Initialize scanner agent
             scanner_agent = NodeScannerAgent(self.config, 
-                                           protocol_filter=self.protocol_filter, 
+                                           protocol_filter=effective_protocol, 
                                            debug=self.debug)
             
             # Run the scan using the agent
@@ -92,15 +159,19 @@ class Scanner:
                     "target": target,
                     "resolved_ip": ip_address,
                     "scan_result": scan_results[0],
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "node_id": node_id,
+                    "org_id": org_id,
+                    "protocol": effective_protocol
                 }
             else:
                 return {
                     "success": False,
                     "target": target,
                     "resolved_ip": ip_address,
-                    "error": "Scan returned no results",
-                    "timestamp": datetime.now().isoformat()
+                    "error": "No scan results returned",
+                    "timestamp": datetime.now().isoformat(),
+                    "node_id": node_id
                 }
         
         except Exception as e:
@@ -108,7 +179,8 @@ class Scanner:
                 "success": False,
                 "target": target,
                 "error": f"Scan failed: {str(e)}",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "node_id": node_id
             }
     
     def scan_nodes_from_database(self, org_id: Optional[str] = None) -> Dict[str, Any]:

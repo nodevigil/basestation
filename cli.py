@@ -304,19 +304,44 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
         )
     
     elif stage == 'discovery':
-        if not args.host:
+        # Handle node-based discovery workflow
+        if args.node_id:
+            # Discovery for specific node (part of orchestration workflow)
+            if not args.host:
+                return {
+                    "success": False,
+                    "error": "Discovery with --node-id requires --host argument",
+                    "suggestion": "Example: pgdn --stage discovery --node-id abc123-def456 --host 192.168.1.1"
+                }
+            
+            try:
+                from pgdn.agent_modules.discovery.discovery_agent import DiscoveryAgent
+                discovery_agent = DiscoveryAgent(config)
+                
+                return discovery_agent.discover_node(
+                    node_id=args.node_id,
+                    host=args.host
+                )
+            except ImportError as e:
+                return {
+                    "success": False,
+                    "error": f"Discovery agent not available: {str(e)}"
+                }
+                
+        elif not args.host:
             return {
                 "success": False,
                 "error": "Discovery stage requires --host argument",
                 "suggestion": "Example: pgdn --stage discovery --host 192.168.1.1"
             }
-        
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_discovery_stage(
-            agent_name=args.agent or 'DiscoveryAgent',
-            host=args.host,
-            org_id=args.org_id
-        )
+        else:
+            # Legacy discovery mode
+            orchestrator = PipelineOrchestrator(config)
+            return orchestrator.run_discovery_stage(
+                agent_name=args.agent or 'DiscoveryAgent',
+                host=args.host,
+                org_id=args.org_id
+            )
     
     else:
         return {
@@ -600,6 +625,7 @@ Examples:
   pgdn --stage score                # Run only scoring
   pgdn --stage signature            # Generate protocol signatures
   pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
+  pgdn --stage discovery --node-id abc123-def456 --host 192.168.1.1 # Run discovery for specific node (orchestration workflow)
   pgdn --stage publish --scan-id 123   # Publish to blockchain ledger only (default behavior)
   pgdn --stage publish --scan-id 123 --publish-ledger  # Publish only to blockchain ledger (explicit)
   pgdn --stage publish --scan-id 123 --publish-report  # Publish reports to local files and Walrus storage (requires ledger to be published first)
@@ -623,6 +649,14 @@ Examples:
   pgdn --stage scan --org-id myorg  # Scan only nodes belonging to organization 'myorg'
   pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan target and associate with organization
   pgdn --stage report --org-id myorg # Generate reports only for organization's scans
+  
+  # Orchestration Workflow (when no protocol is known)
+  # 1. First scan attempt triggers discovery requirement:
+  pgdn --stage scan --target 192.168.1.1 --org-id myorg # Returns: "run-discovery" with node-id
+  # 2. Run discovery for the node:
+  pgdn --stage discovery --node-id <uuid> --host 192.168.1.1 # Identifies protocol and updates node
+  # 3. Re-run scan (now succeeds with discovered protocol):
+  pgdn --stage scan --target 192.168.1.1 --org-id myorg # Proceeds with scan using discovered protocol
   
   # Queue Operations (Background Processing)
   pgdn --queue                      # Queue full pipeline for background processing
@@ -693,6 +727,11 @@ Examples:
     parser.add_argument(
         '--host',
         help='Host/IP address for network topology discovery (required for discovery stage)'
+    )
+    
+    parser.add_argument(
+        '--node-id',
+        help='Node UUID for orchestration workflow (used with discovery stage)'
     )
     
     parser.add_argument(
