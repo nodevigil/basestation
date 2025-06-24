@@ -67,7 +67,7 @@ class NodeScannerAgent(ScanAgent):
     detection, SSL testing, and protocol-specific checks.
     """
     
-    def __init__(self, config: Optional[Config] = None, protocol_filter: Optional[str] = None, debug: bool = False):
+    def __init__(self, config: Optional[Config] = None, protocol_filter: Optional[str] = None, debug: bool = False, org_id: Optional[str] = None):
         """
         Initialize node scanner agent.
         
@@ -75,6 +75,7 @@ class NodeScannerAgent(ScanAgent):
             config: Configuration instance
             protocol_filter: Optional protocol to filter nodes by (e.g., 'filecoin', 'sui')
             debug: Enable debug logging for scanners
+            org_id: Optional organization ID to filter agentic jobs
         """
         super().__init__(config, "NodeScannerAgent")
         self.scan_interval_days = self.config.scanning.scan_interval_days
@@ -83,6 +84,7 @@ class NodeScannerAgent(ScanAgent):
         self.max_concurrent_scans = self.config.scanning.max_concurrent_scans
         self.protocol_filter = protocol_filter
         self.debug = debug
+        self.org_id = org_id
         
         # Initialize scanners
         self.generic_scanner = Scanner()
@@ -453,14 +455,18 @@ class NodeScannerAgent(ScanAgent):
             self.logger.error(f"Failed to get recent scans: {e}")
             return []
     
-    def run(self, nodes: Optional[List[Dict[str, Any]]] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+    def run(self, nodes: Optional[List[Dict[str, Any]]] = None, org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute node scanning.
         
         Args:
             nodes: Optional list of specific nodes to scan
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of scan results
         """
+        # Update org_id if provided
+        if org_id is not None:
+            self.org_id = org_id
         return self.scan_nodes(nodes)

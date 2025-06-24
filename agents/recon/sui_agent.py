@@ -284,11 +284,15 @@ class SuiReconAgent(ReconAgent):
             self.logger.error(f"❌ Failed to get Sui protocol: {e}")
             return None
 
-    def run(self, *args, **kwargs) -> List[Dict[str, Any]]:
+    def run(self, org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute Sui reconnaissance.
+        
+        Args:
+            org_id: Optional organization ID to filter agentic jobs
         
         Returns:
             List of discovered validator nodes
         """
+        # TODO: Implement org_id filtering for Sui reconnaissance
         return self.discover_nodes()

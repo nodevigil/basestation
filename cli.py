@@ -37,7 +37,7 @@ def setup_environment(config: Config) -> None:
     print("="*60)
 
 
-def run_full_pipeline(config: Config, recon_agents: Optional[List[str]] = None, json_output: bool = False):
+def run_full_pipeline(config: Config, recon_agents: Optional[List[str]] = None, json_output: bool = False, org_id: Optional[str] = None):
     """
     Run the complete four-stage pipeline.
     
@@ -45,6 +45,7 @@ def run_full_pipeline(config: Config, recon_agents: Optional[List[str]] = None, 
         config: Configuration instance
         recon_agents: Optional list of specific recon agents to run
         json_output: Whether to return JSON results instead of printing
+        org_id: Optional organization ID to filter agentic jobs
         
     Returns:
         dict: JSON results if json_output=True, None otherwise
@@ -60,7 +61,7 @@ def run_full_pipeline(config: Config, recon_agents: Optional[List[str]] = None, 
             print("   📤 Stage 4: Publishing (Results Output)")
             print()
         
-        results = orchestrator.run_full_pipeline(recon_agents=recon_agents)
+        results = orchestrator.run_full_pipeline(recon_agents=recon_agents, org_id=org_id)
         
         if json_output:
             return {
@@ -113,7 +114,8 @@ def run_single_stage(
     scan_id: Optional[int] = None,
     publish_ledger: bool = False,
     publish_report: bool = False,
-    json_output: bool = False
+    json_output: bool = False,
+    org_id: Optional[str] = None
 ):
     """
     Run a single pipeline stage.
@@ -130,6 +132,7 @@ def run_single_stage(
         publish_ledger: Publish only to blockchain ledger
         publish_report: Publish only reports
         json_output: Whether to return JSON results instead of printing
+        org_id: Optional organization ID to filter agentic jobs
         
     Returns:
         dict: JSON results if json_output=True, None otherwise
@@ -153,7 +156,7 @@ def run_single_stage(
         
         if stage == 'recon':
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_single_stage(stage, agent_names=recon_agents)
+            results = orchestrator.run_single_stage(stage, agent_names=recon_agents, org_id=org_id)
             if not json_output:
                 print(f"✅ Reconnaissance completed: {len(results)} nodes discovered")
                 
@@ -161,20 +164,20 @@ def run_single_stage(
             # For scanning, we'll use the scanner agent directly to support protocol filtering
             from agents.scan.node_scanner_agent import NodeScannerAgent
             
-            scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
+            scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug, org_id=org_id)
             results = scanner_agent.scan_nodes()
             if not json_output:
                 print(f"✅ Scanning completed: {len(results)} nodes scanned")
                 
         elif stage == 'process':
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_single_stage(stage, agent_name)
+            results = orchestrator.run_single_stage(stage, agent_name, org_id=org_id)
             if not json_output:
                 print(f"✅ Processing completed: {len(results)} results processed")
                 
         elif stage == 'score':
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_scoring_stage(agent_name or 'ScoringAgent', force_rescore=force_rescore)
+            results = orchestrator.run_scoring_stage(agent_name or 'ScoringAgent', force_rescore=force_rescore, org_id=org_id)
             if not json_output:
                 print(f"✅ Scoring completed: {len(results)} results scored")
                 
@@ -213,7 +216,7 @@ def run_single_stage(
                     print(f"🎯 Publishing to blockchain ledger for scan {scan_id}")
             
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_publish_stage(agent_name, scan_id=scan_id)
+            results = orchestrator.run_publish_stage(agent_name, scan_id=scan_id, org_id=org_id)
             if not json_output:
                 status = "Success" if results else "Failed"
                 print(f"✅ Publishing completed: {status}")
@@ -225,13 +228,13 @@ def run_single_stage(
                 'format': 'summary',  # Default to summary for single stage
                 'auto_save': False
             }
-            results = orchestrator.run_report_stage(agent_name or 'ReportAgent', report_options)
+            results = orchestrator.run_report_stage(agent_name or 'ReportAgent', report_options, org_id=org_id)
             if not json_output:
                 print(f"✅ Report generation completed successfully!")
         
         elif stage == 'signature':
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_signature_stage(agent_name or 'ProtocolSignatureGeneratorAgent')
+            results = orchestrator.run_signature_stage(agent_name or 'ProtocolSignatureGeneratorAgent', org_id=org_id)
             if not json_output:
                 print(f"✅ Protocol signature generation completed: {len(results)} signatures processed")
                 
@@ -245,7 +248,7 @@ def run_single_stage(
                     print("   Example: pgdn --stage discovery --host 192.168.1.1")
                     sys.exit(1)
             orchestrator = create_orchestrator(config)
-            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent', host=host)
+            results = orchestrator.run_discovery_stage(agent_name or 'DiscoveryAgent', host=host, org_id=org_id)
             if not json_output:
                 print(f"✅ Network topology discovery completed: {len(results)} discoveries processed")
                 
@@ -649,6 +652,11 @@ Examples:
         action='store_true',
         help='Queue the job for background processing using Celery (requires Redis/Celery worker)'
     )
+    
+    parser.add_argument(
+        '--org-id',
+        help='Organization ID to filter agentic jobs (optional)'
+    )
 
     parser.add_argument(
         '--task-id',
@@ -822,7 +830,7 @@ def load_config(args, json_output: bool = False) -> Config:
     return config
 
 
-def scan_target(config: Config, target: str, debug: bool = False, json_output: bool = False):
+def scan_target(config: Config, target: str, debug: bool = False, json_output: bool = False, org_id: Optional[str] = None):
     """
     Scan a specific target (IP or hostname) directly using the agent architecture.
     
@@ -831,6 +839,7 @@ def scan_target(config: Config, target: str, debug: bool = False, json_output: b
         target: IP address or hostname to scan
         debug: Enable debug logging
         json_output: Whether to return JSON results instead of printing
+        org_id: Optional organization ID to filter agentic jobs
         
     Returns:
         dict: JSON results if json_output=True, None otherwise
@@ -863,7 +872,7 @@ def scan_target(config: Config, target: str, debug: bool = False, json_output: b
         }
         
         # Initialize scanner agent
-        scanner_agent = NodeScannerAgent(config, debug=debug)
+        scanner_agent = NodeScannerAgent(config, debug=debug, org_id=org_id)
         
         if not json_output:
             print(f"🛡️  Running comprehensive security scan...")
@@ -1074,7 +1083,7 @@ def list_task_status(json_output: bool = False):
             print(f"❌ {error_msg}")
 
 
-def run_with_queue(config: Config, args, json_output: bool = False):
+def run_with_queue(config: Config, args, json_output: bool = False, org_id: Optional[str] = None):
     """
     Run operations using Celery queue.
     
@@ -1211,7 +1220,7 @@ def run_with_queue(config: Config, args, json_output: bool = False):
             sys.exit(1)
 
 
-def run_parallel_scans(config: Config, targets: List[str], args, json_output: bool = False):
+def run_parallel_scans(config: Config, targets: List[str], args, json_output: bool = False, org_id: Optional[str] = None):
     """
     Run parallel scans for multiple targets.
     
@@ -1306,7 +1315,7 @@ def run_parallel_scans(config: Config, targets: List[str], args, json_output: bo
             import concurrent.futures
             import threading
             
-            scanner_agent = NodeScannerAgent(config, protocol_filter=args.protocol, debug=args.debug)
+            scanner_agent = NodeScannerAgent(config, protocol_filter=args.protocol, debug=args.debug, org_id=org_id)
             
             def scan_target(target):
                 try:
@@ -1944,7 +1953,7 @@ def main():
         
         # Check if queue mode is requested
         if args.queue:
-            result = run_with_queue(config, args, json_output=json_output)
+            result = run_with_queue(config, args, json_output=json_output, org_id=getattr(args, 'org_id', None))
             if json_output and result:
                 print(json.dumps(result, indent=2))
             return
@@ -1956,7 +1965,7 @@ def main():
         # Run pipeline based on arguments
         if args.scan_target:
             # Scan specific target
-            result = scan_target(config, args.scan_target, args.debug, json_output=json_output)
+            result = scan_target(config, args.scan_target, args.debug, json_output=json_output, org_id=getattr(args, 'org_id', None))
             if json_output and result:
                 print(json.dumps(result, indent=2))
         elif args.stage:
@@ -1973,13 +1982,14 @@ def main():
                 args.scan_id,
                 args.publish_ledger,
                 args.publish_report,
-                json_output=json_output
+                json_output=json_output,
+                org_id=getattr(args, 'org_id', None)
             )
             if json_output and result:
                 print(json.dumps(result, indent=2))
         else:
             # Run full pipeline
-            result = run_full_pipeline(config, args.recon_agents, json_output=json_output)
+            result = run_full_pipeline(config, args.recon_agents, json_output=json_output, org_id=getattr(args, 'org_id', None))
             if json_output and result:
                 print(json.dumps(result, indent=2))
         

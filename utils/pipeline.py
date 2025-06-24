@@ -58,7 +58,8 @@ class PipelineOrchestrator:
         recon_agents: Optional[List[str]] = None,
         scan_agent: str = "NodeScannerAgent",
         process_agent: str = "ProcessorAgent",
-        publish_agent: str = "PublisherAgent"
+        publish_agent: str = "PublisherAgent",
+        org_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Run the complete four-stage pipeline.
@@ -68,6 +69,7 @@ class PipelineOrchestrator:
             scan_agent: Name of scan agent to use
             process_agent: Name of process agent to use
             publish_agent: Name of publish agent to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Pipeline execution results
@@ -78,19 +80,19 @@ class PipelineOrchestrator:
         
         try:
             # Stage 1: Reconnaissance
-            recon_results = self.run_recon_stage(recon_agents)
+            recon_results = self.run_recon_stage(recon_agents, org_id=org_id)
             self.stage_results['recon'] = recon_results
             
             # Stage 2: Scanning
-            scan_results = self.run_scan_stage(scan_agent)
+            scan_results = self.run_scan_stage(scan_agent, org_id=org_id)
             self.stage_results['scan'] = scan_results
             
             # Stage 3: Processing
-            process_results = self.run_process_stage(process_agent)
+            process_results = self.run_process_stage(process_agent, org_id=org_id)
             self.stage_results['process'] = process_results
             
             # Stage 4: Publishing
-            publish_results = self.run_publish_stage(publish_agent, process_results)
+            publish_results = self.run_publish_stage(publish_agent, process_results, org_id=org_id)
             self.stage_results['publish'] = publish_results
             
             self.end_time = datetime.utcnow()
@@ -156,12 +158,13 @@ class PipelineOrchestrator:
             # Restore original mode
             self.config.scanning.max_concurrent_scans = original_mode
     
-    def run_recon_stage(self, agent_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def run_recon_stage(self, agent_names: Optional[List[str]] = None, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the reconnaissance stage.
         
         Args:
             agent_names: List of recon agent names to run. If None, runs all available.
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Combined results from all recon agents
@@ -185,7 +188,7 @@ class PipelineOrchestrator:
                 agent = self.agent_registry.create_recon_agent(agent_name, self.config)
                 
                 if agent:
-                    results = agent.execute()
+                    results = agent.execute(org_id=org_id)
                     all_results.extend(results)
                     self.logger.info(f"✅ {agent_name} discovered {len(results)} nodes")
                 else:
@@ -197,12 +200,13 @@ class PipelineOrchestrator:
         self.logger.info(f"🔍 Reconnaissance stage completed: {len(all_results)} total nodes discovered")
         return all_results
     
-    def run_scan_stage(self, agent_name: str = "NodeScannerAgent") -> List[Dict[str, Any]]:
+    def run_scan_stage(self, agent_name: str = "NodeScannerAgent", org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the scanning stage.
         
         Args:
             agent_name: Name of scan agent to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Scan results
@@ -216,7 +220,7 @@ class PipelineOrchestrator:
                 raise Exception(f"Failed to create scan agent: {agent_name}")
             
             # Run scanning (agent will load nodes needing scans from database)
-            results = agent.execute()
+            results = agent.execute(org_id=org_id)
             
             self.logger.info(f"🛡️  Scanning stage completed: {len(results)} nodes scanned")
             return results
@@ -225,12 +229,13 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running scan agent {agent_name}: {e}")
             return []
     
-    def run_process_stage(self, agent_name: str = "ProcessorAgent") -> List[Dict[str, Any]]:
+    def run_process_stage(self, agent_name: str = "ProcessorAgent", org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the processing stage.
         
         Args:
             agent_name: Name of process agent to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Processed results
@@ -244,7 +249,7 @@ class PipelineOrchestrator:
                 raise Exception(f"Failed to create process agent: {agent_name}")
             
             # Run processing (agent will load unprocessed results from database)
-            results = agent.execute()
+            results = agent.execute(org_id=org_id)
             
             self.logger.info(f"📊 Processing stage completed: {len(results)} results processed")
             return results
@@ -257,7 +262,8 @@ class PipelineOrchestrator:
         self,
         agent_name: str = "PublisherAgent",
         processed_results: Optional[List[Dict[str, Any]]] = None,
-        scan_id: Optional[int] = None
+        scan_id: Optional[int] = None,
+        org_id: Optional[str] = None
     ) -> bool:
         """
         Run the publishing stage.
@@ -266,6 +272,7 @@ class PipelineOrchestrator:
             agent_name: Name of publish agent to use
             processed_results: Results to publish. If None, loads from database.
             scan_id: Specific scan ID to publish results for
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             True if publishing succeeded, False otherwise
@@ -295,13 +302,14 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running publish agent {agent_name}: {e}")
             return False
     
-    def run_scoring_stage(self, agent_name: str = "ScoringAgent", force_rescore: bool = False) -> List[Dict[str, Any]]:
+    def run_scoring_stage(self, agent_name: str = "ScoringAgent", force_rescore: bool = False, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the scoring stage independently.
         
         Args:
             agent_name: Name of scoring agent to use
             force_rescore: Whether to re-score results that already have scores
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Scored results
@@ -323,13 +331,14 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running scoring agent {agent_name}: {e}")
             return []
     
-    def run_report_stage(self, agent_name: str = "ReportAgent", report_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def run_report_stage(self, agent_name: str = "ReportAgent", report_options: Optional[Dict[str, Any]] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run the report generation stage independently.
         
         Args:
             agent_name: Name of report agent to use
             report_options: Report generation options (input_file, output_file, format, scan_id, force_report, etc.)
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             Report generation results
@@ -367,12 +376,13 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running report agent {agent_name}: {e}")
             return {}
     
-    def run_signature_stage(self, agent_name: str = "ProtocolSignatureGeneratorAgent") -> List[Dict[str, Any]]:
+    def run_signature_stage(self, agent_name: str = "ProtocolSignatureGeneratorAgent", org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the protocol signature generation stage independently.
         
         Args:
             agent_name: Name of signature agent to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of processed results with signature information
@@ -417,7 +427,7 @@ class PipelineOrchestrator:
             self.logger.error(f"❌ Error running signature agent {agent_name}: {e}")
             return []
     
-    def run_discovery_stage(self, agent_name: str = "DiscoveryAgent", host: Optional[str] = None, force: bool = False) -> List[Dict[str, Any]]:
+    def run_discovery_stage(self, agent_name: str = "DiscoveryAgent", host: Optional[str] = None, force: bool = False, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Run the network discovery stage independently.
         
@@ -425,6 +435,7 @@ class PipelineOrchestrator:
             agent_name: Name of discovery agent to use
             host: Target host for discovery (IP address or hostname)
             force: Force discovery even if host was recently scanned
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of processed results with discovery information
@@ -458,7 +469,7 @@ class PipelineOrchestrator:
         Args:
             stage: Stage name ('recon', 'scan', 'process', 'score', 'report', 'signature', 'publish')
             agent_name: Specific agent name to use
-            **stage_args: Additional arguments for the stage
+            **stage_args: Additional arguments for the stage (including org_id)
             
         Returns:
             Stage execution results
@@ -467,30 +478,42 @@ class PipelineOrchestrator:
         
         if stage == 'recon':
             agent_names = stage_args.get('agent_names', [agent_name] if agent_name else None)
-            return self.run_recon_stage(agent_names)
+            org_id = stage_args.get('org_id')
+            return self.run_recon_stage(agent_names, org_id=org_id)
         
         elif stage == 'scan':
-            return self.run_scan_stage(agent_name or "NodeScannerAgent")
+            org_id = stage_args.get('org_id')
+            return self.run_scan_stage(agent_name or "NodeScannerAgent", org_id=org_id)
         
         elif stage == 'process':
-            return self.run_process_stage(agent_name or "ProcessorAgent")
+            org_id = stage_args.get('org_id')
+            return self.run_process_stage(agent_name or "ProcessorAgent", org_id=org_id)
         
         elif stage == 'score':
-            return self.run_scoring_stage(agent_name or "ScoringAgent")
+            org_id = stage_args.get('org_id')
+            force_rescore = stage_args.get('force_rescore', False)
+            return self.run_scoring_stage(agent_name or "ScoringAgent", force_rescore=force_rescore, org_id=org_id)
         
         elif stage == 'publish':
             processed_results = stage_args.get('processed_results')
-            return self.run_publish_stage(agent_name or "PublisherAgent", processed_results)
+            scan_id = stage_args.get('scan_id')
+            org_id = stage_args.get('org_id')
+            return self.run_publish_stage(agent_name or "PublisherAgent", processed_results, scan_id=scan_id, org_id=org_id)
         
         elif stage == 'report':
             report_options = stage_args.get('report_options')
-            return self.run_report_stage(agent_name or "ReportAgent", report_options)
+            org_id = stage_args.get('org_id')
+            return self.run_report_stage(agent_name or "ReportAgent", report_options, org_id=org_id)
         
         elif stage == 'signature':
-            return self.run_signature_stage(agent_name or "ProtocolSignatureGeneratorAgent")
+            org_id = stage_args.get('org_id')
+            return self.run_signature_stage(agent_name or "ProtocolSignatureGeneratorAgent", org_id=org_id)
         
         elif stage == 'discovery':
-            return self.run_discovery_stage(agent_name or "DiscoveryAgent")
+            host = stage_args.get('host')
+            force = stage_args.get('force', False)
+            org_id = stage_args.get('org_id')
+            return self.run_discovery_stage(agent_name or "DiscoveryAgent", host=host, force=force, org_id=org_id)
         
         else:
             raise ValueError(f"Unknown stage: {stage}")

@@ -397,14 +397,16 @@ class ProcessorAgent(ProcessAgent):
             self.logger.error(f"Failed to get processed results: {e}")
             return []
     
-    def run(self, scan_results: Optional[List[Dict[str, Any]]] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+    def run(self, scan_results: Optional[List[Dict[str, Any]]] = None, org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute result processing.
         
         Args:
             scan_results: Optional list of scan results to process
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             List of processed results
         """
+        # TODO: Implement org_id filtering for processing
         return self.process_results(scan_results)

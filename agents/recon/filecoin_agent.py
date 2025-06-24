@@ -251,10 +251,14 @@ class FilecoinReconAgent(ReconAgent):
             self.logger.error(f"❌ Failed to get Filecoin protocol: {e}")
             return None
 
-    def run(self, *args, **kwargs) -> List[Dict[str, Any]]:
+    def run(self, org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Execute Filecoin reconnaissance.
         Discovers peers from Docker and public APIs.
+        
+        Args:
+            org_id: Optional organization ID to filter agentic jobs
         """
+        # TODO: Implement org_id filtering for Filecoin reconnaissance
         return self.discover_nodes()
 

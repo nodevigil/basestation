@@ -37,11 +37,14 @@ class BaseAgent(ABC):
         return logger
     
     @abstractmethod
-    def run(self, *args, **kwargs) -> Any:
+    def run(self, org_id: Optional[str] = None, *args, **kwargs) -> Any:
         """
         Main execution method for the agent.
         
         This method must be implemented by all concrete agent classes.
+        
+        Args:
+            org_id: Optional organization ID to filter agentic jobs
         
         Returns:
             Results from agent execution
@@ -125,8 +128,14 @@ class ScanAgent(BaseAgent):
         """
         pass
     
-    def run(self, nodes: List[Dict[str, Any]], *args, **kwargs) -> List[Dict[str, Any]]:
-        """Execute node scanning."""
+    def run(self, nodes: List[Dict[str, Any]], org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Execute node scanning.
+        
+        Args:
+            nodes: List of nodes to scan
+            org_id: Optional organization ID to filter agentic jobs
+        """
         return self.scan_nodes(nodes)
 
 
@@ -146,8 +155,14 @@ class ProcessAgent(BaseAgent):
         """
         pass
     
-    def run(self, scan_results: List[Dict[str, Any]], *args, **kwargs) -> List[Dict[str, Any]]:
-        """Execute result processing."""
+    def run(self, scan_results: List[Dict[str, Any]], org_id: Optional[str] = None, *args, **kwargs) -> List[Dict[str, Any]]:
+        """
+        Execute result processing.
+        
+        Args:
+            scan_results: Raw scan results  
+            org_id: Optional organization ID to filter agentic jobs
+        """
         return self.process_results(scan_results)
 
 
@@ -187,8 +202,14 @@ class PublishAgent(BaseAgent):
         else:
             raise ValueError("Either processed_results or scan_id must be provided")
     
-    def run(self, processed_results: Optional[List[Dict[str, Any]]] = None, *args, **kwargs) -> bool:
-        """Execute result publishing."""
+    def run(self, processed_results: Optional[List[Dict[str, Any]]] = None, org_id: Optional[str] = None, *args, **kwargs) -> bool:
+        """
+        Execute result publishing.
+        
+        Args:
+            processed_results: Processed scan results
+            org_id: Optional organization ID to filter agentic jobs
+        """
         if processed_results is not None:
             return self.publish_results(processed_results)
         else:
