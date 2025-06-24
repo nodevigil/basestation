@@ -47,7 +47,6 @@
 - **Dynamic Registry**: Runtime scanner registration and management
 
 ### 5. **Maintained Backward Compatibility**
-- **Legacy Imports**: `from scanning.scanner import Scanner` still works
 - **Same Interface**: Existing `scan()` method signature preserved
 - **Result Format**: Legacy result format maintained for compatibility
 - **Static Methods**: Methods like `get_web_ports_and_schemes()` available
@@ -117,14 +116,6 @@ from pgdn.scanning.scan_orchestrator import ScanOrchestrator
 config = {...}  # From config.json
 orchestrator = ScanOrchestrator(config)
 results = orchestrator.scan("192.168.1.1")
-```
-
-### Legacy Usage (Still Works)
-```python
-from scanning.scanner import Scanner
-
-scanner = Scanner()
-results = scanner.scan("192.168.1.1")
 ```
 
 ### Custom Scanner Creation

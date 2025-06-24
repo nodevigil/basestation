@@ -74,14 +74,9 @@ The new scanning system addresses the following issues from the original impleme
 
 ### For Existing Code
 
-The system maintains backward compatibility:
+The system provides a new recommended approach:
 
 ```python
-# Old way (still works)
-from scanning.scanner import Scanner
-scanner = Scanner()
-result = scanner.scan("192.168.1.1")
-
 # New way (recommended)
 from pgdn.scanning.scan_orchestrator import ScanOrchestrator
 orchestrator = ScanOrchestrator(config)

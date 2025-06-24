@@ -6,6 +6,11 @@ from celery.utils.log import get_task_logger
 from typing import Dict, Any, List, Optional
 import traceback
 
+# Add required imports for the updated Scanner
+from pgdn.core.config import Config
+from pgdn.core.logging import setup_logging
+from pgdn.core.database import create_tables
+
 logger = get_task_logger(__name__)
 
 # Import the celery app
@@ -39,15 +44,15 @@ def batch_scan_nodes_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.scanner import Scanner
         
         logger.info(f"Batch scanning {len(node_batch)} nodes")
         
-        # Initialize scanner agent
-        scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
+        # Initialize scanner with new modular system
+        scanner = Scanner(config, protocol_filter=protocol_filter, debug=debug)
         
-        # Run scans for the batch
-        scan_results = scanner_agent.scan_nodes(node_batch)
+        # Run scans for the batch using the database scan method
+        scan_results = scanner.scan_nodes_from_database()
         
         logger.info(f"Batch scan completed for {len(node_batch)} nodes")
         return {
@@ -91,15 +96,20 @@ def scan_single_node_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.scanner import Scanner
         
         logger.info(f"Scanning single node: {node_data.get('address', 'unknown')}")
         
-        # Initialize scanner agent
-        scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
+        # Initialize scanner with new modular system
+        scanner = Scanner(config, protocol_filter=protocol_filter, debug=debug)
         
         # Run scan for the single node
-        scan_results = scanner_agent.scan_nodes([node_data])
+        target_address = node_data.get('address')
+        if target_address:
+            scan_result = scanner.scan_target(target_address)
+            scan_results = [scan_result] if scan_result else []
+        else:
+            scan_results = []
         
         logger.info(f"Single node scan completed")
         return {
@@ -149,12 +159,12 @@ def parallel_target_scans_task(
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.scanner import Scanner
         
         logger.info(f"Parallel scanning {len(targets)} targets with max_concurrent={max_concurrent}")
         
-        # Initialize scanner agent
-        scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
+        # Initialize scanner with new modular system
+        scanner = Scanner(config, protocol_filter=protocol_filter, debug=debug)
         
         # Create semaphore to limit concurrent scans
         semaphore = Semaphore(max_concurrent)
@@ -176,12 +186,12 @@ def parallel_target_scans_task(
                         'name': f'Parallel scan of {target}'
                     }
                     
-                    results = scanner_agent.scan_nodes([mock_node])
+                    result = scanner.scan_target(target)
                     logger.info(f"Completed scan for {target}")
                     return {
                         'target': target,
-                        'success': True,
-                        'result': results[0] if results else None
+                        'success': result.get('success', False) if result else False,
+                        'result': result
                     }
                     
                 except Exception as e:
