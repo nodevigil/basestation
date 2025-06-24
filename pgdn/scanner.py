@@ -35,12 +35,13 @@ class Scanner:
         self.protocol_filter = protocol_filter
         self.debug = debug
     
-    def scan_target(self, target: str) -> Dict[str, Any]:
+    def scan_target(self, target: str, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Scan a specific target (IP or hostname) directly.
         
         Args:
             target: IP address or hostname to scan
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Scan results including success status, resolved IP, and scan data
@@ -75,7 +76,7 @@ class Scanner:
                                            debug=self.debug)
             
             # Run the scan using the agent
-            scan_results = scanner_agent.scan_nodes([mock_node])
+            scan_results = scanner_agent.scan_nodes([mock_node], org_id=org_id)
             
             if scan_results:
                 return {
@@ -102,9 +103,12 @@ class Scanner:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def scan_nodes_from_database(self) -> Dict[str, Any]:
+    def scan_nodes_from_database(self, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Scan nodes discovered in the database using the scan stage.
+        
+        Args:
+            org_id: Optional organization ID to filter agentic jobs
         
         Returns:
             dict: Scan results including success status and scan data
@@ -115,7 +119,7 @@ class Scanner:
             scanner_agent = NodeScannerAgent(self.config, 
                                            protocol_filter=self.protocol_filter, 
                                            debug=self.debug)
-            results = scanner_agent.scan_nodes()
+            results = scanner_agent.scan_nodes(org_id=org_id)
             
             return {
                 "success": True,
@@ -135,13 +139,14 @@ class Scanner:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5) -> Dict[str, Any]:
+    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Scan multiple targets in parallel.
         
         Args:
             targets: List of targets to scan
             max_parallel: Maximum number of parallel scans
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Parallel scan results
@@ -155,7 +160,7 @@ class Scanner:
         
         def scan_single_target(target):
             """Helper function for parallel execution."""
-            result = self.scan_target(target)
+            result = self.scan_target(target, org_id=org_id)
             return {
                 "target": target,
                 "success": result["success"],

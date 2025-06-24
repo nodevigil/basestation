@@ -173,7 +173,8 @@ class ParallelOperations:
                                     force_rescore: bool = False,
                                     host: Optional[str] = None,
                                     use_queue: bool = False,
-                                    wait_for_completion: bool = False) -> Dict[str, Any]:
+                                    wait_for_completion: bool = False,
+                                    org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Coordinate a complete parallel operation based on provided parameters.
         
@@ -190,6 +191,7 @@ class ParallelOperations:
             host: Host for discovery stage
             use_queue: Whether to use queue
             wait_for_completion: Whether to wait for completion
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Coordination results
@@ -206,7 +208,8 @@ class ParallelOperations:
                         'protocol_filter': protocol_filter,
                         'debug': debug,
                         'force_rescore': force_rescore,
-                        'host': host
+                        'host': host,
+                        'org_id': org_id
                     }
                 
                 return self.run_parallel_stages(
@@ -220,7 +223,7 @@ class ParallelOperations:
                     targets = load_targets_from_file(target_file)
                 
                 return self.run_parallel_scans(
-                    targets, max_parallel, protocol_filter, debug, use_queue, wait_for_completion
+                    targets, max_parallel, protocol_filter, debug, use_queue, wait_for_completion, org_id=org_id
                 )
             
             else:

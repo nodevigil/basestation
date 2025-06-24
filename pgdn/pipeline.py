@@ -37,19 +37,20 @@ class PipelineOrchestrator:
             self._orchestrator = create_orchestrator(self.config)
         return self._orchestrator
     
-    def run_full_pipeline(self, recon_agents: Optional[List[str]] = None) -> Dict[str, Any]:
+    def run_full_pipeline(self, recon_agents: Optional[List[str]] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run the complete four-stage pipeline.
         
         Args:
             recon_agents: Optional list of specific recon agents to run
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Pipeline execution results including success status, execution_id,
                   timing, and stage results
         """
         try:
-            results = self.orchestrator.run_full_pipeline(recon_agents=recon_agents)
+            results = self.orchestrator.run_full_pipeline(recon_agents=recon_agents, org_id=org_id)
             
             return {
                 "success": results['success'],
@@ -66,18 +67,19 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_recon_stage(self, agent_names: Optional[List[str]] = None) -> Dict[str, Any]:
+    def run_recon_stage(self, agent_names: Optional[List[str]] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the reconnaissance stage.
         
         Args:
             agent_names: Optional list of specific recon agents to run
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Reconnaissance results
         """
         try:
-            results = self.orchestrator.run_single_stage('recon', agent_names=agent_names)
+            results = self.orchestrator.run_single_stage('recon', agent_names=agent_names, org_id=org_id)
             
             return {
                 "success": True,
@@ -95,18 +97,19 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_process_stage(self, agent_name: Optional[str] = None) -> Dict[str, Any]:
+    def run_process_stage(self, agent_name: Optional[str] = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the processing stage.
         
         Args:
             agent_name: Optional specific agent name to use
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Processing results
         """
         try:
-            results = self.orchestrator.run_single_stage('process', agent_name)
+            results = self.orchestrator.run_single_stage('process', agent_name, org_id=org_id)
             
             return {
                 "success": True,
@@ -124,19 +127,20 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_scoring_stage(self, agent_name: str = 'ScoringAgent', force_rescore: bool = False) -> Dict[str, Any]:
+    def run_scoring_stage(self, agent_name: str = 'ScoringAgent', force_rescore: bool = False, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the scoring stage.
         
         Args:
             agent_name: Agent name to use for scoring
             force_rescore: Whether to force re-scoring of existing results
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Scoring results
         """
         try:
-            results = self.orchestrator.run_scoring_stage(agent_name, force_rescore=force_rescore)
+            results = self.orchestrator.run_scoring_stage(agent_name, force_rescore=force_rescore, org_id=org_id)
             
             return {
                 "success": True,
@@ -154,19 +158,20 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_publish_stage(self, agent_name: str, scan_id: int) -> Dict[str, Any]:
+    def run_publish_stage(self, agent_name: str, scan_id: int, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the publishing stage.
         
         Args:
             agent_name: Agent name to use for publishing ('PublishLedgerAgent' or 'PublishReportAgent')
             scan_id: Scan ID to publish results for
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Publishing results
         """
         try:
-            results = self.orchestrator.run_publish_stage(agent_name, scan_id=scan_id)
+            results = self.orchestrator.run_publish_stage(agent_name, scan_id=scan_id, org_id=org_id)
             
             return {
                 "success": True,
@@ -187,18 +192,19 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_signature_stage(self, agent_name: str = 'ProtocolSignatureGeneratorAgent') -> Dict[str, Any]:
+    def run_signature_stage(self, agent_name: str = 'ProtocolSignatureGeneratorAgent', org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the signature generation stage.
         
         Args:
             agent_name: Agent name to use for signature generation
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Signature generation results
         """
         try:
-            results = self.orchestrator.run_signature_stage(agent_name)
+            results = self.orchestrator.run_signature_stage(agent_name, org_id=org_id)
             
             return {
                 "success": True,
@@ -216,13 +222,14 @@ class PipelineOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def run_discovery_stage(self, agent_name: str = 'DiscoveryAgent', host: str = None) -> Dict[str, Any]:
+    def run_discovery_stage(self, agent_name: str = 'DiscoveryAgent', host: str = None, org_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Run only the network topology discovery stage.
         
         Args:
             agent_name: Agent name to use for discovery
             host: Host/IP address for network topology discovery
+            org_id: Optional organization ID to filter agentic jobs
             
         Returns:
             dict: Discovery results
@@ -236,7 +243,7 @@ class PipelineOrchestrator:
             }
         
         try:
-            results = self.orchestrator.run_discovery_stage(agent_name, host=host)
+            results = self.orchestrator.run_discovery_stage(agent_name, host=host, org_id=org_id)
             
             return {
                 "success": True,
