@@ -158,19 +158,98 @@ class SuiSpecificScanner:
         self.logger.debug(f"❌ No version endpoints found for {ip}")
         return {"version_exposed": False}
 
-    def scan(self, ip):
+    def scan(self, ip, scan_level: int = 1):
         """
-        Runs all Sui-specific checks on a given IP.
-        """
-        self.logger.info(f"🚀 Starting Sui-specific scan for {ip}")
-        self.logger.debug(f"Scan configuration - timeout: {self.timeout}s, debug: {self.debug}")
+        Runs Sui-specific checks based on scan level.
         
-        result = {"ip": ip}
-        result.update(self.check_metrics_endpoint(ip))
-        result.update(self.check_rpc_endpoint(ip))
+        Args:
+            ip: Target IP address
+            scan_level: Scan level (1-3) determining aggressiveness
+        """
+        self.logger.info(f"🚀 Starting Sui scan for {ip} at level {scan_level}")
+        
+        if scan_level == 1:
+            return self._scan_level_1(ip)
+        elif scan_level == 2:
+            return self._scan_level_2(ip)
+        elif scan_level == 3:
+            return self._scan_level_3(ip)
+        else:
+            raise ValueError(f"Invalid scan_level: {scan_level}. Must be 1, 2, or 3.")
+    
+    def _scan_level_1(self, ip):
+        """Level 1: Basic node metadata and version check."""
+        self.logger.info(f"🔍 Level 1 Sui scan for {ip}")
+        
+        result = {
+            "ip": ip, 
+            "scan_level": 1,
+            "scanner_type": "sui"
+        }
+        
+        # Basic version and node info
         result.update(self.check_version(ip))
         
-        self.logger.info(f"✅ Sui scan completed for {ip}: metrics={result.get('metrics_exposed', False)}, rpc={result.get('rpc_exposed', False)}")
-        self.logger.debug(f"Final scan results: {result}")
+        # Basic metrics check
+        metrics_result = self.check_metrics_endpoint(ip)
+        result.update(metrics_result)
         
+        self.logger.info(f"✅ Level 1 Sui scan completed for {ip}")
+        return result
+    
+    def _scan_level_2(self, ip):
+        """Level 2: Enhanced checks including RPC and validator health."""
+        self.logger.info(f"🔍 Level 2 Sui scan for {ip}")
+        
+        result = {
+            "ip": ip,
+            "scan_level": 2, 
+            "scanner_type": "sui"
+        }
+        
+        # All level 1 checks
+        result.update(self.check_version(ip))
+        result.update(self.check_metrics_endpoint(ip))
+        
+        # Level 2 specific: RPC endpoint checks
+        result.update(self.check_rpc_endpoint(ip))
+        
+        # Enhanced validator health check
+        validator_health = self._check_validator_health_basic(ip)
+        if validator_health:
+            result.update(validator_health)
+        
+        self.logger.info(f"✅ Level 2 Sui scan completed for {ip}")
+        return result
+    
+    def _scan_level_3(self, ip):
+        """Level 3: Deep protocol inspection with transaction testing."""
+        self.logger.info(f"🔍 Level 3 Sui scan for {ip}")
+        
+        result = {
+            "ip": ip,
+            "scan_level": 3,
+            "scanner_type": "sui"
+        }
+        
+        # All level 2 checks
+        result.update(self.check_version(ip))
+        result.update(self.check_metrics_endpoint(ip))
+        result.update(self.check_rpc_endpoint(ip))
+        
+        # Level 3 specific: deep protocol inspection
+        validator_config = self._check_validator_config(ip)
+        if validator_config:
+            result["validator_config"] = validator_config
+        
+        chain_stats = self._query_chain_stats(ip)
+        if chain_stats:
+            result["chain_stats"] = chain_stats
+        
+        # Test transaction simulation (safe testnet operations)
+        tx_test = self._test_dummy_transaction(ip)
+        if tx_test:
+            result["transaction_test"] = tx_test
+        
+        self.logger.info(f"✅ Level 3 Sui scan completed for {ip}")
         return result

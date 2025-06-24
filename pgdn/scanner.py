@@ -2,7 +2,7 @@
 Scanner Module
 
 Provides scanning functionality for individual targets and bulk scanning operations.
-This module abstracts scanning logic from CLI concerns.
+This module now uses the new modular scanning system with ScanOrchestrator.
 """
 
 import socket
@@ -35,13 +35,14 @@ class Scanner:
         self.protocol_filter = protocol_filter
         self.debug = debug
     
-    def scan_target(self, target: str, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_target(self, target: str, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
         Scan a specific target (IP or hostname) with orchestration workflow.
         
         Args:
             target: IP address or hostname to scan
             org_id: Organization ID (required for orchestration)
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Scan results or workflow instructions
@@ -74,7 +75,7 @@ class Scanner:
             protocol = validation_result.get("protocol")
             
             # Proceed with actual scanning
-            scan_result = self._perform_scan(target, org_id, protocol, node_id)
+            scan_result = self._perform_scan(target, org_id, protocol, node_id, scan_level)
             
             # Update node status after scan
             if node_id:
@@ -93,21 +94,22 @@ class Scanner:
                 "timestamp": datetime.now().isoformat()
             }
     
-    def _perform_scan(self, target: str, org_id: str, protocol: Optional[str], node_id: Optional[str]) -> Dict[str, Any]:
+    def _perform_scan(self, target: str, org_id: str, protocol: Optional[str], node_id: Optional[str], scan_level: int = 1) -> Dict[str, Any]:
         """
-        Perform the actual scan using the existing scanning logic.
+        Perform the actual scan using the new modular scanning system.
         
         Args:
             target: IP address or hostname to scan
             org_id: Organization ID
             protocol: Protocol name (if determined)
             node_id: Node UUID for tracking
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Scan results
         """
         try:
-            from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
+            from pgdn.scanning.scan_orchestrator import ScanOrchestrator
             
             # Resolve hostname to IP if needed
             try:
@@ -121,48 +123,30 @@ class Scanner:
                     "node_id": node_id
                 }
             
-            # Create a mock node entry for the scanner agent
-            import uuid
+            # Prepare scanning configuration
+            scan_config = getattr(self.config, 'scanning', {})
             
-            # Determine source based on protocol filter
-            if protocol:
-                source = f'{protocol}_manual_scan'
-                effective_protocol = protocol
-            elif self.protocol_filter:
-                source = f'{self.protocol_filter}_manual_scan'
-                effective_protocol = self.protocol_filter
-            else:
-                source = 'manual_scan'
-                effective_protocol = None
+            # Create scan orchestrator with configuration
+            orchestrator = ScanOrchestrator(scan_config)
             
-            mock_node = {
-                'id': 0,
-                'uuid': node_id or str(uuid.uuid4()),
-                'address': target,
-                'source': source,
-                'name': f'Direct scan of {target}',
-                'protocol_name': effective_protocol,
-                'org_id': org_id  # Add org_id for tracking
-            }
-            
-            # Initialize scanner agent
-            scanner_agent = NodeScannerAgent(self.config, 
-                                           protocol_filter=effective_protocol, 
-                                           debug=self.debug)
-            
-            # Run the scan using the agent
-            scan_results = scanner_agent.scan_nodes([mock_node], org_id=org_id)
+            # Perform the scan using the new modular system with scan_level
+            scan_results = orchestrator.scan(
+                target=ip_address,
+                scan_level=scan_level,
+                scan_timestamp=datetime.now().isoformat()
+            )
             
             if scan_results:
                 return {
                     "success": True,
                     "target": target,
                     "resolved_ip": ip_address,
-                    "scan_result": scan_results[0],
+                    "scan_result": scan_results,
+                    "scan_level": scan_level,
                     "timestamp": datetime.now().isoformat(),
                     "node_id": node_id,
                     "org_id": org_id,
-                    "protocol": effective_protocol
+                    "protocol": protocol
                 }
             else:
                 return {
@@ -183,29 +167,87 @@ class Scanner:
                 "node_id": node_id
             }
     
-    def scan_nodes_from_database(self, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_nodes_from_database(self, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
-        Scan nodes discovered in the database using the scan stage.
+        Scan nodes discovered in the database using the new modular scanning system.
         
         Args:
-            org_id: Optional organization ID to filter agentic jobs
+            org_id: Optional organization ID to filter nodes
+            scan_level: Scan level (1-3, default: 1)
         
         Returns:
             dict: Scan results including success status and scan data
         """
         try:
-            from pgdn.agent_modules.scan.node_scanner_agent import NodeScannerAgent
+            from pgdn.scanning.scan_orchestrator import ScanOrchestrator
+            from core.database import get_db_session
+            from models.ledger import NodeMetadata
             
-            scanner_agent = NodeScannerAgent(self.config, 
-                                           protocol_filter=self.protocol_filter, 
-                                           debug=self.debug)
-            results = scanner_agent.scan_nodes(org_id=org_id)
+            # Get nodes from database
+            results = []
+            with get_db_session() as session:
+                query = session.query(NodeMetadata)
+                if org_id:
+                    query = query.filter(NodeMetadata.org_id == org_id)
+                if self.protocol_filter:
+                    query = query.filter(NodeMetadata.protocol == self.protocol_filter)
+                
+                nodes = query.filter(NodeMetadata.status == 'discovered').all()
+                
+                if not nodes:
+                    return {
+                        "success": True,
+                        "stage": "scan",
+                        "results": [],
+                        "results_count": 0,
+                        "message": "No discovered nodes found to scan",
+                        "protocol_filter": self.protocol_filter,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                
+                # Prepare scanning configuration
+                scan_config = getattr(self.config, 'scanning', {})
+                orchestrator = ScanOrchestrator(scan_config)
+                
+                # Scan each node
+                for node in nodes:
+                    try:
+                        scan_result = orchestrator.scan(
+                            target=node.target,
+                            scan_level=scan_level,
+                            scan_timestamp=datetime.now().isoformat()
+                        )
+                        
+                        results.append({
+                            "node_id": node.node_id,
+                            "target": node.target,
+                            "protocol": node.protocol,
+                            "scan_result": scan_result,
+                            "scan_level": scan_level,
+                            "success": True
+                        })
+                        
+                        # Update node status to scanned
+                        node.status = 'scanned'
+                        node.last_scanned = datetime.now()
+                        
+                    except Exception as e:
+                        results.append({
+                            "node_id": node.node_id,
+                            "target": node.target,
+                            "protocol": node.protocol,
+                            "success": False,
+                            "error": str(e)
+                        })
+                
+                session.commit()
             
             return {
                 "success": True,
                 "stage": "scan",
                 "results": results,
                 "results_count": len(results),
+                "scan_level": scan_level,
                 "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
@@ -214,12 +256,12 @@ class Scanner:
             return {
                 "success": False,
                 "stage": "scan",
-                "error": f"Node scanning failed: {str(e)}",
+                "error": f"Database node scanning failed: {str(e)}",
                 "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
     
-    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5, org_id: Optional[str] = None) -> Dict[str, Any]:
+    def scan_parallel_targets(self, targets: List[str], max_parallel: int = 5, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """
         Scan multiple targets in parallel.
         
@@ -227,6 +269,7 @@ class Scanner:
             targets: List of targets to scan
             max_parallel: Maximum number of parallel scans
             org_id: Optional organization ID to filter agentic jobs
+            scan_level: Scan level (1-3, default: 1)
             
         Returns:
             dict: Parallel scan results
@@ -240,7 +283,7 @@ class Scanner:
         
         def scan_single_target(target):
             """Helper function for parallel execution."""
-            result = self.scan_target(target, org_id=org_id)
+            result = self.scan_target(target, org_id=org_id, scan_level=scan_level)
             return {
                 "target": target,
                 "success": result["success"],
@@ -280,6 +323,7 @@ class Scanner:
                 "successful": successful,
                 "total": len(targets),
                 "max_parallel": max_parallel,
+                "scan_level": scan_level,
                 "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }

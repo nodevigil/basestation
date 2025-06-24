@@ -231,11 +231,11 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
                     "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
                 }
             scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-            return scanner.scan_target(args.target, org_id=args.org_id)
+            return scanner.scan_target(args.target, org_id=args.org_id, scan_level=args.scan_level)
         else:
             # Database scanning
             scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-            return scanner.scan_nodes_from_database(org_id=args.org_id)
+            return scanner.scan_nodes_from_database(org_id=args.org_id, scan_level=args.scan_level)
     
     elif stage == 'process':
         orchestrator = PipelineOrchestrator(config)
@@ -617,7 +617,9 @@ Examples:
   # Standard Operations
   pgdn                              # Run full pipeline
   pgdn --stage recon                # Run only reconnaissance
-  pgdn --stage scan                 # Run only scanning
+  pgdn --stage scan                 # Run only scanning (scan level 1 by default)
+  pgdn --stage scan --scan-level 2  # Run scanning with GeoIP enrichment
+  pgdn --stage scan --scan-level 3  # Run comprehensive scanning with advanced analysis
   pgdn --stage scan --protocol filecoin # Scan only Filecoin nodes
   pgdn --stage scan --protocol filecoin --debug # Scan with debug logging
   pgdn --stage scan --protocol sui  # Scan only Sui nodes
@@ -635,7 +637,11 @@ Examples:
   pgdn --stage report --report-input scan_result.json # Generate report from specific scan
   pgdn --stage report --report-email # Generate with email notification
   pgdn --stage report --auto-save-report # Auto-save with timestamp
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan specific IP/hostname
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan specific IP/hostname (level 1)
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --scan-level 2 # Scan target with GeoIP enrichment
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --scan-level 3 # Comprehensive scan of target
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --protocol sui # Scan target as Sui node
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --protocol sui --scan-level 3 # Comprehensive Sui scan
   pgdn --stage scan --target 139.84.148.36 --org-id myorg --debug # Scan target with debug
   pgdn --list-agents                # List available agents
   pgdn --recon-agents SuiReconAgent # Run specific recon agent
@@ -710,6 +716,14 @@ Examples:
     parser.add_argument(
         '--target',
         help='Scan a specific IP address or hostname (requires --org-id when used with --stage scan)'
+    )
+    
+    parser.add_argument(
+        '--scan-level',
+        type=int,
+        choices=[1, 2, 3],
+        default=1,
+        help='Scan level: 1 (basic), 2 (standard with geo), 3 (comprehensive with advanced analysis)'
     )
     
     parser.add_argument(

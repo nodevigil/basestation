@@ -106,10 +106,11 @@ def run_single_stage_task(
             results = orchestrator.run_single_stage(stage, agent_names=recon_agents)
             
         elif stage == 'scan':
-            # For scanning, use the scanner agent directly to support protocol filtering
-            from agents.scan.node_scanner_agent import NodeScannerAgent
-            scanner_agent = NodeScannerAgent(config, protocol_filter=protocol_filter, debug=debug)
-            results = scanner_agent.scan_nodes()
+            # For scanning, use the new modular scanner to support protocol filtering
+            from pgdn.scanner import Scanner
+            scanner = Scanner(config, protocol_filter=protocol_filter, debug=debug)
+            scan_result = scanner.scan_nodes_from_database()
+            results = scan_result.get('results', []) if scan_result.get('success') else []
             
         elif stage == 'process':
             results = orchestrator.run_single_stage(stage, agent_name)
@@ -181,37 +182,24 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
         setup_logging(config.logging)
         create_tables(config.database)
         
-        from agents.scan.node_scanner_agent import NodeScannerAgent
+        from pgdn.scanner import Scanner
         import socket
         
         logger.info(f"Scanning target: {target}")
         
-        # Resolve hostname to IP if needed
-        try:
-            ip_address = socket.gethostbyname(target)
-        except socket.gaierror:
-            raise ValueError(f"DNS resolution failed for {target}")
+        # Use the new modular scanner for target scanning
+        scanner = Scanner(config, debug=debug)
         
-        # Create a mock node entry for the scanner agent
-        import uuid
-        mock_node = {
-            'id': 0,
-            'uuid': str(uuid.uuid4()),  # Add UUID for scan results
-            'address': target,
-            'source': 'manual_scan',
-            'name': f'Direct scan of {target}'
-        }
-        
-        # Initialize scanner agent and run scan
-        scanner_agent = NodeScannerAgent(config, debug=debug)
-        scan_results = scanner_agent.scan_nodes([mock_node])
+        # Perform scan using the target scanning method (requires org_id)
+        # For pipeline tasks, we'll use a default org_id or make it configurable
+        org_id = config_dict.get('org_id') or 'pipeline-default'
+        scan_result = scanner.scan_target(target, org_id=org_id)
         
         logger.info(f"Target scan completed for {target}")
         return {
-            'success': True,
+            'success': scan_result.get('success', False) if scan_result else False,
             'target': target,
-            'ip_address': ip_address,
-            'results': scan_results,
+            'results': [scan_result] if scan_result else [],
             'task_id': self.request.id
         }
         

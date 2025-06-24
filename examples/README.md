@@ -2,6 +2,12 @@
 
 This directory contains practical examples demonstrating how to use PGDN for various security assessment scenarios.
 
+## Scanning System Examples
+
+- [scanning_examples.py](scanning_examples.py) - Basic usage of the modular scanning system
+- [custom_scanner_example.py](custom_scanner_example.py) - Creating custom scanners
+- [legacy_compatibility_example.py](legacy_compatibility_example.py) - Backward compatibility demonstration
+
 ## Library Examples
 
 - [basic_scanning.py](library/basic_scanning.py) - Simple target scanning

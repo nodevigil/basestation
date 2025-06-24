@@ -43,6 +43,30 @@ class ScanConfig:
     max_concurrent_scans: int = field(default_factory=lambda: int(os.getenv('MAX_CONCURRENT_SCANS', '5')))
     enable_vulnerability_scanning: bool = field(default_factory=lambda: os.getenv('ENABLE_VULN_SCAN', 'true').lower() == 'true')
     enable_ssl_testing: bool = field(default_factory=lambda: os.getenv('ENABLE_SSL_TEST', 'true').lower() == 'true')
+    # New modular scanning configuration
+    orchestrator: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled_scanners': ['generic', 'web', 'vulnerability'],
+        'use_external_tools': True
+    })
+    scanners: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
+        'generic': {
+            'enabled': True,
+            'default_ports': [22, 80, 443, 2375, 3306],
+            'connection_timeout': 1,
+            'banner_timeout': 2
+        },
+        'web': {
+            'enabled': True,
+            'timeout': 10,
+            'max_redirects': 5,
+            'user_agent': 'PGDN-Scanner/1.0'
+        },
+        'vulnerability': {
+            'enabled': True,
+            'max_cves_per_banner': 5,
+            'enable_database_lookup': True
+        }
+    })
 
 
 @dataclass
