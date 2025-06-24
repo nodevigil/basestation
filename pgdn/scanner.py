@@ -62,12 +62,20 @@ class Scanner:
             
             # Create a mock node entry for the scanner agent
             import uuid
+            
+            # Determine source based on protocol filter
+            if self.protocol_filter:
+                source = f'{self.protocol_filter}_manual_scan'
+            else:
+                source = 'manual_scan'
+            
             mock_node = {
                 'id': 0,
                 'uuid': str(uuid.uuid4()),  # Add UUID for scan results
                 'address': target,
-                'source': 'manual_scan',
-                'name': f'Direct scan of {target}'
+                'source': source,
+                'name': f'Direct scan of {target}',
+                'protocol_name': self.protocol_filter  # Add protocol info for consistency
             }
             
             # Initialize scanner agent

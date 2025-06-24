@@ -156,7 +156,7 @@ def run_single_stage_task(
 
 
 @app.task(bind=True, name='tasks.pipeline.scan_target')
-def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool = False):
+def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool = False, org_id: Optional[str] = None):
     """
     Scan a specific target as a Celery task.
     
@@ -164,6 +164,7 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
         config_dict: Configuration dictionary
         target: IP address or hostname to scan
         debug: Enable debug logging
+        org_id: Optional organization ID to filter agentic jobs
         
     Returns:
         Dict with scan results
@@ -204,7 +205,7 @@ def scan_target_task(self, config_dict: Dict[str, Any], target: str, debug: bool
         
         # Initialize scanner agent and run scan
         scanner_agent = NodeScannerAgent(config, debug=debug)
-        scan_results = scanner_agent.scan_nodes([mock_node])
+        scan_results = scanner_agent.scan_nodes([mock_node], org_id=org_id)
         
         logger.info(f"Target scan completed for {target}")
         return {

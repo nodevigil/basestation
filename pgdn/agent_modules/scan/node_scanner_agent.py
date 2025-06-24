@@ -181,12 +181,17 @@ class NodeScannerAgent(ScanAgent):
                 
                 nodes = []
                 for validator in validators_needing_scan:
+                    # Create a proper source field for database nodes
+                    protocol_name = validator.protocol.name if validator.protocol else 'unknown'
+                    source = f"{protocol_name}_database"
+                    
                     nodes.append({
                         'id': validator.id,  # Keep integer ID for database operations
                         'uuid': str(validator.uuid),  # Add UUID for scan results
                         'address': validator.address,
                         'name': validator.name,
-                        'protocol_name': validator.protocol.name if validator.protocol else None
+                        'protocol_name': protocol_name,
+                        'source': source  # Add source field for consistency
                     })
                 
                 return nodes
@@ -291,24 +296,35 @@ class NodeScannerAgent(ScanAgent):
             # Perform generic security scan
             generic_result = self.generic_scanner.scan(ip_address)
             
-            # Perform protocol-specific scans based on source
+            # Perform protocol-specific scans based on source or protocol_name
+            protocol = None
+            
+            # Try to get protocol from protocol_name first (database nodes)
+            if 'protocol_name' in node and node['protocol_name']:
+                protocol = node['protocol_name'].lower()
+                self.logger.debug(f"🏷️  Using protocol from protocol_name: {protocol}")
+            # Fall back to extracting from source (manual scans)
+            elif 'source' in node and node['source']:
+                node_source = node['source'].lower()
+                # Extract protocol name from source (e.g., 'sui_recon_agent' -> 'sui')
+                protocol = node_source.split('_')[0] if '_' in node_source else node_source
+                self.logger.debug(f"🏷️  Extracted protocol from source: {protocol}")
+            
             protocol_result = None
-            node_source = node['source'].lower()
-            
-            # Extract protocol name from source (e.g., 'sui_recon_agent' -> 'sui')
-            protocol = node_source.split('_')[0] if '_' in node_source else node_source
-            
-            protocol_scanner = self.protocol_registry.get_scanner(protocol)
-            if protocol_scanner:
-                self.logger.info(f"🔍 Running {protocol.upper()}-specific scan for {address} (source: {node['source']})")
-                try:
-                    protocol_result = protocol_scanner.scan(ip_address)
-                    self.logger.debug(f"🔍 {protocol.upper()} scan result for {address}: {protocol_result}")
-                except Exception as e:
-                    self.logger.warning(f"Protocol-specific scan failed for {address}: {e}")
-                    protocol_result = {"error": str(e)}
-            else:
-                self.logger.debug(f"ℹ️  No protocol-specific scanner available for {protocol} (source: {node['source']})")
+            if protocol and protocol != 'manual':
+                protocol_scanner = self.protocol_registry.get_scanner(protocol)
+                if protocol_scanner:
+                    source_info = node.get('protocol_name', node.get('source', 'unknown'))
+                    self.logger.info(f"🔍 Running {protocol.upper()}-specific scan for {address} (source: {source_info})")
+                    try:
+                        protocol_result = protocol_scanner.scan(ip_address)
+                        self.logger.debug(f"🔍 {protocol.upper()} scan result for {address}: {protocol_result}")
+                    except Exception as e:
+                        self.logger.warning(f"Protocol-specific scan failed for {address}: {e}")
+                        protocol_result = {"error": str(e)}
+                else:
+                    source_info = node.get('protocol_name', node.get('source', 'unknown'))
+                    self.logger.debug(f"ℹ️  No protocol-specific scanner available for {protocol} (source: {source_info})")
             
             # Run web probes on detected HTTP/HTTPS services (same logic as WhatWeb)
             web_probe_results = {}
@@ -338,7 +354,7 @@ class NodeScannerAgent(ScanAgent):
                 'generic_scan': generic_result,
                 'protocol_scan': protocol_result,
                 'web_probes': web_probe_results if web_probe_results else None,
-                'source': node['source'],
+                'source': node.get('source', f"database_{node.get('protocol_name', 'unknown')}"),
                 'failed': False
             }
             
@@ -384,7 +400,7 @@ class NodeScannerAgent(ScanAgent):
             'scan_end': int(scan_time.timestamp()),    # Same time for failed scans
             'generic_scan': None,
             'protocol_scan': None,
-            'source': node['source'],
+            'source': node.get('source', f"database_{node.get('protocol_name', 'unknown')}"),
             'failed': True,
             'error_message': error_message
         }

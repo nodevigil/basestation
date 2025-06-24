@@ -222,8 +222,20 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
         )
     
     elif stage == 'scan':
-        scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-        return scanner.scan_nodes_from_database(org_id=args.org_id)
+        # Check if target scanning with org_id requirement
+        if args.target:
+            if not args.org_id:
+                return {
+                    "success": False,
+                    "error": "Target scanning requires --org-id argument",
+                    "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
+                }
+            scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
+            return scanner.scan_target(args.target, org_id=args.org_id)
+        else:
+            # Database scanning
+            scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
+            return scanner.scan_nodes_from_database(org_id=args.org_id)
     
     elif stage == 'process':
         orchestrator = PipelineOrchestrator(config)
@@ -313,23 +325,6 @@ def run_single_stage_command(config: Config, args) -> Dict[str, Any]:
         }
 
 
-def run_target_scan_command(config: Config, args) -> Dict[str, Any]:
-    """Run target scan command."""
-    scanner = Scanner(config, protocol_filter=args.protocol, debug=args.debug)
-    result = scanner.scan_target(args.scan_target, org_id=args.org_id)
-    
-    # Save result if successful
-    if result.get('success') and not args.json:
-        try:
-            output_file = scanner.save_scan_result(result.get('scan_result', {}), args.scan_target)
-            result['output_file'] = output_file
-            print(f"💾 Results saved to: {output_file}")
-        except Exception as e:
-            print(f"⚠️  Could not save results: {e}")
-    
-    return result
-
-
 def run_queue_command(config: Config, args) -> Dict[str, Any]:
     """Run queue-related commands."""
     queue_manager = QueueManager(config)
@@ -347,9 +342,15 @@ def run_queue_command(config: Config, args) -> Dict[str, Any]:
             "suggestion": "Use --task-id <id> to check specific task status"
         }
     
-    elif args.scan_target:
+    elif args.target:
+        if not args.org_id:
+            return {
+                "success": False,
+                "error": "Target scanning requires --org-id argument",
+                "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg --queue"
+            }
         result = queue_manager.queue_target_scan(
-            args.scan_target, 
+            args.target, 
             args.debug,
             org_id=args.org_id
         )
@@ -547,9 +548,6 @@ def main():
         elif args.parallel_targets or args.target_file or args.parallel_stages:
             result = run_parallel_command(config, args)
         
-        elif args.scan_target:
-            result = run_target_scan_command(config, args)
-        
         elif args.stage:
             result = run_single_stage_command(config, args)
         
@@ -611,8 +609,8 @@ Examples:
   pgdn --stage report --report-input scan_result.json # Generate report from specific scan
   pgdn --stage report --report-email # Generate with email notification
   pgdn --stage report --auto-save-report # Auto-save with timestamp
-  pgdn --scan-target 139.84.148.36 # Scan specific IP/hostname
-  pgdn --scan-target 139.84.148.36 --debug # Scan target with debug
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan specific IP/hostname
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --debug # Scan target with debug
   pgdn --list-agents                # List available agents
   pgdn --recon-agents SuiReconAgent # Run specific recon agent
   pgdn --update-cves                # Update CVE database with latest data
@@ -623,13 +621,13 @@ Examples:
   # Organization-specific Operations
   pgdn --org-id myorg               # Run full pipeline for specific organization
   pgdn --stage scan --org-id myorg  # Scan only nodes belonging to organization 'myorg'
-  pgdn --scan-target 139.84.148.36 --org-id myorg # Scan target and associate with organization
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan target and associate with organization
   pgdn --stage report --org-id myorg # Generate reports only for organization's scans
   
   # Queue Operations (Background Processing)
   pgdn --queue                      # Queue full pipeline for background processing
   pgdn --stage scan --queue         # Queue scan stage for background processing
-  pgdn --scan-target 139.84.148.36 --queue # Queue target scan for background processing
+  pgdn --stage scan --target 139.84.148.36 --org-id myorg --queue # Queue target scan for background processing
   pgdn --queue --wait-for-completion # Queue job and wait for completion
   pgdn --queue --org-id myorg       # Queue pipeline for specific organization
   pgdn --task-id abc123-def456      # Check status of queued task
@@ -676,8 +674,8 @@ Examples:
     )
     
     parser.add_argument(
-        '--scan-target',
-        help='Scan a specific IP address or hostname (bypasses database)'
+        '--target',
+        help='Scan a specific IP address or hostname (requires --org-id when used with --stage scan)'
     )
     
     parser.add_argument(
