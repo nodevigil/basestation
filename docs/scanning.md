@@ -37,12 +37,27 @@ The system implements three distinct scan levels to balance thoroughness with pe
 
 ## Architecture
 
+PGDN implements a two-layer scanning architecture that separates infrastructure scanning from protocol-specific analysis:
+
+### Infrastructure Orchestrator Layer
+- **Purpose**: General infrastructure scanning (ports, services, vulnerabilities, geolocation)
+- **Implementation**: `ScanOrchestrator` with modular scanner system
+- **Scanners**: Generic, Web, Vulnerability, Geo scanners
+- **CLI Access**: Default behavior for `--stage scan`
+
+### Protocol-Specific Layer  
+- **Purpose**: Blockchain protocol analysis and specialized checks
+- **Implementation**: Protocol-specific scanners (Sui, Filecoin, etc.)
+- **CLI Access**: `--force-protocol` flag triggers separate protocol scanning
+- **Results**: Separate `orchestrator_scan` and `protocol_scan` sections
+
 ### Core Components
 
 1. **`BaseScanner`**: Abstract base class for all scanners with scan_level support
 2. **`ScannerRegistry`**: Manages registration and creation of scanner instances
-3. **`ScanOrchestrator`**: Coordinates multiple scanners, handles scan levels, and integrates external tools
-4. **Individual Scanner Modules**: Specialized scanners for different purposes
+3. **`ScanOrchestrator`**: Coordinates infrastructure scanners, handles scan levels, and integrates external tools
+4. **`PipelineOrchestrator`**: Manages separated infrastructure and protocol scanning workflows
+5. **Individual Scanner Modules**: Specialized scanners for different purposes
 
 ### Scanner Types
 
@@ -70,7 +85,7 @@ The system supports three scan levels, configurable via CLI or programmatically:
 pgdn --stage scan --scan-level 1                    # Basic scanning
 pgdn --stage scan --scan-level 2                    # Standard with GeoIP
 pgdn --stage scan --scan-level 3                    # Comprehensive analysis
-pgdn --stage scan --scan-level 2 --protocol sui     # Level 2 with Sui focus
+pgdn --stage scan --scan-level 2 --force-protocol sui     # Level 2 with Sui protocol scanning
 ```
 
 ### Scanner Configuration Structure
@@ -114,12 +129,6 @@ pgdn --stage scan --scan-level 2 --protocol sui     # Level 2 with Sui focus
         "enabled": true,
         "module_path": "pgdn.scanning.filecoin_scanner.FilecoinSpecificScanner"
       }
-        "enable_database_lookup": true
-      },
-      "sui": {
-        "enabled": true,
-        "module_path": "pgdn.scanning.sui_scanner.SuiSpecificScanner"
-      }
     }
   }
 }
@@ -139,9 +148,9 @@ pgdn --stage scan --target 192.168.1.1 --org-id myorg --scan-level 2
 # Level 3 comprehensive scanning
 pgdn --stage scan --target 192.168.1.1 --org-id myorg --scan-level 3
 
-# Protocol-specific Level 3 scanning
-pgdn --stage scan --protocol sui --scan-level 3
-pgdn --stage scan --protocol filecoin --scan-level 3
+# Protocol-specific scanning (separate from infrastructure scanning)
+pgdn --stage scan --force-protocol sui --scan-level 3
+pgdn --stage scan --force-protocol filecoin --scan-level 3
 
 # Database scanning with scan levels
 pgdn --stage scan --scan-level 2 --org-id myorg
@@ -150,12 +159,12 @@ pgdn --stage scan --scan-level 2 --org-id myorg
 ### Programmatic Usage
 
 ```python
-# Using the Scanner class
+# Using the Scanner class (infrastructure scanning)
 from pgdn import Scanner
 from pgdn.core.config import Config
 
 config = Config()
-scanner = Scanner(config, protocol_filter="sui")
+scanner = Scanner(config)
 
 # Scan with different levels
 result_l1 = scanner.scan_target("192.168.1.1", org_id="myorg", scan_level=1)
@@ -167,6 +176,11 @@ from pgdn.scanning.scan_orchestrator import ScanOrchestrator
 
 orchestrator = ScanOrchestrator(config)
 result = orchestrator.scan("192.168.1.1", scan_level=2)
+
+# Protocol-specific scanning is now handled separately by PipelineOrchestrator
+from pgdn.pipeline import PipelineOrchestrator
+pipeline = PipelineOrchestrator(config)
+result = pipeline.run_scan_stage(target="192.168.1.1", org_id="myorg", force_protocol="sui")
 ```
 
 ### Scan Level Results Structure
@@ -203,18 +217,22 @@ result = orchestrator.scan("192.168.1.1", scan_level=2)
   }
 }
 
-# Level 3 Result (includes protocol-specific)
+# Level 3 Result (includes protocol-specific - when using --force-protocol)
 {
   "scan_level": 3,
   "target": "192.168.1.1", 
   "geoip": {...},
-  "scanner_results": {
-    "generic": {...},
-    "web": {...},
-    "vulnerability": {...},
-    "geo": {...},
-    "sui": {...},          # Sui blockchain analysis
-    "filecoin": {...}      # Filecoin network analysis
+  "orchestrator_scan": {
+    "scanner_results": {
+      "generic": {...},
+      "web": {...},
+      "vulnerability": {...},
+      "geo": {...}
+    }
+  },
+  "protocol_scan": {
+    "sui": {...},          # Sui blockchain analysis (only when --force-protocol sui)
+    "filecoin": {...}      # Filecoin network analysis (only when --force-protocol filecoin)  
   }
 }
 ```
@@ -377,8 +395,7 @@ The system maintains full backward compatibility while adding scan level support
 6. **Real-time Configuration**: Hot-reload of scanner configuration
 7. **Scan Level Analytics**: Performance and effectiveness metrics per level
 8. **Custom Scan Levels**: User-defined scan level combinations
-3. **Scan Profiles**: Predefined scanner combinations for different use cases
-4. **Parallel Scanning**: Concurrent execution of independent scanners
+9. **Parallel Scanning**: Concurrent execution of independent scanners
 ## Implementation Status
 
 ### ✅ **Phase 1 - COMPLETED**: Core Modular System

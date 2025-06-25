@@ -26,8 +26,15 @@ pip install pgdn
 # Run full security assessment pipeline
 pgdn
 
-# Scan specific target
-pgdn --scan-target 192.168.1.100
+# Infrastructure scanning only
+pgdn --stage scan --target 192.168.1.100 --org-id <uuid>
+
+# Infrastructure + protocol-specific scanning
+pgdn --stage scan --target 192.168.1.100 --org-id <uuid> --force-protocol sui
+
+# Specific scanner types
+pgdn --stage scan --target 192.168.1.100 --org-id <uuid> --type web
+pgdn --stage scan --target 192.168.1.100 --org-id <uuid> --type whatweb
 
 # Generate report for specific scan
 pgdn --stage report --scan-id 123
