@@ -382,17 +382,17 @@ class Scanner:
         try:
             from pgdn.scanning.scan_orchestrator import ScanOrchestrator
             from core.database import get_db_session
-            from models.ledger import NodeMetadata
+            from pgdn.core.database import ValidatorAddress
             
             # Get nodes from database
             results = []
             with get_db_session() as session:
-                query = session.query(NodeMetadata)
+                query = session.query(ValidatorAddress)
                 if org_id:
-                    query = query.filter(NodeMetadata.org_id == org_id)
+                    query = query.filter(ValidatorAddress.organization_id == org_id)
                 # Protocol filtering removed - now handled by separate protocol scanning
                 
-                query = query.filter(NodeMetadata.status == 'discovered')
+                query = query.filter(ValidatorAddress.active == True)
                 
                 # Apply limit if specified
                 if limit:
@@ -438,29 +438,28 @@ class Scanner:
                 for node in nodes:
                     try:
                         scan_result = orchestrator.scan(
-                            target=node.target,
+                            target=node.address,  # Use address field instead of target
                             scan_level=scan_level,
                             scan_timestamp=datetime.now().isoformat()
                         )
                         
                         results.append({
-                            "node_id": node.node_id,
-                            "target": node.target,
-                            "protocol": node.protocol,
+                            "node_id": str(node.uuid),  # Use uuid instead of node_id
+                            "target": node.address,  # Use address field
+                            "protocol_id": node.protocol_id,  # Use protocol_id instead of protocol
                             "scan_result": scan_result,
                             "scan_level": scan_level,
                             "success": True
                         })
                         
-                        # Update node status to scanned
-                        node.status = 'scanned'
-                        node.last_scanned = datetime.now()
+                        # Note: ValidatorAddress doesn't have status/last_scanned fields
+                        # We should track scans in the validator_scans table instead
                         
                     except Exception as e:
                         results.append({
-                            "node_id": node.node_id,
-                            "target": node.target,
-                            "protocol": node.protocol,
+                            "node_id": str(node.uuid),
+                            "target": node.address,
+                            "protocol_id": node.protocol_id,
                             "success": False,
                             "error": str(e)
                         })
