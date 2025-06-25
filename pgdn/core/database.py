@@ -67,6 +67,7 @@ class ValidatorScan(Base):
     failed = Column(Boolean, default=False, nullable=False)
     version = Column(String(20), nullable=False)  # Scanner version - must be set explicitly
     signature_created = Column(Boolean, default=False, nullable=False)  # Track if protocol signature was created from this scan
+    scan_type = Column(String(50), nullable=True)  # Type of scan performed (e.g., 'web', 'geo', 'generic', 'target_scan')
     
     # Relationship back to validator address
     validator_address = relationship("ValidatorAddress", back_populates="scans")
@@ -88,6 +89,7 @@ class ValidatorScan(Base):
             'failed': self.failed,
             'version': self.version,
             'signature_created': self.signature_created,
+            'scan_type': self.scan_type,
         }
 
 

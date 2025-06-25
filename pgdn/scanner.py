@@ -161,17 +161,39 @@ class Scanner:
             )
             
             if scan_results:
-                return {
-                    "success": True,
-                    "target": target,
-                    "resolved_ip": ip_address,
-                    "scan_result": scan_results,
-                    "scan_level": scan_level,
-                    "timestamp": datetime.now().isoformat(),
-                    "node_id": node_id,
-                    "org_id": org_id,
-                    "protocol": protocol
-                }
+                # Determine scan type based on enabled scanners
+                scan_type = self._determine_scan_type()
+                
+                # Save scan results to database for target scans
+                try:
+                    scan_record_id = self._save_target_scan_result(target, ip_address, scan_results, org_id, protocol, node_id, scan_level, scan_type)
+                    
+                    return {
+                        "success": True,
+                        "target": target,
+                        "resolved_ip": ip_address,
+                        "scan_result": scan_results,
+                        "scan_level": scan_level,
+                        "timestamp": datetime.now().isoformat(),
+                        "node_id": node_id,
+                        "org_id": org_id,
+                        "protocol": protocol,
+                        "scan_record_id": scan_record_id
+                    }
+                except Exception as e:
+                    # If database save fails, still return the scan results but log the error
+                    return {
+                        "success": True,
+                        "target": target,
+                        "resolved_ip": ip_address,
+                        "scan_result": scan_results,
+                        "scan_level": scan_level,
+                        "timestamp": datetime.now().isoformat(),
+                        "node_id": node_id,
+                        "org_id": org_id,
+                        "protocol": protocol,
+                        "database_save_error": str(e)
+                    }
             else:
                 return {
                     "success": False,
@@ -190,6 +212,123 @@ class Scanner:
                 "timestamp": datetime.now().isoformat(),
                 "node_id": node_id
             }
+    
+    def _determine_scan_type(self) -> str:
+        """
+        Determine the scan type based on enabled scanners.
+        
+        Returns:
+            str: Scan type description
+        """
+        if self.enabled_scanners:
+            if len(self.enabled_scanners) == 1:
+                # Single scanner type
+                return self.enabled_scanners[0]
+            else:
+                # Multiple scanners - return comma-separated list
+                return ','.join(sorted(self.enabled_scanners))
+        else:
+            # No specific scanners configured - default scan
+            return 'default'
+    
+    def _save_target_scan_result(self, target: str, ip_address: str, scan_results: Dict[str, Any], 
+                                org_id: str, protocol: Optional[str], node_id: Optional[str], scan_level: int, 
+                                scan_type: Optional[str] = None) -> int:
+        """
+        Save target scan results to database.
+        
+        Args:
+            target: Original target (hostname or IP)
+            ip_address: Resolved IP address
+            scan_results: Scan results from orchestrator
+            org_id: Organization ID
+            protocol: Protocol name (if determined)
+            node_id: Node UUID for tracking
+            scan_level: Scan level used
+            scan_type: Type of scan performed (e.g., 'web', 'geo', 'generic')
+            
+        Returns:
+            int: ID of created scan record
+        """
+        import hashlib
+        import json
+        from pgdn.core.database import get_db_session, ValidatorAddress, ValidatorScan, Protocol, SCANNER_VERSION
+        
+        # Compute scan hash (same logic as NodeScannerAgent)
+        hash_data = {
+            'ip_address': ip_address,
+            'generic_scan': scan_results.get('generic_scan', {}),
+            'protocol_scan': scan_results.get('protocol_scan', {})
+        }
+        content_json = json.dumps(hash_data, sort_keys=True)
+        scan_hash = hashlib.sha256(content_json.encode()).hexdigest()
+        
+        with get_db_session() as session:
+            # Find or create protocol
+            protocol_record = None
+            if protocol:
+                protocol_record = session.query(Protocol).filter(Protocol.name == protocol).first()
+                if not protocol_record:
+                    # Create minimal protocol entry for target scans
+                    protocol_record = Protocol(
+                        name=protocol,
+                        display_name=protocol.title(),
+                        category="target_scan",
+                        ports=[],
+                        endpoints=[],
+                        banners=[],
+                        rpc_methods=[],
+                        metrics_keywords=[],
+                        http_paths=[],
+                        identification_hints=[]
+                    )
+                    session.add(protocol_record)
+                    session.flush()  # Get the ID
+            
+            # Find or create validator address for this target
+            validator = session.query(ValidatorAddress).filter(ValidatorAddress.address == target).first()
+            if not validator:
+                # Create new validator address entry
+                validator = ValidatorAddress(
+                    address=target,
+                    name=f"Target scan: {target}",
+                    protocol_id=protocol_record.id if protocol_record else None,
+                    active=True
+                )
+                session.add(validator)
+                session.flush()  # Get the ID
+            
+            # Create scan result with proper format (similar to NodeScannerAgent._save_scan_result)
+            scan_result_data = {
+                'node_id': str(validator.uuid),  # Use validator UUID
+                'address': target,
+                'ip_address': ip_address,
+                'scan_start': int(datetime.now().timestamp()),
+                'scan_end': int(datetime.now().timestamp()),
+                'generic_scan': scan_results,  # The orchestrator results contain all scan data
+                'protocol_scan': None,  # Protocol-specific data is already in generic_scan
+                'web_probes': None,
+                'source': f"target_scan_{org_id}",
+                'failed': False
+            }
+            
+            # Create scan record
+            scan_record = ValidatorScan(
+                validator_address_id=validator.id,
+                scan_date=datetime.now(),
+                ip_address=ip_address,
+                score=None,  # Will be computed by ProcessAgent
+                scan_hash=scan_hash,
+                scan_results=scan_result_data,
+                failed=False,
+                version=SCANNER_VERSION,
+                scan_type=scan_type or 'target_scan'  # Default to 'target_scan' if not specified
+            )
+            
+            session.add(scan_record)
+            session.commit()
+            
+            return scan_record.id
     
     def scan_nodes_from_database(self, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
         """

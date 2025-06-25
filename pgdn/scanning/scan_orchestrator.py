@@ -56,7 +56,13 @@ class ScanOrchestrator:
         }
         
         # Run GeoIP enrichment for level 1 and above
-        if scan_level >= 1:
+        # Only skip geo if scanners were explicitly configured and 'geo' is not included
+        # This maintains backward compatibility while respecting explicit scanner selection
+        orchestrator_config = self.config.get('orchestrator', {})
+        explicit_scanner_config = 'enabled_scanners' in orchestrator_config
+        should_run_geo = scan_level >= 1 and (not explicit_scanner_config or 'geo' in self.enabled_scanners)
+        
+        if should_run_geo:
             try:
                 from pgdn.scanning.geo_scanner import GeoScanner
                 geo_scanner = GeoScanner(self.config.get('scanners', {}).get('geo', {}))

@@ -436,7 +436,8 @@ class NodeScannerAgent(ScanAgent):
                     scan_hash=scan_hash,  # Computed immediately during scanning
                     scan_results=result,  # This contains the UUID in node_id
                     failed=result.get('failed', False),
-                    version=SCANNER_VERSION
+                    version=SCANNER_VERSION,
+                    scan_type='node_scan'  # Database node scans
                 )
                 
                 session.add(scan_record)
