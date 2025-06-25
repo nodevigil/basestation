@@ -16,7 +16,7 @@ from typing import Optional, List, Dict, Any
 from pgdn import (
     ApplicationCore, load_config, setup_environment, initialize_application,
     PipelineOrchestrator, Scanner, ReportManager, CVEManager, 
-    SignatureManager, QueueManager, AgentManager, ParallelOperations
+    SignatureManager, AgentManager, ParallelOperations
 )
 from pgdn.scanner import load_targets_from_file
 from pgdn.core.config import Config
@@ -223,9 +223,7 @@ def execute_command(config: Config, args) -> Dict[str, Any]:
     execution_mode = _determine_execution_mode(args)
     
     # Route to appropriate execution handler
-    if execution_mode == 'queue':
-        return _execute_via_queue(config, args)
-    elif execution_mode == 'parallel':
+    if execution_mode == 'parallel':
         return _execute_via_parallel(config, args)
     else:
         return _execute_direct(config, args)
@@ -233,18 +231,11 @@ def execute_command(config: Config, args) -> Dict[str, Any]:
 
 def _determine_execution_mode(args) -> str:
     """Determine the execution mode based on arguments."""
-    # Parallel operations take precedence (they can use queue internally)
+    # Parallel operations take precedence
     if any([args.parallel_targets, args.target_file, args.parallel_stages]):
         return 'parallel'
-    elif getattr(args, 'queue', False):
-        return 'queue'
     else:
         return 'direct'
-
-
-def _execute_via_queue(config: Config, args) -> Dict[str, Any]:
-    """Execute command via queue/background processing."""
-    return run_queue_command(config, args)
 
 
 def _execute_via_parallel(config: Config, args) -> Dict[str, Any]:
@@ -452,106 +443,6 @@ def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
             "error": f"Unknown stage: {stage}"
         }
 
-def run_queue_command(config: Config, args) -> Dict[str, Any]:
-    """Run queue-related commands."""
-    queue_manager = QueueManager(config)
-    
-    if args.task_id:
-        return queue_manager.get_task_status(args.task_id)
-    
-    elif args.cancel_task:
-        return queue_manager.cancel_task(args.cancel_task)
-    
-    elif args.list_tasks:
-        return {
-            "success": True,
-            "message": "Task status listing requires additional task tracking implementation",
-            "suggestion": "Use --task-id <id> to check specific task status"
-        }
-    
-    elif args.update_cves or args.start_cve_scheduler:
-        # Queue CVE commands
-        return {
-            "success": False,
-            "error": "CVE commands do not support queueing",
-            "suggestion": "Run CVE commands directly without --queue flag"
-        }
-    
-    elif any([args.learn_signatures_from_scans, args.update_signature_flags, 
-             args.mark_signature_created, args.show_signature_stats]):
-        # Queue signature commands
-        return {
-            "success": False,
-            "error": "Signature commands do not support queueing",
-            "suggestion": "Run signature commands directly without --queue flag"
-        }
-    
-    elif args.target:
-        if not args.org_id:
-            return {
-                "success": False,
-                "error": "Target scanning requires --org-id argument",
-                "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg --queue"
-            }
-        result = queue_manager.queue_target_scan(
-            args.target, 
-            args.debug,
-            org_id=args.org_id
-        )
-        if args.wait_for_completion and result.get('success'):
-            task_id = result['task_id']
-            wait_result = queue_manager.wait_for_tasks(task_id, timeout=3600)
-            result['wait_result'] = wait_result
-        return result
-    
-    elif args.stage:
-        # Configure report options if needed
-        report_options = None
-        if args.stage == 'report':
-            report_options = {
-                'input_file': getattr(args, 'report_input', None),
-                'output_file': getattr(args, 'report_output', None),
-                'format': getattr(args, 'report_format', 'json'),
-                'auto_save': getattr(args, 'auto_save_report', False),
-                'email_report': getattr(args, 'report_email', False),
-                'recipient_email': getattr(args, 'recipient_email', None),
-                'scan_id': getattr(args, 'scan_id', None),
-                'force_report': getattr(args, 'force_report', False)
-            }
-        
-        result = queue_manager.queue_single_stage(
-            args.stage,
-            getattr(args, 'agent', None),
-            getattr(args, 'recon_agents', None),
-            getattr(args, 'protocol', None),
-            getattr(args, 'debug', False),
-            getattr(args, 'force_rescore', False),
-            getattr(args, 'host', None),
-            report_options=report_options,
-            force=getattr(args, 'force', False),
-            org_id=args.org_id
-        )
-        
-        if args.wait_for_completion and result.get('success'):
-            task_id = result['task_id']
-            wait_result = queue_manager.wait_for_tasks(task_id, timeout=3600)
-            result['wait_result'] = wait_result
-        
-        return result
-    
-    else:
-        # Queue full pipeline
-        result = queue_manager.queue_full_pipeline(
-            getattr(args, 'recon_agents', None),
-            org_id=args.org_id
-        )
-        
-        if args.wait_for_completion and result.get('success'):
-            task_id = result['task_id']
-            wait_result = queue_manager.wait_for_tasks(task_id, timeout=3600)
-            result['wait_result'] = wait_result
-        
-        return result
 
 
 def run_parallel_command(config: Config, args) -> Dict[str, Any]:
@@ -583,7 +474,7 @@ def run_parallel_command(config: Config, args) -> Dict[str, Any]:
         recon_agents=args.recon_agents,
         force_rescore=args.force_rescore,
         host=args.host,
-        use_queue=args.queue,
+        use_queue=False,
         wait_for_completion=args.wait_for_completion,
         org_id=args.org_id
     )
@@ -662,27 +553,16 @@ def main():
         
         # Setup environment (unless in JSON mode or for simple operations)
         if not json_output and not any([
-            args.list_agents, args.task_id, args.cancel_task, args.list_tasks,
-            args.update_cves and not args.initial_cves
+            args.list_agents, args.update_cves and not args.initial_cves
         ]):
             setup_environment_cli(config)
         
         # Route to appropriate command handler
         result = None
         
-        # Commands that can be queued should go through unified execution
+        # Route to appropriate command handler
         if args.list_agents:
             result = run_list_agents_command()
-        
-        elif args.task_id or args.cancel_task or args.list_tasks:
-            # Queue management commands (cannot be queued themselves)
-            result = run_queue_command(config, args)
-        
-        elif any([args.update_cves, args.start_cve_scheduler, 
-                 args.learn_signatures_from_scans, args.update_signature_flags, 
-                 args.mark_signature_created, args.show_signature_stats]):
-            # These commands support queueing - route through unified execution
-            result = execute_command(config, args)
         
         else:
             # Default: use unified command execution (handles stages, targets, full pipeline, etc.)
@@ -788,22 +668,11 @@ Examples:
   # 3. Re-run scan (now succeeds with discovered protocol):
   pgdn --stage scan --target 192.168.1.1 --org-id myorg # Proceeds with scan using discovered protocol
   
-  # Queue Operations (Background Processing)
-  pgdn --queue                      # Queue full pipeline for background processing
-  pgdn --stage scan --queue         # Queue scan stage for background processing
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --queue # Queue target scan for background processing
-  pgdn --queue --wait-for-completion # Queue job and wait for completion
-  pgdn --queue --org-id myorg       # Queue pipeline for specific organization
-  pgdn --task-id abc123-def456      # Check status of queued task
-  pgdn --cancel-task abc123-def456  # Cancel a queued task
-  pgdn --list-tasks                 # List all active queued tasks
-  
   # Parallel Processing
   pgdn --parallel-targets 192.168.1.100 192.168.1.101 192.168.1.102 # Scan multiple targets in parallel
-  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --queue --max-parallel 3 # Queue parallel scans with concurrency limit
-  pgdn --target-file targets.txt --queue # Scan targets from file in parallel
-  pgdn --parallel-stages recon scan --queue # Run multiple independent stages in parallel
-  pgdn --parallel-stages recon scan --queue --wait-for-completion # Run and wait for completion
+  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --max-parallel 3 # Parallel scans with concurrency limit
+  pgdn --target-file targets.txt # Scan targets from file in parallel
+  pgdn --parallel-stages recon scan # Run multiple independent stages in parallel
   pgdn --parallel-targets 10.0.0.1 10.0.0.2 --org-id myorg # Parallel scans for specific organization
   
   # Signature Learning from Existing Scans
