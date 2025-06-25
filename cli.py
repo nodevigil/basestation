@@ -1,8 +1,29 @@
 """
-DePIN Infrastructure Scanner - Command Line Interface
+DePIN Infrastructure Scanner - Scanning Library Interface
 
-A thin CLI wrapper around the PGDN library providing command-line access
-to all scanning, reporting, and management functionality.
+A library interface providing access to scanning functionality.
+Focuses on scanning operations only.
+Returns JSON data for consumption by external applications.
+
+Example usage as a library:
+
+    from cli import ScannerLibrary
+    
+    # Initialize scanner
+    scanner = ScannerLibrary(config_file='config.json')
+    
+    # Run scanning operations
+    scan_result = scanner.run_scan(
+        target='192.168.1.1',
+        org_id='myorg',
+        scan_level=2,
+        force_protocol='sui'
+    )
+    
+    # Run processing of scan results
+    process_result = scanner.run_process(org_id='myorg')
+    
+    # Custom scanners (sui, filecoin) are automatically available
 """
 
 import argparse
@@ -13,13 +34,84 @@ import traceback
 from typing import Optional, List, Dict, Any
 
 # Import the library components
-from pgdn import (
+from lib import (
     ApplicationCore, load_config, setup_environment, initialize_application,
-    PipelineOrchestrator, Scanner, ReportManager, CVEManager, 
-    SignatureManager, AgentManager, ParallelOperations
+    Config, PipelineOrchestrator, Scanner
 )
-from pgdn.scanner import load_targets_from_file
-from pgdn.core.config import Config
+from lib.scanner import load_targets_from_file
+
+# Export the main library interface
+__all__ = ['ScannerLibrary']
+
+
+class ScannerLibrary:
+    """
+    Main library interface for DePIN infrastructure scanning.
+    
+    This class provides a simple interface to the scanning functionality
+    while keeping custom scanners like Sui and Filecoin available.
+    """
+    
+    def __init__(self, config_file: str = None, log_level: str = 'INFO'):
+        """
+        Initialize the scanner library.
+        
+        Args:
+            config_file: Path to configuration file
+            log_level: Logging level
+        """
+        self.config = load_config(
+            config_file=config_file,
+            log_level=log_level,
+            use_docker_config=os.getenv('USE_DOCKER_CONFIG', '').lower() in ('true', '1', 'yes')
+        )
+        self.orchestrator = PipelineOrchestrator(self.config)
+    
+    def run_scan(self, target: str = None, org_id: str = None, scan_level: int = 1, 
+                 force_protocol: str = None, debug: bool = False, 
+                 enabled_scanners: List[str] = None, enabled_external_tools: List[str] = None,
+                 limit: int = None) -> Dict[str, Any]:
+        """
+        Run scanning stage.
+        
+        Args:
+            target: Specific target to scan
+            org_id: Organization ID to filter operations
+            scan_level: Scan intensity level (1-3)
+            force_protocol: Force specific protocol scanner (sui, filecoin)
+            debug: Enable debug logging
+            enabled_scanners: List of specific scanners to run
+            enabled_external_tools: List of specific external tools to run
+            limit: Limit number of targets to scan
+            
+        Returns:
+            Dict containing scan results
+        """
+        return self.orchestrator.run_scan_stage(
+            target=target,
+            org_id=org_id,
+            scan_level=scan_level,
+            force_protocol=force_protocol,
+            debug=debug,
+            enabled_scanners=enabled_scanners,
+            enabled_external_tools=enabled_external_tools,
+            limit=limit
+        )
+    
+    def run_process(self, org_id: str = None) -> Dict[str, Any]:
+        """
+        Run processing stage.
+        
+        Args:
+            org_id: Organization ID to filter operations
+            
+        Returns:
+            Dict containing processing results
+        """
+        return self.orchestrator.run_process_stage(org_id=org_id)
+
+
+# CLI interface functions below
 
 
 def setup_environment_cli(config: Config) -> None:
@@ -33,8 +125,8 @@ def setup_environment_cli(config: Config) -> None:
     setup_environment(config)
     
     # CLI-specific output
-    print("🐦 PGND - Agentic DePIN Infrastructure Scanner")
-    print("="*60)
+    print("� PGDN - DePIN Infrastructure Scanner Library")
+    print("="*50)
 
 
 def print_result(result: Dict[str, Any], json_output: bool = False) -> None:
@@ -56,42 +148,15 @@ def print_result(result: Dict[str, Any], json_output: bool = False) -> None:
         # Handle different result types
         operation = result.get('operation', result.get('stage', 'operation'))
         
-        if operation == 'full_pipeline':
-            print_pipeline_result(result)
-        elif operation in ['recon', 'scan', 'process', 'score', 'publish', 'signature', 'discovery']:
+        if operation in ['scan', 'process']:
             print_stage_result(result)
         elif operation == 'target_scan':
             print_target_scan_result(result)
-        elif operation == 'parallel_scans':
-            print_parallel_scan_result(result)
-        elif operation == 'report':
-            print_report_result(result)
-        elif operation == 'cve_update':
-            print_cve_result(result)
-        elif operation == 'list_agents':
-            print_agents_result(result)
         else:
             # Generic success message
             print(f"✅ {operation.replace('_', ' ').title()} completed successfully!")
             if 'results_count' in result:
                 print(f"   Results: {result['results_count']} items")
-
-
-def print_pipeline_result(result: Dict[str, Any]) -> None:
-    """Print full pipeline results."""
-    print(f"✅ Pipeline completed successfully!")
-    print(f"   Execution ID: {result.get('execution_id', 'N/A')}")
-    print(f"   Total time: {result.get('execution_time_seconds', 0):.2f} seconds")
-    
-    # Print stage summaries
-    stages = result.get('stages', {})
-    for stage_name, stage_results in stages.items():
-        if stage_name in ['recon', 'scan', 'process']:
-            count = len(stage_results) if isinstance(stage_results, list) else 'N/A'
-            print(f"   {stage_name.title()}: {count} items")
-        elif stage_name == 'publish':
-            status = 'Success' if stage_results else 'Failed'
-            print(f"   {stage_name.title()}: {status}")
 
 
 def print_stage_result(result: Dict[str, Any]) -> None:
@@ -137,80 +202,9 @@ def print_target_scan_result(result: Dict[str, Any]) -> None:
                     print(f"   🔌 RPC endpoint: ❌ Not exposed")
 
 
-def print_parallel_scan_result(result: Dict[str, Any]) -> None:
-    """Print parallel scan results."""
-    successful = result.get('successful', 0)
-    total = result.get('total', 0)
-    print(f"✅ Parallel scans completed: {successful}/{total} successful")
-
-
-def print_report_result(result: Dict[str, Any]) -> None:
-    """Print report generation results."""
-    scan_id = result.get('scan_id')
-    if scan_id:
-        print(f"✅ Report generated for scan {scan_id}")
-    else:
-        print(f"✅ Report generation completed!")
-
-
-def print_cve_result(result: Dict[str, Any]) -> None:
-    """Print CVE update results."""
-    stats = result.get('statistics', {})
-    initial = result.get('initial_populate', False)
-    
-    print("✅ CVE database updated successfully!")
-    print("📊 Database Statistics:")
-    print(f"   • Total CVEs: {stats.get('total_cves', 'Unknown')}")
-    print(f"   • High Severity CVEs: {stats.get('high_severity_count', 'Unknown')}")
-    print(f"   • Recent CVEs (30 days): {stats.get('recent_cves_30_days', 'Unknown')}")
-    
-    if stats.get('last_update'):
-        print(f"   • Last Update: {stats['last_update']}")
-        print(f"   • New CVEs Added: {stats.get('last_update_new_cves', 0)}")
-        print(f"   • CVEs Updated: {stats.get('last_update_updated_cves', 0)}")
-    
-    if initial:
-        print("   🎉 Initial database population completed!")
-    else:
-        print("   📈 CVE database is now up to date")
-
-
-def print_agents_result(result: Dict[str, Any]) -> None:
-    """Print available agents."""
-    agents = result.get('agents', {})
-    
-    print("📋 Available Agents:")
-    print("="*40)
-    
-    for category, agent_list in agents.items():
-        print(f"\n{category.upper()} AGENTS:")
-        if agent_list:
-            for agent in agent_list:
-                print(f"  • {agent}")
-        else:
-            print("  (none available)")
-    
-    print("\nUsage examples:")
-    print("  # Run full pipeline")
-    print("  pgdn")
-    print("  ")
-    print("  # Run only reconnaissance stage")
-    print("  pgdn --stage recon")
-    print("  ")
-    print("  # Run specific recon agent")
-    print("  pgdn --stage recon --recon-agents SuiReconAgent")
-
-
 def execute_command(config: Config, args) -> Dict[str, Any]:
     """
-    Unified command execution that handles all execution modes.
-    
-    This unified approach replaces the separate run_full_pipeline_command and 
-    run_single_stage_command functions, reducing complexity and duplication by:
-    - Centralizing execution mode determination (direct, queue, parallel)
-    - Eliminating duplicate queue/parallel checks across multiple functions
-    - Providing a single entry point for all command execution
-    - Maintaining clean separation between execution strategies
+    Execute command using the scanner library.
     
     Args:
         config: Configuration instance
@@ -219,77 +213,30 @@ def execute_command(config: Config, args) -> Dict[str, Any]:
     Returns:
         Dict containing execution results
     """
-    # Determine execution mode
-    execution_mode = _determine_execution_mode(args)
-    
-    # Route to appropriate execution handler
-    if execution_mode == 'parallel':
-        return _execute_via_parallel(config, args)
-    else:
-        return _execute_direct(config, args)
-
-
-def _determine_execution_mode(args) -> str:
-    """Determine the execution mode based on arguments."""
-    # Parallel operations take precedence
-    if any([args.parallel_targets, args.target_file, args.parallel_stages]):
-        return 'parallel'
-    else:
-        return 'direct'
-
-
-def _execute_via_parallel(config: Config, args) -> Dict[str, Any]:
-    """Execute command via parallel processing."""
-    return run_parallel_command(config, args)
-
-
-def _execute_direct(config: Config, args) -> Dict[str, Any]:
-    """Execute command directly (synchronous)."""
-    # Handle CVE commands
-    if args.update_cves or args.start_cve_scheduler:
-        return run_cve_command(args)
-    
-    # Handle signature commands
-    elif any([args.learn_signatures_from_scans, args.update_signature_flags, 
-             args.mark_signature_created, args.show_signature_stats]):
-        return run_signature_command(args)
+    # Create library instance
+    library = ScannerLibrary()
+    library.config = config
+    library.orchestrator = PipelineOrchestrator(config)
     
     # Handle stage-based commands
-    elif args.stage:
-        return _execute_single_stage(config, args)
-    
-    # Default: full pipeline
+    if args.stage:
+        return _execute_single_stage_with_library(library, args)
     else:
-        return _execute_full_pipeline(config, args)
+        # Default: run scan stage
+        return library.run_scan(org_id=args.org_id)
 
 
-def _execute_full_pipeline(config: Config, args) -> Dict[str, Any]:
-    """Execute full pipeline directly."""
-    orchestrator = PipelineOrchestrator(config)
-    return orchestrator.run_full_pipeline(
-        recon_agents=args.recon_agents,
-        org_id=args.org_id
-    )
-
-
-def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
-    """Execute single stage directly."""
+def _execute_single_stage_with_library(library: ScannerLibrary, args) -> Dict[str, Any]:
+    """Execute single stage using the library."""
     stage = args.stage
     
-    if stage == 'recon':
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_recon_stage(
-            agent_names=args.recon_agents,
-            org_id=args.org_id
-        )
-    
-    elif stage == 'scan':
+    if stage == 'scan':
         # Parse scanner selection options
-        enabled_scanners = args.scanners
-        enabled_external_tools = args.external_tools
+        enabled_scanners = getattr(args, 'scanners', None)
+        enabled_external_tools = getattr(args, 'external_tools', None)
         
         # Handle scan type shortcuts
-        if args.type:
+        if hasattr(args, 'type') and args.type:
             if args.type == 'nmap':
                 enabled_scanners = []
                 enabled_external_tools = ['nmap']
@@ -319,226 +266,25 @@ def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
                 enabled_scanners = None
                 enabled_external_tools = None
         
-        # Use new orchestration approach
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_scan_stage(
-            target=args.target,
+        return library.run_scan(
+            target=getattr(args, 'target', None),
             org_id=args.org_id,
-            scan_level=args.scan_level,
-            force_protocol=args.force_protocol,
-            debug=args.debug,
+            scan_level=getattr(args, 'scan_level', 1),
+            force_protocol=getattr(args, 'force_protocol', None),
+            debug=getattr(args, 'debug', False),
             enabled_scanners=enabled_scanners,
             enabled_external_tools=enabled_external_tools,
-            limit=args.limit
+            limit=getattr(args, 'limit', None)
         )
     
     elif stage == 'process':
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_process_stage(
-            agent_name=args.agent,
-            org_id=args.org_id
-        )
-    
-    elif stage == 'score':
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_scoring_stage(
-            agent_name=args.agent or 'ScoringAgent',
-            force_rescore=args.force_rescore,
-            org_id=args.org_id
-        )
-    
-    elif stage == 'publish':
-        if not args.scan_id:
-            return {
-                "success": False,
-                "error": "Publish stage requires --scan-id argument",
-                "suggestion": "Example: pgdn --stage publish --scan-id 123"
-            }
-        
-        # Determine agent
-        if sum([args.publish_ledger, args.publish_report]) > 1:
-            return {
-                "success": False,
-                "error": "Cannot specify multiple publish flags simultaneously",
-                "suggestion": "Use one of: --publish-ledger or --publish-report"
-            }
-        elif args.publish_ledger:
-            agent_name = 'PublishLedgerAgent'
-        elif args.publish_report:
-            agent_name = 'PublishReportAgent'
-        else:
-            agent_name = 'PublishLedgerAgent'  # Default
-        
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_publish_stage(
-            agent_name, 
-            scan_id=args.scan_id,
-            org_id=args.org_id
-        )
-    
-    elif stage == 'report':
-        report_manager = ReportManager(config)
-        return report_manager.generate_report(
-            agent_name=args.agent or 'ReportAgent',
-            scan_id=getattr(args, 'scan_id', None),
-            input_file=getattr(args, 'report_input', None),
-            output_file=getattr(args, 'report_output', None),
-            report_format=getattr(args, 'report_format', 'json'),
-            auto_save=getattr(args, 'auto_save_report', False),
-            email_report=getattr(args, 'report_email', False),
-            recipient_email=getattr(args, 'recipient_email', None),
-            force_report=getattr(args, 'force_report', False),
-            org_id=args.org_id
-        )
-    
-    elif stage == 'signature':
-        orchestrator = PipelineOrchestrator(config)
-        return orchestrator.run_signature_stage(
-            agent_name=args.agent or 'ProtocolSignatureGeneratorAgent',
-            org_id=args.org_id
-        )
-    
-    elif stage == 'discovery':
-        # Handle node-based discovery workflow
-        if args.node_id:
-            # Discovery for specific node (part of orchestration workflow)
-            if not args.host:
-                return {
-                    "success": False,
-                    "error": "Discovery with --node-id requires --host argument",
-                    "suggestion": "Example: pgdn --stage discovery --node-id abc123-def456 --host 192.168.1.1"
-                }
-            
-            try:
-                from pgdn.agent_modules.discovery.discovery_agent import DiscoveryAgent
-                discovery_agent = DiscoveryAgent(config)
-                
-                return discovery_agent.discover_node(
-                    node_id=args.node_id,
-                    host=args.host
-                )
-            except ImportError as e:
-                return {
-                    "success": False,
-                    "error": f"Discovery agent not available: {str(e)}"
-                }
-                
-        elif not args.host:
-            return {
-                "success": False,
-                "error": "Discovery stage requires --host argument",
-                "suggestion": "Example: pgdn --stage discovery --host 192.168.1.1"
-            }
-        else:
-            # Legacy discovery mode
-            orchestrator = PipelineOrchestrator(config)
-            return orchestrator.run_discovery_stage(
-                agent_name=args.agent or 'DiscoveryAgent',
-                host=args.host,
-                org_id=args.org_id
-            )
+        return library.run_process(org_id=args.org_id)
     
     else:
         return {
             "success": False,
-            "error": f"Unknown stage: {stage}"
+            "error": f"Unknown stage: {stage}. Available stages: scan, process"
         }
-
-
-
-def run_parallel_command(config: Config, args) -> Dict[str, Any]:
-    """Run parallel operations command."""
-    # Determine targets
-    targets = None
-    if args.parallel_targets:
-        targets = args.parallel_targets
-    elif args.target_file:
-        try:
-            targets = load_targets_from_file(args.target_file)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Error loading targets from file: {str(e)}"
-            }
-    
-    # Use library for parallel operations
-    parallel_ops = ParallelOperations(config)
-    
-    return parallel_ops.coordinate_parallel_operation(
-        targets=targets,
-        target_file=None,  # Already loaded above if needed
-        stages=args.parallel_stages,
-        max_parallel=args.max_parallel,
-        force_protocol=args.force_protocol,
-        debug=args.debug,
-        agent_name=args.agent,
-        recon_agents=args.recon_agents,
-        force_rescore=args.force_rescore,
-        host=args.host,
-        use_queue=False,
-        wait_for_completion=args.wait_for_completion,
-        org_id=args.org_id
-    )
-
-
-def run_cve_command(args) -> Dict[str, Any]:
-    """Run CVE-related commands."""
-    cve_manager = CVEManager()
-    
-    if args.start_cve_scheduler:
-        return cve_manager.start_scheduler(args.cve_update_time)
-    else:
-        return cve_manager.update_database(
-            force_update=args.replace_cves,
-            initial_populate=args.initial_cves
-        )
-
-
-def run_signature_command(args) -> Dict[str, Any]:
-    """Run signature-related commands."""
-    signature_manager = SignatureManager()
-    
-    if args.learn_signatures_from_scans:
-        if not args.signature_protocol:
-            return {
-                "success": False,
-                "error": "Signature learning requires --signature-protocol argument",
-                "suggestion": "Example: pgdn --learn-signatures-from-scans --signature-protocol sui"
-            }
-        
-        return signature_manager.learn_from_scans(
-            protocol=args.signature_protocol,
-            min_confidence=args.signature_learning_min_confidence,
-            max_examples=args.signature_learning_max_examples,
-            org_id=args.org_id
-        )
-    
-    elif args.update_signature_flags:
-        return signature_manager.update_signature_flags(
-            args.protocol_filter,
-            org_id=args.org_id
-        )
-    
-    elif args.mark_signature_created:
-        return signature_manager.mark_signature_created(
-            args.mark_signature_created,
-            org_id=args.org_id
-        )
-    
-    elif args.show_signature_stats:
-        return signature_manager.get_signature_statistics(org_id=args.org_id)
-    
-    else:
-        return {
-            "success": False,
-            "error": "No signature operation specified"
-        }
-
-
-def run_list_agents_command() -> Dict[str, Any]:
-    """Run list agents command."""
-    agent_manager = AgentManager()
-    return agent_manager.list_all_agents()
 
 
 def main():
@@ -552,22 +298,12 @@ def main():
         # Load configuration
         config = load_config_cli(args, json_output)
         
-        # Setup environment (unless in JSON mode or for simple operations)
-        if not json_output and not any([
-            args.list_agents, args.update_cves and not args.initial_cves
-        ]):
+        # Setup environment (unless in JSON mode)
+        if not json_output:
             setup_environment_cli(config)
         
-        # Route to appropriate command handler
-        result = None
-        
-        # Route to appropriate command handler
-        if args.list_agents:
-            result = run_list_agents_command()
-        
-        else:
-            # Default: use unified command execution (handles stages, targets, full pipeline, etc.)
-            result = execute_command(config, args)
+        # Execute command
+        result = execute_command(config, args)
         
         # Print results
         if result:
@@ -599,18 +335,17 @@ def main():
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="PGDN - Agentic DePIN Infrastructure Scanner CLI",
+        description="PGDN - DePIN Infrastructure Scanner Library",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Standard Operations
-  pgdn                              # Run full pipeline
-  pgdn --stage recon                # Run only reconnaissance
+  pgdn                              # Run scanning (default)
   pgdn --stage scan                 # Run only scanning (scan level 1 by default)
   pgdn --stage scan --scan-level 2  # Run scanning with GeoIP enrichment
   pgdn --stage scan --scan-level 3  # Run comprehensive scanning with advanced analysis
-  pgdn --stage scan --org-id myorg  # Scan database nodes for specific organization
-  pgdn --stage scan --org-id myorg --limit 5 # Scan only 5 validators from database
+  pgdn --stage scan --org-id myorg  # Scan targets for specific organization
+  pgdn --stage scan --org-id myorg --limit 5 # Scan only 5 targets for organization
   pgdn --stage scan --org-id myorg --limit 10 --scan-level 2 # Scan 10 validators with GeoIP
   pgdn --stage process              # Run only processing
 
@@ -634,51 +369,9 @@ Examples:
   pgdn --stage scan --target example.com --org-id myorg --scanners generic web
   pgdn --stage scan --target example.com --org-id myorg --external-tools nmap whatweb
   pgdn --stage scan --target example.com --org-id myorg --scanners geo --external-tools nmap
-  pgdn --stage score                # Run only scoring
-  pgdn --stage signature            # Generate protocol signatures
-  pgdn --stage discovery --host 192.168.1.1 # Run network topology discovery for specific host
-  pgdn --stage discovery --node-id abc123-def456 --host 192.168.1.1 # Run discovery for specific node (orchestration workflow)
-  pgdn --stage publish --scan-id 123   # Publish to blockchain ledger only (default behavior)
-  pgdn --stage publish --scan-id 123 --publish-ledger  # Publish only to blockchain ledger (explicit)
-  pgdn --stage publish --scan-id 123 --publish-report  # Publish reports to local files and Walrus storage (requires ledger to be published first)
-  pgdn --stage report               # Generate AI security analysis report for all unprocessed scans
-  pgdn --stage report --scan-id 123 # Generate report for specific scan ID
-  pgdn --stage report --force-report # Generate reports for all scans (even if already processed)
-  pgdn --stage report --report-input scan_result.json # Generate report from specific scan
-  pgdn --stage report --report-email # Generate with email notification
-  pgdn --stage report --auto-save-report # Auto-save with timestamp
-  pgdn --list-agents                # List available agents
-  pgdn --recon-agents SuiReconAgent # Run specific recon agent
-  pgdn --update-cves                # Update CVE database with latest data
-  pgdn --update-cves --replace-cves # Force update of CVE database
-  pgdn --update-cves --initial-cves # Initial CVE database population
-  pgdn --start-cve-scheduler        # Start daily CVE update scheduler
   
   # Organization-specific Operations
-  pgdn --org-id myorg               # Run full pipeline for specific organization
-  pgdn --stage report --org-id myorg # Generate reports only for organization's scans
-  
-  # Orchestration Workflow (when no protocol is known)
-  # 1. First scan attempt triggers discovery requirement:
-  pgdn --stage scan --target 192.168.1.1 --org-id myorg # Returns: "run-discovery" with node-id
-  # 2. Run discovery for the node:
-  pgdn --stage discovery --node-id <uuid> --host 192.168.1.1 # Identifies protocol and updates node
-  # 3. Re-run scan (now succeeds with discovered protocol):
-  pgdn --stage scan --target 192.168.1.1 --org-id myorg # Proceeds with scan using discovered protocol
-  
-  # Parallel Processing
-  pgdn --parallel-targets 192.168.1.100 192.168.1.101 192.168.1.102 # Scan multiple targets in parallel
-  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --max-parallel 3 # Parallel scans with concurrency limit
-  pgdn --target-file targets.txt # Scan targets from file in parallel
-  pgdn --parallel-stages recon scan # Run multiple independent stages in parallel
-  pgdn --parallel-targets 10.0.0.1 10.0.0.2 --org-id myorg # Parallel scans for specific organization
-  
-  # Signature Learning from Existing Scans
-  pgdn --learn-signatures-from-scans --signature-protocol sui # Learn Sui signatures from existing scans
-  pgdn --learn-signatures-from-scans --signature-protocol filecoin # Learn Filecoin signatures
-  pgdn --learn-signatures-from-scans --signature-protocol ethereum --signature-learning-min-confidence 0.8 # Learn with higher confidence threshold
-  pgdn --learn-signatures-from-scans --signature-protocol sui --signature-learning-max-examples 500 # Limit examples
-  pgdn --learn-signatures-from-scans --signature-protocol sui --org-id myorg # Learn signatures for specific organization
+  pgdn --org-id myorg               # Run scanning for specific organization
         """
     )
     
@@ -690,18 +383,13 @@ Examples:
     
     parser.add_argument(
         '--org-id',
-        help='Organization ID to filter agentic jobs by organization'
+        help='Organization ID to filter scanning operations by organization'
     )
     
     parser.add_argument(
         '--stage',
-        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature', 'discovery'],
+        choices=['scan', 'process'],
         help='Run only the specified stage'
-    )
-    
-    parser.add_argument(
-        '--agent',
-        help='Specific agent name to use for the stage'
     )
     
     parser.add_argument(
@@ -720,7 +408,7 @@ Examples:
     parser.add_argument(
         '--limit',
         type=int,
-        help='Limit the number of validators to scan from database (useful for testing or resource management)'
+        help='Limit the number of targets to scan (useful for testing or resource management)'
     )
     
     parser.add_argument(
@@ -744,61 +432,9 @@ Examples:
     )
     
     parser.add_argument(
-        '--recon-agents',
-        nargs='+',
-        help='List of reconnaissance agents to run'
-    )
-    
-    parser.add_argument(
         '--force-protocol',
         choices=['filecoin', 'sui'],
         help='Force run protocol-specific scanner even if protocol is unknown (e.g., filecoin, sui)'
-    )
-    
-    parser.add_argument(
-        '--host',
-        help='Host/IP address for network topology discovery (required for discovery stage)'
-    )
-    
-    parser.add_argument(
-        '--node-id',
-        help='Node UUID for orchestration workflow (used with discovery stage)'
-    )
-    
-    parser.add_argument(
-        '--list-agents',
-        action='store_true',
-        help='List all available agents and exit'
-    )
-    
-    parser.add_argument(
-        '--update-cves',
-        action='store_true',
-        help='Update CVE database with latest vulnerability data'
-    )
-    
-    parser.add_argument(
-        '--replace-cves',
-        action='store_true',
-        help='Force update of CVE database (use with --update-cves)'
-    )
-    
-    parser.add_argument(
-        '--initial-cves',
-        action='store_true',
-        help='Perform initial CVE database population (use with --update-cves)'
-    )
-    
-    parser.add_argument(
-        '--start-cve-scheduler',
-        action='store_true',
-        help='Start the CVE update scheduler (runs daily at 2 AM)'
-    )
-    
-    parser.add_argument(
-        '--cve-update-time',
-        default='02:00',
-        help='Time for daily CVE updates (HH:MM format, default: 02:00)'
     )
     
     parser.add_argument(
@@ -817,186 +453,6 @@ Examples:
         '--debug',
         action='store_true',
         help='Enable debug logging for scanners (creates detailed log files)'
-    )
-    
-    parser.add_argument(
-        '--force-rescore',
-        action='store_true',
-        help='Force re-scoring of results that already have scores (use with --stage score)'
-    )
-    
-    # Report stage arguments
-    parser.add_argument(
-        '--scan-id',
-        type=int,
-        help='Specific scan ID to generate report for (if not provided, will run for all unprocessed scans). Required for publish stage.'
-    )
-    
-    parser.add_argument(
-        '--force-report',
-        action='store_true',
-        help='Force generation of report even if scan has already been processed'
-    )
-    
-    parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Force operation to bypass caching/recent result checks'
-    )
-    
-    parser.add_argument(
-        '--report-input',
-        help='Input file for report generation (JSON scan results)'
-    )
-    
-    parser.add_argument(
-        '--report-output',
-        help='Output file for report results (JSON format)'
-    )
-    
-    parser.add_argument(
-        '--report-format',
-        choices=['json', 'summary'],
-        default='json',
-        help='Report output format (default: json)'
-    )
-    
-    parser.add_argument(
-        '--report-email',
-        action='store_true',
-        help='Generate email notification in report'
-    )
-    
-    parser.add_argument(
-        '--recipient-email',
-        help='Recipient email address for notification'
-    )
-    
-    parser.add_argument(
-        '--auto-save-report',
-        action='store_true',
-        help='Auto-save report with timestamp filename'
-    )
-    
-    # Publish stage arguments
-    parser.add_argument(
-        '--publish-ledger',
-        action='store_true',
-        help='Publish scan results to blockchain ledger (use with --stage publish)'
-    )
-    
-    parser.add_argument(
-        '--publish-report',
-        action='store_true',
-        help='Publish scan reports to local files and Walrus storage (use with --stage publish, requires ledger to be published first)'
-    )
-    
-    parser.add_argument(
-        '--queue',
-        action='store_true',
-        help='Queue the job for background processing using Celery (requires Redis/Celery worker)'
-    )
-
-    parser.add_argument(
-        '--task-id',
-        help='Check status of a specific queued task'
-    )
-
-    parser.add_argument(
-        '--batch-size',
-        type=int,
-        default=10,
-        help='Batch size for queued operations (default: 10)'
-    )
-
-    parser.add_argument(
-        '--wait-for-completion',
-        action='store_true',
-        help='Wait for queued tasks to complete before exiting (use with --queue)'
-    )
-
-    parser.add_argument(
-        '--list-tasks',
-        action='store_true',
-        help='List all active queued tasks and their status'
-    )
-
-    parser.add_argument(
-        '--cancel-task',
-        help='Cancel a specific queued task by ID'
-    )
-    
-    parser.add_argument(
-        '--parallel-targets',
-        nargs='+',
-        help='Scan multiple targets in parallel (space-separated list of IPs/hostnames)'
-    )
-
-    parser.add_argument(
-        '--max-parallel',
-        type=int,
-        default=5,
-        help='Maximum number of parallel tasks/scans (default: 5)'
-    )
-
-    parser.add_argument(
-        '--parallel-stages',
-        nargs='+',
-        choices=['recon', 'scan', 'process', 'score', 'publish', 'report', 'signature', 'discovery'],
-        help='Run multiple stages in parallel (space-separated list)'
-    )
-
-    parser.add_argument(
-        '--target-file',
-        help='File containing list of targets to scan (one per line)'
-    )
-    
-    parser.add_argument(
-        '--learn-signatures-from-scans',
-        action='store_true',
-        help='Learn improved protocol signatures from existing scan data'
-    )
-    
-    parser.add_argument(
-        '--signature-protocol',
-        help='Protocol name for signature learning (required with --learn-signatures-from-scans). Examples: sui, filecoin, ethereum'
-    )
-    
-    parser.add_argument(
-        '--signature-learning-min-confidence',
-        type=float,
-        default=0.7,
-        help='Minimum confidence threshold for scans to include in learning (default: 0.7)'
-    )
-    
-    parser.add_argument(
-        '--signature-learning-max-examples',
-        type=int,
-        default=1000,
-        help='Maximum examples to process per protocol (default: 1000)'
-    )
-    
-    parser.add_argument(
-        '--update-signature-flags',
-        action='store_true',
-        help='Update signature_created flags for scans that have been processed for signature generation'
-    )
-    
-    parser.add_argument(
-        '--protocol-filter',
-        help='Protocol filter for signature flag updates (e.g., sui, filecoin, ethereum)'
-    )
-    
-    parser.add_argument(
-        '--mark-signature-created',
-        type=int,
-        help='Mark a specific scan ID as having its signature created'
-    )
-    
-    parser.add_argument(
-        '--show-signature-stats',
-        action='store_true',
-        help='Show statistics about signature creation status for scans'
     )
     
     return parser.parse_args()

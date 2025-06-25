@@ -40,13 +40,13 @@ Documentation = "https://github.com/your-org/pgdn/docs"
 Issues = "https://github.com/your-org/pgdn/issues"
 
 [tool.setuptools]
-packages = ["pgdn", "core", "utils", "agents", "models", "services", "tasks", "tests"]
+packages = ["lib", "lib.core", "lib.scanners", "lib.tools", "lib.utils"]
 include-package-data = true
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.package-data]
-pgdn = ["*.json", "*.yml", "*.yaml"]
+lib = ["*.json", "*.yml", "*.yaml"]
 core = ["*.json"]
 "*" = ["*.md", "*.txt", "*.ini"]

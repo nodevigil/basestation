@@ -9,7 +9,7 @@ scanning operations without using the CLI interface.
 # Example 1: Basic Configuration and Environment Setup
 def example_basic_setup():
     """Example of basic application setup using the library."""
-    from pgdn import ApplicationCore
+    from lib import ApplicationCore
     
     # Initialize application core
     app_core = ApplicationCore()
@@ -21,7 +21,7 @@ def example_basic_setup():
         use_docker_config=False
     )
     
-    # Setup environment (logging, database, etc.)
+    # Setup environment (logging, etc.)
     app_core.setup_environment(config)
     
     print("✅ Application initialized successfully")
@@ -31,7 +31,7 @@ def example_basic_setup():
 # Example 2: Running a Full Pipeline Programmatically
 def example_full_pipeline():
     """Example of running a full pipeline using the library."""
-    from pgdn import initialize_application, PipelineOrchestrator
+    from lib import initialize_application, PipelineOrchestrator
     
     # Complete initialization in one call
     config = initialize_application(
@@ -60,7 +60,7 @@ def example_full_pipeline():
 # Example 3: Direct Target Scanning
 def example_target_scanning():
     """Example of scanning specific targets directly."""
-    from pgdn import load_config, Scanner
+    from lib import load_config, Scanner
     
     # Setup
     config = load_config("config.json")
