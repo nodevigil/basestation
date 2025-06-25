@@ -312,7 +312,7 @@ def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
                 enabled_scanners = []
                 enabled_external_tools = ['docker_exposure']
             elif args.type == 'whatweb':
-                enabled_scanners = []
+                enabled_scanners = ['web']  # Enable web scanner to detect web services
                 enabled_external_tools = ['whatweb']
             elif args.type == 'full':
                 # Use default configuration (don't override)

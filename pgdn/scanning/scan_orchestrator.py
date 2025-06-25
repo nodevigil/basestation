@@ -121,9 +121,15 @@ class ScanOrchestrator:
                 self.logger.error(f"Nmap scan failed for {target}: {e}")
                 external_results["nmap"] = {"error": str(e)}
         
-        # WhatWeb scan (on detected web ports)
-        if 'whatweb' in self.enabled_external_tools:
+        # WhatWeb scan (on detected web ports or when web scanner is enabled)
+        if 'whatweb' in self.enabled_external_tools or 'web' in self.enabled_scanners:
             web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
+            
+            # If no web ports found but web scanner is enabled, try standard ports
+            if not web_ports and 'web' in self.enabled_scanners:
+                self.logger.debug(f"Web scanner enabled but no ports detected. Trying standard web ports for WhatWeb.")
+                web_ports = [(80, "http"), (443, "https")]
+            
             whatweb_results = {}
             for port, scheme in web_ports:
                 try:
