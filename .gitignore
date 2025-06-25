@@ -244,3 +244,4 @@ scan_result_*.json
 security_report*.json
 protocol_seeder.py*
 internal_docs*
+CLAUDE.md
