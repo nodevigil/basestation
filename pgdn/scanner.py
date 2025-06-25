@@ -22,20 +22,18 @@ class Scanner:
     or running bulk scanning operations, independent of CLI concerns.
     """
     
-    def __init__(self, config: Config, protocol_filter: Optional[str] = None, debug: bool = False, 
+    def __init__(self, config: Config, debug: bool = False, 
                  enabled_scanners: Optional[List[str]] = None, enabled_external_tools: Optional[List[str]] = None):
         """
         Initialize the scanner.
         
         Args:
             config: Configuration instance
-            protocol_filter: Optional protocol filter (e.g., 'filecoin', 'sui')
             debug: Enable debug logging
             enabled_scanners: List of specific scanners to run (overrides config)
             enabled_external_tools: List of specific external tools to run (overrides config)
         """
         self.config = config
-        self.protocol_filter = protocol_filter
         self.debug = debug
         self.enabled_scanners = enabled_scanners
         self.enabled_external_tools = enabled_external_tools
@@ -68,7 +66,7 @@ class Scanner:
             validation_result = orchestration.validate_scan_request(
                 org_id=org_id,
                 target=target,
-                protocol_filter=self.protocol_filter
+                protocol_filter=None  # Protocol filtering now handled separately
             )
             
             # If validation fails or discovery is required, return immediately
@@ -352,8 +350,7 @@ class Scanner:
                 query = session.query(NodeMetadata)
                 if org_id:
                     query = query.filter(NodeMetadata.org_id == org_id)
-                if self.protocol_filter:
-                    query = query.filter(NodeMetadata.protocol == self.protocol_filter)
+                # Protocol filtering removed - now handled by separate protocol scanning
                 
                 nodes = query.filter(NodeMetadata.status == 'discovered').all()
                 
@@ -364,7 +361,6 @@ class Scanner:
                         "results": [],
                         "results_count": 0,
                         "message": "No discovered nodes found to scan",
-                        "protocol_filter": self.protocol_filter,
                         "timestamp": datetime.now().isoformat()
                     }
                 
@@ -431,7 +427,6 @@ class Scanner:
                 "results": results,
                 "results_count": len(results),
                 "scan_level": scan_level,
-                "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -440,7 +435,6 @@ class Scanner:
                 "success": False,
                 "stage": "scan",
                 "error": f"Database node scanning failed: {str(e)}",
-                "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
     
@@ -507,7 +501,6 @@ class Scanner:
                 "total": len(targets),
                 "max_parallel": max_parallel,
                 "scan_level": scan_level,
-                "protocol_filter": self.protocol_filter,
                 "timestamp": datetime.now().isoformat()
             }
         

@@ -33,7 +33,7 @@ class ParallelOperations:
     def run_parallel_scans(self,
                           targets: List[str],
                           max_parallel: int = 5,
-                          protocol_filter: Optional[str] = None,
+                          force_protocol: Optional[str] = None,
                           debug: bool = False,
                           use_queue: bool = False,
                           wait_for_completion: bool = False,
@@ -44,7 +44,7 @@ class ParallelOperations:
         Args:
             targets: List of targets to scan
             max_parallel: Maximum number of parallel scans
-            protocol_filter: Optional protocol filter
+            force_protocol: Optional protocol filter
             debug: Enable debug logging
             use_queue: Whether to use queue for background processing
             wait_for_completion: Whether to wait for queued tasks to complete
@@ -65,7 +65,7 @@ class ParallelOperations:
                 # Use queue for parallel processing
                 queue_manager = QueueManager(self.config)
                 result = queue_manager.queue_parallel_scans(
-                    targets, max_parallel, protocol_filter, debug, org_id=org_id
+                    targets, max_parallel, force_protocol, debug, org_id=org_id
                 )
                 
                 if wait_for_completion and result.get('success'):
@@ -77,7 +77,7 @@ class ParallelOperations:
                 return result
             else:
                 # Direct parallel execution
-                scanner = Scanner(self.config, protocol_filter=protocol_filter, debug=debug)
+                scanner = Scanner(self.config, force_protocol=force_protocol, debug=debug)
                 return scanner.scan_parallel_targets(targets, max_parallel, org_id=org_id)
                 
         except Exception as e:
@@ -86,7 +86,7 @@ class ParallelOperations:
                 "error": f"Parallel scan operation failed: {str(e)}",
                 "targets": targets,
                 "max_parallel": max_parallel,
-                "protocol_filter": protocol_filter,
+                "force_protocol": force_protocol,
                 "timestamp": datetime.now().isoformat()
             }
     
@@ -168,7 +168,7 @@ class ParallelOperations:
                                     target_file: Optional[str] = None,
                                     stages: Optional[List[str]] = None,
                                     max_parallel: int = 5,
-                                    protocol_filter: Optional[str] = None,
+                                    force_protocol: Optional[str] = None,
                                     debug: bool = False,
                                     agent_name: Optional[str] = None,
                                     recon_agents: Optional[List[str]] = None,
@@ -185,7 +185,7 @@ class ParallelOperations:
             target_file: File containing targets (alternative to direct list)
             stages: List of stages for parallel stage execution
             max_parallel: Maximum parallel operations
-            protocol_filter: Optional protocol filter
+            force_protocol: Optional protocol filter
             debug: Enable debug logging
             agent_name: Specific agent name
             recon_agents: List of recon agents
@@ -207,7 +207,7 @@ class ParallelOperations:
                     stage_configs[stage] = {
                         'agent_name': agent_name,
                         'recon_agents': recon_agents,
-                        'protocol_filter': protocol_filter,
+                        'force_protocol': force_protocol,
                         'debug': debug,
                         'force_rescore': force_rescore,
                         'host': host,
@@ -225,7 +225,7 @@ class ParallelOperations:
                     targets = load_targets_from_file(target_file)
                 
                 return self.run_parallel_scans(
-                    targets, max_parallel, protocol_filter, debug, use_queue, wait_for_completion, org_id=org_id
+                    targets, max_parallel, force_protocol, debug, use_queue, wait_for_completion, org_id=org_id
                 )
             
             else:

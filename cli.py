@@ -325,7 +325,7 @@ def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
             target=args.target,
             org_id=args.org_id,
             scan_level=args.scan_level,
-            protocol_filter=args.protocol,
+            force_protocol=args.force_protocol,
             debug=args.debug,
             enabled_scanners=enabled_scanners,
             enabled_external_tools=enabled_external_tools
@@ -468,7 +468,7 @@ def run_parallel_command(config: Config, args) -> Dict[str, Any]:
         target_file=None,  # Already loaded above if needed
         stages=args.parallel_stages,
         max_parallel=args.max_parallel,
-        protocol_filter=args.protocol,
+        force_protocol=args.force_protocol,
         debug=args.debug,
         agent_name=args.agent,
         recon_agents=args.recon_agents,
@@ -746,9 +746,9 @@ Examples:
     )
     
     parser.add_argument(
-        '--protocol',
+        '--force-protocol',
         choices=['filecoin', 'sui'],
-        help='Protocol filter for scanning (e.g., filecoin, sui)'
+        help='Force run protocol-specific scanner even if protocol is unknown (e.g., filecoin, sui)'
     )
     
     parser.add_argument(
