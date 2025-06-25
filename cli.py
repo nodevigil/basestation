@@ -328,7 +328,8 @@ def _execute_single_stage(config: Config, args) -> Dict[str, Any]:
             force_protocol=args.force_protocol,
             debug=args.debug,
             enabled_scanners=enabled_scanners,
-            enabled_external_tools=enabled_external_tools
+            enabled_external_tools=enabled_external_tools,
+            limit=args.limit
         )
     
     elif stage == 'process':
@@ -608,10 +609,15 @@ Examples:
   pgdn --stage scan                 # Run only scanning (scan level 1 by default)
   pgdn --stage scan --scan-level 2  # Run scanning with GeoIP enrichment
   pgdn --stage scan --scan-level 3  # Run comprehensive scanning with advanced analysis
-  pgdn --stage scan --protocol filecoin # Scan only Filecoin nodes
-  pgdn --stage scan --protocol filecoin --debug # Scan with debug logging
-  pgdn --stage scan --protocol sui  # Scan only Sui nodes
+  pgdn --stage scan --org-id myorg  # Scan database nodes for specific organization
+  pgdn --stage scan --org-id myorg --limit 5 # Scan only 5 validators from database
+  pgdn --stage scan --org-id myorg --limit 10 --scan-level 2 # Scan 10 validators with GeoIP
   pgdn --stage process              # Run only processing
+
+  # Target Scanning
+  pgdn --stage scan --target example.com --org-id myorg                       # Infrastructure scan of target
+  pgdn --stage scan --target example.com --org-id myorg --force-protocol sui  # Infrastructure + Sui protocol scan
+  pgdn --stage scan --target example.com --org-id myorg --scan-level 3        # Comprehensive target scan
 
   # Scanner Type Selection (for testing and debugging)
   pgdn --stage scan --target example.com --org-id myorg --type nmap           # Only run nmap scan
@@ -641,12 +647,6 @@ Examples:
   pgdn --stage report --report-input scan_result.json # Generate report from specific scan
   pgdn --stage report --report-email # Generate with email notification
   pgdn --stage report --auto-save-report # Auto-save with timestamp
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan specific IP/hostname (level 1)
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --scan-level 2 # Scan target with GeoIP enrichment
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --scan-level 3 # Comprehensive scan of target
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --protocol sui # Scan target as Sui node
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --protocol sui --scan-level 3 # Comprehensive Sui scan
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg --debug # Scan target with debug
   pgdn --list-agents                # List available agents
   pgdn --recon-agents SuiReconAgent # Run specific recon agent
   pgdn --update-cves                # Update CVE database with latest data
@@ -656,8 +656,6 @@ Examples:
   
   # Organization-specific Operations
   pgdn --org-id myorg               # Run full pipeline for specific organization
-  pgdn --stage scan --org-id myorg  # Scan only nodes belonging to organization 'myorg'
-  pgdn --stage scan --target 139.84.148.36 --org-id myorg # Scan target and associate with organization
   pgdn --stage report --org-id myorg # Generate reports only for organization's scans
   
   # Orchestration Workflow (when no protocol is known)
@@ -717,6 +715,12 @@ Examples:
         choices=[1, 2, 3],
         default=1,
         help='Scan level: 1 (basic), 2 (standard with geo), 3 (comprehensive with advanced analysis)'
+    )
+    
+    parser.add_argument(
+        '--limit',
+        type=int,
+        help='Limit the number of validators to scan from database (useful for testing or resource management)'
     )
     
     parser.add_argument(

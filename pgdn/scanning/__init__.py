@@ -9,6 +9,7 @@ from .geo_scanner import GeoScanner
 # Legacy compatibility
 from .scanner import *
 
+
 __all__ = [
     'Scanner', 'ScanOrchestrator', 'BaseScanner', 'ScannerRegistry',
     'GenericScanner', 'WebScanner', 'VulnerabilityScanner', 'GeoScanner'

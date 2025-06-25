@@ -20,7 +20,7 @@ class NodeOrchestrationService:
     def __init__(self):
         pass
     
-    def validate_scan_request(self, org_id: str, target: str, protocol_filter: Optional[str] = None) -> Dict[str, Any]:
+    def validate_scan_request(self, org_id: str, target: str, protocol_filter: Optional[str] = None, infrastructure_only: bool = False) -> Dict[str, Any]:
         """
         Validate a scan request and determine the appropriate workflow.
         
@@ -28,6 +28,7 @@ class NodeOrchestrationService:
             org_id: Organization UUID string
             target: Target IP/hostname to scan
             protocol_filter: Optional protocol name filter
+            infrastructure_only: If True, bypass protocol requirements for infrastructure scans
             
         Returns:
             Dict containing validation results and next action
@@ -67,7 +68,7 @@ class NodeOrchestrationService:
                 session.commit()
             
             # 3. Determine workflow based on node status and protocol
-            return self._determine_workflow(session, node, protocol_filter)
+            return self._determine_workflow(session, node, protocol_filter, infrastructure_only)
     
     def _find_node_by_target(self, session: Session, target: str, org_id: str) -> Optional[Node]:
         """Find a node by target (IP/hostname) and organization."""
@@ -104,7 +105,7 @@ class NodeOrchestrationService:
         session.flush()  # Get the UUID
         return node
     
-    def _determine_workflow(self, session: Session, node: Node, protocol_filter: Optional[str]) -> Dict[str, Any]:
+    def _determine_workflow(self, session: Session, node: Node, protocol_filter: Optional[str], infrastructure_only: bool = False) -> Dict[str, Any]:
         """Determine the appropriate workflow based on node status and protocol."""
         
         # If protocol filter is provided, try to find the protocol
@@ -132,6 +133,19 @@ class NodeOrchestrationService:
                     "node_id": str(node.uuid),
                     "org_id": str(node.org_id),
                     "protocol": protocol.name,
+                    "next_action": None
+                }
+            elif infrastructure_only:
+                # Infrastructure-only scan - can proceed without protocol
+                node.status = 'infrastructure_scanned'
+                session.commit()
+                
+                return {
+                    "success": True,
+                    "status": "ready_to_scan",
+                    "node_id": str(node.uuid),
+                    "org_id": str(node.org_id),
+                    "protocol": None,
                     "next_action": None
                 }
             else:
@@ -167,17 +181,27 @@ class NodeOrchestrationService:
                 }
         
         elif node.status == 'scanned':
-            # Node already scanned - can rescan if needed
-            protocol_obj = session.query(Protocol).filter(Protocol.id == node.protocol_id).first()
-            return {
-                "success": True,
-                "status": "ready_to_scan",
-                "node_id": str(node.uuid),
-                "org_id": str(node.org_id),
-                "protocol": protocol_obj.name if protocol_obj else None,
-                "next_action": None,
-                "note": "Node previously scanned - will rescan"
-            }
+            # Node already scanned - check if it has a protocol
+            if node.protocol_id:
+                protocol_obj = session.query(Protocol).filter(Protocol.id == node.protocol_id).first()
+                return {
+                    "success": True,
+                    "status": "ready_to_scan",
+                    "node_id": str(node.uuid),
+                    "org_id": str(node.org_id),
+                    "protocol": protocol_obj.name if protocol_obj else None,
+                    "next_action": None,
+                    "note": "Node previously scanned - will rescan"
+                }
+            else:
+                # Node was scanned but has no protocol - requires discovery
+                return {
+                    "success": False,
+                    "error": "Node has been scanned but no protocol identified - requires discovery",
+                    "next_action": "run-discovery",
+                    "node_id": str(node.uuid),
+                    "org_id": str(node.org_id)
+                }
         
         elif node.status == 'error':
             # Node in error state - can retry

@@ -105,7 +105,8 @@ class PipelineOrchestrator:
         force_protocol: Optional[str] = None,
         debug: bool = False,
         enabled_scanners: Optional[List[str]] = None,
-        enabled_external_tools: Optional[List[str]] = None
+        enabled_external_tools: Optional[List[str]] = None,
+        limit: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Run only the scanning stage with new orchestration approach.
@@ -118,12 +119,13 @@ class PipelineOrchestrator:
             debug: Enable debug logging
             enabled_scanners: Optional list of specific scanners to enable
             enabled_external_tools: Optional list of specific external tools to enable
+            limit: Optional limit on number of validators to scan from database
             
         Returns:
             dict: Scan results with both orchestrator and protocol scan results
         """
         try:
-            # Use the new Scanner class with modular orchestration (without protocol-specific scanning)
+            # Use the new Scanner class with modular orchestration
             from pgdn.scanner import Scanner
             
             scanner = Scanner(
@@ -139,8 +141,7 @@ class PipelineOrchestrator:
                 "stage": "scan",
                 "scan_level": scan_level,
                 "timestamp": datetime.now().isoformat(),
-                "orchestrator_scan": None,
-                "protocol_scan": None
+                "scan_result": None
             }
             
             if target:
@@ -152,27 +153,24 @@ class PipelineOrchestrator:
                         "suggestion": "Example: pgdn --stage scan --target 139.84.148.36 --org-id myorg"
                     }
                 
-                # 1. Run orchestrator scan (infrastructure scanning)
-                orchestrator_result = scanner.scan_target(target, org_id=org_id, scan_level=scan_level)
-                results["orchestrator_scan"] = orchestrator_result
+                # Single entry point for scanning a target, passing the protocol from the CLI
+                scan_result = scanner.scan_target(
+                    target,
+                    org_id=org_id,
+                    scan_level=scan_level,
+                    force_protocol=force_protocol
+                )
+                
+                # The result from scan_target is now the final, authoritative result.
+                # It will contain success, error, workflow actions, or the full scan data.
+                results.update(scan_result)
                 results["operation"] = "target_scan"
                 results["target"] = target
-                
-                # 2. Run protocol scan if force_protocol is specified
-                if force_protocol:
-                    protocol_result = self._run_protocol_scan(target, force_protocol, org_id, scan_level, debug)
-                    results["protocol_scan"] = protocol_result
-                
-                # 3. TODO: Auto-detect protocol from discovery data and run protocol scan
-                # This would check if discovery metadata indicates a known protocol type
-                
-                # Maintain backward compatibility - return orchestrator result as main scan_result
-                results["scan_result"] = orchestrator_result
                 
                 return results
             else:
                 # Database scanning - run orchestrator on database nodes
-                orchestrator_result = scanner.scan_nodes_from_database(org_id=org_id, scan_level=scan_level)
+                orchestrator_result = scanner.scan_nodes_from_database(org_id=org_id, scan_level=scan_level, limit=limit)
                 results["orchestrator_scan"] = orchestrator_result
                 results["operation"] = "database_scan"
                 results["results"] = orchestrator_result.get("results", [])
@@ -188,69 +186,6 @@ class PipelineOrchestrator:
                 "success": False,
                 "stage": "scan",
                 "error": f"Scanning stage failed: {str(e)}",
-                "timestamp": datetime.now().isoformat()
-            }
-    
-    def _run_protocol_scan(self, target: str, protocol: str, org_id: str, scan_level: int, debug: bool) -> Dict[str, Any]:
-        """
-        Run protocol-specific scanning separately from orchestrator.
-        
-        Args:
-            target: Target to scan
-            protocol: Protocol name (sui, filecoin, etc.)
-            org_id: Organization ID
-            scan_level: Scan level
-            debug: Debug mode
-            
-        Returns:
-            Protocol scan results
-        """
-        try:
-            # Import protocol scanner dynamically
-            if protocol == 'sui':
-                from pgdn.scanning.sui_scanner import SuiSpecificScanner
-                protocol_scanner = SuiSpecificScanner(debug=debug)
-            elif protocol == 'filecoin':
-                from pgdn.scanning.filecoin_scanner import FilecoinSpecificScanner
-                protocol_scanner = FilecoinSpecificScanner(debug=debug)
-            else:
-                return {
-                    "success": False,
-                    "error": f"Unknown protocol: {protocol}",
-                    "protocol": protocol
-                }
-            
-            # Resolve target to IP
-            import socket
-            try:
-                ip_address = socket.gethostbyname(target)
-            except socket.gaierror as e:
-                return {
-                    "success": False,
-                    "error": f"DNS resolution failed: {str(e)}",
-                    "protocol": protocol,
-                    "target": target
-                }
-            
-            # Run protocol-specific scan
-            protocol_result = protocol_scanner.scan(ip_address, scan_level=scan_level)
-            
-            return {
-                "success": True,
-                "protocol": protocol,
-                "target": target,
-                "resolved_ip": ip_address,
-                "scan_level": scan_level,
-                "result": protocol_result,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Protocol scan failed: {str(e)}",
-                "protocol": protocol,
-                "target": target,
                 "timestamp": datetime.now().isoformat()
             }
 

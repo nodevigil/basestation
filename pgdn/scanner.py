@@ -38,7 +38,7 @@ class Scanner:
         self.enabled_scanners = enabled_scanners
         self.enabled_external_tools = enabled_external_tools
     
-    def scan_target(self, target: str, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
+    def scan_target(self, target: str, org_id: Optional[str] = None, scan_level: int = 1, force_protocol: Optional[str] = None) -> Dict[str, Any]:
         """
         Scan a specific target (IP or hostname) with orchestration workflow.
         
@@ -46,6 +46,7 @@ class Scanner:
             target: IP address or hostname to scan
             org_id: Organization ID (required for orchestration)
             scan_level: Scan level (1-3, default: 1)
+            force_protocol: Optional protocol to force (bypasses discovery)
             
         Returns:
             dict: Scan results or workflow instructions
@@ -61,12 +62,17 @@ class Scanner:
         try:
             from services.node_orchestration import NodeOrchestrationService
             
+            # Determine if this is an infrastructure-only scan
+            # Infrastructure-only scans don't require protocol discovery
+            infrastructure_only = self._is_infrastructure_only_scan()
+            
             # Use orchestration service to validate request and determine workflow
             orchestration = NodeOrchestrationService()
             validation_result = orchestration.validate_scan_request(
                 org_id=org_id,
                 target=target,
-                protocol_filter=None  # Protocol filtering now handled separately
+                protocol_filter=force_protocol,  # Pass the force_protocol from CLI
+                infrastructure_only=infrastructure_only
             )
             
             # If validation fails or discovery is required, return immediately
@@ -75,7 +81,8 @@ class Scanner:
             
             # If we get here, we're ready to scan
             node_id = validation_result.get("node_id")
-            protocol = validation_result.get("protocol")
+            # Use force_protocol if provided, otherwise use discovered protocol
+            protocol = force_protocol or validation_result.get("protocol")
             
             # Proceed with actual scanning
             scan_result = self._perform_scan(target, org_id, protocol, node_id, scan_level)
@@ -155,6 +162,7 @@ class Scanner:
             scan_results = orchestrator.scan(
                 target=ip_address,
                 scan_level=scan_level,
+                protocol=protocol,
                 scan_timestamp=datetime.now().isoformat()
             )
             
@@ -228,6 +236,37 @@ class Scanner:
         else:
             # No specific scanners configured - default scan
             return 'default'
+    
+    def _is_infrastructure_only_scan(self) -> bool:
+        """
+        Determine if this is an infrastructure-only scan that doesn't require protocol discovery.
+        
+        Infrastructure-only scans include:
+        - External tools only (nmap, whatweb, ssl, docker)
+        - Basic infrastructure scanners (generic, web, vulnerability, geo)
+        - No protocol-specific scanners
+        
+        Returns:
+            bool: True if this is an infrastructure-only scan
+        """
+        # If only external tools are enabled, this is infrastructure-only
+        if self.enabled_external_tools and not self.enabled_scanners:
+            return True
+        
+        # If enabled scanners are specified, check if they're all infrastructure scanners
+        if self.enabled_scanners:
+            infrastructure_scanners = {'generic', 'web', 'vulnerability', 'geo'}
+            enabled_set = set(self.enabled_scanners)
+            
+            # If all enabled scanners are infrastructure scanners, this is infrastructure-only
+            if enabled_set.issubset(infrastructure_scanners):
+                return True
+        
+        # Default behavior is infrastructure-only if no specific configuration
+        if not self.enabled_scanners and not self.enabled_external_tools:
+            return True
+        
+        return False
     
     def _save_target_scan_result(self, target: str, ip_address: str, scan_results: Dict[str, Any], 
                                 org_id: str, protocol: Optional[str], node_id: Optional[str], scan_level: int, 
@@ -328,13 +367,14 @@ class Scanner:
             
             return scan_record.id
     
-    def scan_nodes_from_database(self, org_id: Optional[str] = None, scan_level: int = 1) -> Dict[str, Any]:
+    def scan_nodes_from_database(self, org_id: Optional[str] = None, scan_level: int = 1, limit: Optional[int] = None) -> Dict[str, Any]:
         """
         Scan nodes discovered in the database using the new modular scanning system.
         
         Args:
             org_id: Optional organization ID to filter nodes
             scan_level: Scan level (1-3, default: 1)
+            limit: Optional limit on number of nodes to scan
         
         Returns:
             dict: Scan results including success status and scan data
@@ -352,7 +392,13 @@ class Scanner:
                     query = query.filter(NodeMetadata.org_id == org_id)
                 # Protocol filtering removed - now handled by separate protocol scanning
                 
-                nodes = query.filter(NodeMetadata.status == 'discovered').all()
+                query = query.filter(NodeMetadata.status == 'discovered')
+                
+                # Apply limit if specified
+                if limit:
+                    query = query.limit(limit)
+                
+                nodes = query.all()
                 
                 if not nodes:
                     return {

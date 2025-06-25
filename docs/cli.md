@@ -58,39 +58,61 @@ pgdn --stage discovery --host 192.168.1.1
 
 ### Scan Levels
 
-PGDN supports three progressive scan levels:
+PGDN supports three progressive scan levels for balanced scanning depth:
 
 ```bash
-# Level 1: Basic scanning (default)
-pgdn --stage scan --target 192.168.1.100 --org-id myorg
+# Level 1: Basic scanning - Legal, passive, and safe scanners
+# Includes: generic, web, ssl_test, whatweb, geo
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 1
 
-# Level 2: Standard scanning with GeoIP enrichment
+# Level 2: Standard scanning - Adds published, atomic, protocol-aware scanners  
+# Includes: Level 1 + nmap, vulnerability + protocol-specific scanner (if protocol available)
 pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
 
-# Level 3: Comprehensive scanning with protocol analysis
+# Level 3: Comprehensive scanning - Adds aggressive, exploratory scanners
+# Includes: Level 2 + dirbuster, docker_exposure, dnsdumpster
 pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 3
 
-# Protocol-specific Level 3 scanning
-pgdn --stage scan --protocol sui --scan-level 3
-pgdn --stage scan --protocol filecoin --scan-level 3
+# Force protocol override (Level 2+ required for protocol scanners)
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2 --force-protocol sui
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 3 --force-protocol filecoin
 ```
 
 ### Target Scanning
 
-Scan specific targets with different levels:
+Scan specific targets with different levels and protocol handling:
 
 ```bash
-# Basic Level 1 target scan
+# Basic Level 1 target scan (default)
 pgdn --stage scan --target 192.168.1.100 --org-id myorg
 
-# Level 2 with GeoIP context
+# Level 2 with automatic protocol detection from database
 pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
 
-# Comprehensive Level 3 analysis
+# Level 3 comprehensive analysis
 pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 3
 
-# Debug mode with specific level
+# Override database protocol with CLI protocol
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2 --force-protocol sui
+
+# Debug mode for troubleshooting
 pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2 --debug
+```
+
+### Protocol Handling Logic
+
+The system handles protocols in the following priority order:
+
+1. **CLI Protocol Provided**: Uses `--force-protocol` (overrides database)
+2. **Database Protocol Available**: Uses discovered protocol from database  
+3. **No Protocol Available**: Returns error requiring discovery
+
+```bash
+# If node has no protocol in database, discovery is required:
+pgdn --stage discovery --node-id <uuid> --host 192.168.1.100
+
+# Then scan will succeed:
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
 ```
 
 ### Database Scanning

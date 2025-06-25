@@ -18,20 +18,20 @@ The new scanning system addresses the following issues from the original impleme
 The system implements three distinct scan levels to balance thoroughness with performance:
 
 ### Level 1: Basic Scanning
-- **Purpose**: Fast, essential security checks
-- **Scanners**: Generic (ports/services), Web (basic HTTP checks), Vulnerability (CVE lookups)
+- **Purpose**: Legal, passive, and safe scanners
+- **Scanners**: Generic (ports/services), Web (HTTP checks), SSL test, WhatWeb (tech detection), GeoIP
 - **Use Case**: Regular monitoring, CI/CD pipelines, quick assessments
 - **Performance**: Fastest execution time
 
-### Level 2: Standard Scanning with GeoIP
-- **Purpose**: Comprehensive analysis with geographic context
-- **Scanners**: All Level 1 scanners + GeoScanner (IP geolocation and ASN data)
+### Level 2: Standard Scanning with Protocol Detection
+- **Purpose**: Comprehensive analysis with protocol-aware scanning
+- **Scanners**: All Level 1 + Nmap (detailed port scan), Vulnerability (CVE lookups) + Protocol scanner (if protocol available)
 - **Use Case**: Standard security assessments, threat intelligence gathering
 - **Performance**: Moderate execution time
 
 ### Level 3: Comprehensive Scanning
-- **Purpose**: Deep analysis with advanced protocol-specific checks
-- **Scanners**: All Level 2 scanners + Protocol-specific scanners (Sui, Filecoin, etc.)
+- **Purpose**: Deep analysis with aggressive exploratory tools
+- **Scanners**: All Level 2 + Dirbuster (directory enumeration), Docker exposure, DNSDumpster
 - **Use Case**: In-depth security audits, compliance assessments, forensics
 - **Performance**: Longest execution time, most thorough analysis
 
@@ -82,10 +82,26 @@ The system supports three scan levels, configurable via CLI or programmatically:
 
 ```bash
 # CLI Examples
-pgdn --stage scan --scan-level 1                    # Basic scanning
-pgdn --stage scan --scan-level 2                    # Standard with GeoIP
-pgdn --stage scan --scan-level 3                    # Comprehensive analysis
-pgdn --stage scan --scan-level 2 --force-protocol sui     # Level 2 with Sui protocol scanning
+pgdn --stage scan --scan-level 1                    # Basic scanning (legal, passive, safe)
+pgdn --stage scan --scan-level 2                    # Standard with protocol detection  
+pgdn --stage scan --scan-level 3                    # Comprehensive with aggressive tools
+pgdn --stage scan --scan-level 2 --force-protocol sui     # Level 2 with forced Sui protocol scanning
+```
+
+### Protocol Handling
+
+The system handles protocol detection and scanning with the following logic:
+
+1. **CLI Protocol Provided** (`--force-protocol`): Overrides any database protocol
+2. **Database Protocol Available**: Uses discovered protocol from node record
+3. **No Protocol Available**: Returns error requiring discovery workflow
+
+```bash
+# Discovery workflow for nodes without protocols:
+pgdn --stage discovery --node-id <uuid> --host 192.168.1.100
+
+# Then scan will include protocol scanner:
+pgdn --stage scan --target 192.168.1.100 --org-id myorg --scan-level 2
 ```
 
 ### Scanner Configuration Structure
@@ -94,13 +110,14 @@ pgdn --stage scan --scan-level 2 --force-protocol sui     # Level 2 with Sui pro
 {
   "scanning": {
     "orchestrator": {
-      "enabled_scanners": ["generic", "web", "vulnerability", "geo", "sui", "filecoin"],
-      "use_external_tools": true
+      "enabled_scanners": ["generic", "web", "vulnerability", "geo"],
+      "use_external_tools": true,
+      "enabled_external_tools": ["nmap", "whatweb", "ssl_test", "docker_exposure"]
     },
     "scanners": {
       "generic": {
         "enabled": true,
-        "default_ports": [22, 80, 443, 2375, 3306],
+        "default_ports": [22, 80, 443, 2375, 3306, 8080, 9000, 9184],
         "connection_timeout": 1,
         "banner_timeout": 2
       },

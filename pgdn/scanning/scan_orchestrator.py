@@ -6,6 +6,7 @@ This replaces the old scanner.py with a modular, configurable approach.
 from typing import Dict, Any, List, Optional, Tuple
 import logging
 from pgdn.scanning.base_scanner import ScannerRegistry
+from pgdn.scanning.routing import get_scanners_for_level
 from pgdn.tools.nmap import nmap_scan
 from pgdn.tools.whatweb import whatweb_scan
 from pgdn.tools.ssltester import ssl_test
@@ -34,47 +35,40 @@ class ScanOrchestrator:
         self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
     
-    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive scan using multiple scanner types.
         
         Args:
             target: Target IP address or hostname
             ports: List of ports to scan
             scan_level: Scan level (1-3, default: 1)
+            protocol: Optional protocol name for routing
             **kwargs: Additional scan parameters
             
         Returns:
             Comprehensive scan results
         """
-        self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level})")
+        self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level}, protocol: {protocol})")
         
+        # Get the list of scanners to run based on level and protocol
+        scanners_to_run = get_scanners_for_level(scan_level, protocol)
+        self.logger.debug(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
+
         results = {
             "target": target,
             "scan_level": scan_level,
+            "protocol": protocol,
             "scan_timestamp": kwargs.get('scan_timestamp'),
-            "scan_results": {}
+            "scan_results": {},
+            "external_tools": {}
         }
         
-        # Run GeoIP enrichment for level 1 and above
-        # Only skip geo if scanners were explicitly configured and 'geo' is not included
-        # This maintains backward compatibility while respecting explicit scanner selection
-        orchestrator_config = self.config.get('orchestrator', {})
-        explicit_scanner_config = 'enabled_scanners' in orchestrator_config
-        should_run_geo = scan_level >= 1 and (not explicit_scanner_config or 'geo' in self.enabled_scanners)
-        
-        if should_run_geo:
-            try:
-                from pgdn.scanning.geo_scanner import GeoScanner
-                geo_scanner = GeoScanner(self.config.get('scanners', {}).get('geo', {}))
-                self.logger.debug(f"Running GeoIP enrichment for {target}")
-                geo_result = geo_scanner.scan(target, **kwargs)
-                results["scan_results"]["geo"] = geo_result
-            except Exception as e:
-                self.logger.warning(f"GeoIP enrichment failed for {target}: {e}")
-                results["scan_results"]["geo"] = {"error": str(e)}
-        
-        # Run enabled scanners with scan_level parameter
-        for scanner_type in self.enabled_scanners:
+        # Separate internal scanners from external tools
+        internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
+        external_tools = [s for s in scanners_to_run if s not in internal_scanners]
+
+        # Run internal scanners
+        for scanner_type in internal_scanners:
             try:
                 scanner = self.scanner_registry.get_scanner(scanner_type)
                 if scanner:
@@ -85,25 +79,45 @@ class ScanOrchestrator:
                     self.logger.warning(f"Scanner {scanner_type} not available")
             except Exception as e:
                 self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
-                import traceback
-                self.logger.error(traceback.format_exc())
                 results["scan_results"][scanner_type] = {"error": str(e)}
         
-        # Run external tools if enabled
+        # Run external tools
         if self.use_external_tools:
-            results["external_tools"] = self._run_external_tools(target, results)
+            results["external_tools"] = self._run_external_tools(target, results, external_tools)
         
         # Post-process results to match legacy format
         legacy_results = self._convert_to_legacy_format(results)
         
         return legacy_results
     
-    def _run_external_tools(self, target: str, scan_results: Dict[str, Any]) -> Dict[str, Any]:
-        """Run external scanning tools.
+    def _filter_infrastructure_scanners(self, enabled_scanners: List[str]) -> List[str]:
+        """Filter out protocol-specific scanners, keeping only infrastructure scanners.
+        
+        Args:
+            enabled_scanners: List of all enabled scanners
+            
+        Returns:
+            List of infrastructure scanners only
+        """
+        # Define protocol-specific scanners that should not run during infrastructure scanning
+        protocol_scanners = {'sui', 'filecoin', 'ethereum', 'solana', 'cosmos', 'polkadot'}
+        
+        # Return only infrastructure scanners
+        infrastructure_scanners = [
+            scanner for scanner in enabled_scanners 
+            if scanner not in protocol_scanners
+        ]
+        
+        self.logger.debug(f"Filtered infrastructure scanners: {infrastructure_scanners}")
+        return infrastructure_scanners
+    
+    def _run_external_tools(self, target: str, scan_results: Dict[str, Any], enabled_tools: List[str]) -> Dict[str, Any]:
+        """Run external scanning tools based on the routing function's output.
         
         Args:
             target: Target to scan
             scan_results: Results from modular scanners
+            enabled_tools: List of external tools to run for this scan
             
         Returns:
             External tool results
@@ -111,7 +125,7 @@ class ScanOrchestrator:
         external_results = {}
         
         # Nmap scan
-        if 'nmap' in self.enabled_external_tools:
+        if 'nmap' in enabled_tools:
             try:
                 self.logger.info(f"Running nmap scan for {target}")
                 nmap_results = nmap_scan(target)
@@ -121,14 +135,9 @@ class ScanOrchestrator:
                 self.logger.error(f"Nmap scan failed for {target}: {e}")
                 external_results["nmap"] = {"error": str(e)}
         
-        # WhatWeb scan (on detected web ports or when web scanner is enabled)
-        if 'whatweb' in self.enabled_external_tools or 'web' in self.enabled_scanners:
+        # WhatWeb scan
+        if 'whatweb' in enabled_tools:
             web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
-            
-            # If no web ports found but web scanner is enabled, try standard ports
-            if not web_ports and 'web' in self.enabled_scanners:
-                self.logger.debug(f"Web scanner enabled but no ports detected. Trying standard web ports for WhatWeb.")
-                web_ports = [(80, "http"), (443, "https")]
             
             whatweb_results = {}
             for port, scheme in web_ports:
@@ -144,7 +153,7 @@ class ScanOrchestrator:
                 external_results["whatweb"] = whatweb_results
         
         # SSL test
-        if 'ssl_test' in self.enabled_external_tools:
+        if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
             try:
                 self.logger.debug(f"Running SSL test for {target}")
                 ssl_results = ssl_test(target, port=443)
@@ -153,8 +162,20 @@ class ScanOrchestrator:
                 self.logger.debug(f"SSL test failed for {target}: {e}")
                 external_results["ssl_test"] = {"error": str(e)}
         
+        # Dirbuster scan
+        if 'dirbuster' in enabled_tools:
+            # Placeholder for dirbuster logic
+            self.logger.info(f"Dirbuster scan requested for {target}, but not yet implemented.")
+            external_results["dirbuster"] = {"status": "not_implemented"}
+
+        # DNSDumpster scan
+        if 'dnsdumpster' in enabled_tools:
+            # Placeholder for dnsdumpster logic
+            self.logger.info(f"DNSDumpster scan requested for {target}, but not yet implemented.")
+            external_results["dnsdumpster"] = {"status": "not_implemented"}
+
         # Docker exposure check
-        if 'docker_exposure' in self.enabled_external_tools:
+        if 'docker' in enabled_tools or 'docker_exposure' in enabled_tools:
             open_ports = self._extract_open_ports(scan_results)
             if 2375 in open_ports:
                 try:

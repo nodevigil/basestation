@@ -148,6 +148,14 @@ class ScannerRegistry:
             self.logger.error(f"Failed to create scanner {scanner_type}: {e}")
             return None
     
+    def get_registered_scanners(self) -> List[str]:
+        """Get list of registered scanner types.
+        
+        Returns:
+            List of registered scanner type names
+        """
+        return list(self._scanners.keys())
+    
     def get_available_scanners(self) -> List[str]:
         """Get list of available scanner types.
         
