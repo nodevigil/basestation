@@ -20,7 +20,15 @@ def test_scan_level_functionality():
     
     # Test with scan_level 1 (basic)
     print("\n=== Testing Scan Level 1 (Basic) ===")
-    orchestrator = ScanOrchestrator(config.data)
+    
+    # Prepare scanning configuration (following pattern from pgdn/scanner.py)
+    scanning_config = config.scanning
+    scan_config = {
+        'orchestrator': scanning_config.orchestrator,
+        'scanners': getattr(scanning_config, 'scanners', {})
+    }
+    
+    orchestrator = ScanOrchestrator(scan_config)
     result = orchestrator.run_scan("8.8.8.8", scan_level=1)
     
     print(f"Scan successful: {result.get('success', False)}")

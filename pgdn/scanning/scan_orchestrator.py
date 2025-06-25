@@ -22,7 +22,7 @@ class ScanOrchestrator:
         """Initialize scan orchestrator.
         
         Args:
-            config: Scanning configuration
+            config: Scanning configuration dictionary
         """
         self.config = config or {}
         self.scanner_registry = ScannerRegistry(config)
