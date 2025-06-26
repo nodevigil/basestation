@@ -1,27 +1,15 @@
 """
-DePIN Infrastructure Scanner Library
+PGDN Infrastructure Scanner Library
 
-Main library interface for scanning and processing DePIN infrastructure.
+Simplified, clean interface for DePIN infrastructure scanning.
 """
 
-from .application_core import (
-    ApplicationCore, 
-    load_config, 
-    setup_environment, 
-    initialize_application
-)
-from .core.config import Config
-from .pipeline import PipelineOrchestrator
 from .scanner import Scanner
+from .core.config import Config
 
 __all__ = [
-    'ApplicationCore',
-    'load_config',
-    'setup_environment', 
-    'initialize_application',
-    'Config',
-    'PipelineOrchestrator',
-    'Scanner'
+    'Scanner',
+    'Config'
 ]
 
 __version__ = '1.0.0'

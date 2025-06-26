@@ -1,7 +1,7 @@
 """
-Simplified CLI for DePIN Infrastructure Scanner
+Simplified CLI - Single Entry Point
 
-Clean, single entry point that uses the refactored Scanner class.
+This replaces the complex CLI with multiple classes with a clean, simple interface.
 """
 
 import argparse
@@ -9,8 +9,8 @@ import sys
 import json
 from typing import Dict, Any
 
-from lib.scanner import Scanner
-from lib.core.config import Config
+from lib import Config, load_config
+from lib.scanner_refactored import Scanner
 
 
 def main():
@@ -19,9 +19,11 @@ def main():
     
     try:
         # Load configuration
-        config = None
-        if args.config:
-            config = Config.from_file(args.config)
+        config = load_config(
+            config_file=args.config,
+            log_level=args.log_level,
+            use_docker_config=False
+        )
         
         # Create scanner
         scanner = Scanner(config)
@@ -29,6 +31,7 @@ def main():
         # Perform scan
         result = scanner.scan(
             target=args.target,
+            org_id=args.org_id,
             scan_level=args.scan_level,
             protocol=args.protocol,
             enabled_scanners=args.scanners,
@@ -41,10 +44,11 @@ def main():
             print(json.dumps(result, indent=2))
         else:
             print_human_readable(result)
-            
-        # Exit with appropriate code
-        sys.exit(0 if result.get('success', False) else 1)
         
+        # Exit with error code if scan failed
+        if not result.get('success', False):
+            sys.exit(1)
+            
     except KeyboardInterrupt:
         error_msg = "Operation cancelled by user"
         if args.json:
@@ -52,7 +56,7 @@ def main():
         else:
             print(f"\n⚠️  {error_msg}")
         sys.exit(1)
-        
+    
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
         if args.json:
@@ -69,15 +73,30 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic scans
-  pgdn --target example.com
-  pgdn --target example.com --protocol sui
-  pgdn --target example.com --scan-level 3
+  # Basic scan
+  pgdn --target example.com --org-id myorg
   
-  # Scanner selection
-  pgdn --target example.com --scanners generic web
-  pgdn --target example.com --external-tools nmap
+  # Protocol-specific scan
+  pgdn --target example.com --org-id myorg --protocol sui
+  
+  # Comprehensive scan
+  pgdn --target example.com --org-id myorg --scan-level 3
+  
+  # Custom scanner selection
+  pgdn --target example.com --org-id myorg --scanners generic web
         """
+    )
+    
+    parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Return results in JSON format'
+    )
+    
+    parser.add_argument(
+        '--org-id',
+        required=True,
+        help='Organization ID (required)'
     )
     
     parser.add_argument(
@@ -116,13 +135,14 @@ Examples:
     
     parser.add_argument(
         '--config',
-        help='Path to configuration file (JSON format)'
+        help='Path to configuration file'
     )
     
     parser.add_argument(
-        '--json',
-        action='store_true',
-        help='Return results in JSON format'
+        '--log-level',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default='INFO',
+        help='Set logging level'
     )
     
     parser.add_argument(
@@ -137,29 +157,18 @@ Examples:
 def print_human_readable(result: Dict[str, Any]):
     """Print results in human-readable format."""
     if result.get('success'):
-        print("✅ Scan completed successfully")
-        print(f"🎯 Target: {result.get('target')} → {result.get('resolved_ip')}")
-        print(f"📊 Scan Level: {result.get('scan_level')}")
-        
-        if result.get('protocol'):
-            print(f"🔧 Protocol: {result.get('protocol')}")
+        print(f"✅ Scan completed for {result['target']}")
+        print(f"   Resolved IP: {result['resolved_ip']}")
+        print(f"   Scan Level: {result['scan_level']}")
+        print(f"   Protocol: {result.get('protocol', 'None')}")
         
         scan_result = result.get('scan_result', {})
-        if scan_result.get('open_ports'):
-            print(f"🔓 Open Ports: {scan_result['open_ports']}")
-        
-        if scan_result.get('geoip'):
-            geo = scan_result['geoip']
-            print(f"🌍 Location: {geo.get('city_name', 'Unknown')}, {geo.get('country_name', 'Unknown')}")
-        
-        print(f"⏰ Timestamp: {result.get('timestamp')}")
-        print(f"🆔 Node ID: {result.get('node_id')}")
-        
+        if 'open_ports' in scan_result:
+            ports = scan_result['open_ports']
+            print(f"   Open Ports: {ports if ports else 'None'}")
     else:
-        print("❌ Scan failed")
-        print(f"🎯 Target: {result.get('target')}")
-        print(f"⚠️  Error: {result.get('error')}")
-        print(f"⏰ Timestamp: {result.get('timestamp')}")
+        print(f"❌ Scan failed for {result['target']}")
+        print(f"   Error: {result.get('error', 'Unknown error')}")
 
 
 if __name__ == "__main__":

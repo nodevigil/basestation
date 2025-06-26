@@ -172,6 +172,20 @@ class Config:
         """Create configuration from dictionary."""
         return cls(config_overrides=config_dict)
     
+    @classmethod
+    def from_file(cls, config_file: str) -> 'Config':
+        """Create configuration from JSON file."""
+        import json
+        
+        try:
+            with open(config_file, 'r') as f:
+                config_dict = json.load(f)
+            return cls.from_dict(config_dict)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Configuration file not found: {config_file}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in configuration file: {e}")
+    
     def validate(self) -> bool:
         """
         Validate configuration settings.

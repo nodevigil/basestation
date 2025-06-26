@@ -6,79 +6,70 @@ This module demonstrates how to use the PGDN library for various DePIN infrastru
 scanning operations without using the CLI interface.
 """
 
-# Example 1: Basic Configuration and Environment Setup
+# Example 1: Basic Configuration Loading
 def example_basic_setup():
-    """Example of basic application setup using the library."""
-    from lib import ApplicationCore
+    """Example of basic configuration loading using the library."""
+    from lib import Config
     
-    # Initialize application core
-    app_core = ApplicationCore()
+    # Load configuration from file
+    config = Config.from_file("config.json")
     
-    # Load configuration with custom parameters
-    config = app_core.load_config(
-        config_file="config.json",
-        log_level="INFO",
-        use_docker_config=False
-    )
-    
-    # Setup environment (logging, etc.)
-    app_core.setup_environment(config)
-    
-    print("✅ Application initialized successfully")
+    print("✅ Configuration loaded successfully")
+    print(f"   Scan orchestrator config: {hasattr(config.scanning, 'orchestrator')}")
+    print(f"   Available protocols: {list(config.protocols.keys()) if hasattr(config, 'protocols') else 'None'}")
     return config
 
 
-# Example 2: Running a Full Pipeline Programmatically
-def example_full_pipeline():
-    """Example of running a full pipeline using the library."""
-    from lib import initialize_application, PipelineOrchestrator
+# Example 2: Running a Full Scan
+def example_full_scan():
+    """Example of running a full scan using the library."""
+    from lib import Scanner, Config
     
-    # Complete initialization in one call
-    config = initialize_application(
-        config_file="config.json",
-        log_level="DEBUG"
+    # Load configuration
+    config = Config.from_file("config.json")
+    
+    # Create scanner
+    scanner = Scanner(config)
+    
+    # Run scan
+    result = scanner.scan(
+        target="example.com",
+        protocol="sui"
     )
     
-    # Create pipeline orchestrator
-    orchestrator = PipelineOrchestrator(config)
-    
-    # Run full pipeline with specific recon agents
-    result = orchestrator.run_full_pipeline(
-        recon_agents=['SuiReconAgent', 'FilecoinReconAgent']
-    )
-    
-    if result['success']:
-        print(f"✅ Pipeline completed successfully!")
-        print(f"   Execution ID: {result['execution_id']}")
-        print(f"   Total time: {result['execution_time_seconds']:.2f} seconds")
+    if result.get('success', False):
+        print(f"✅ Scan completed successfully!")
+        print(f"   Target: {result.get('target')}")
+        print(f"   Results: {len(result.get('results', []))} findings")
         return result
     else:
-        print(f"❌ Pipeline failed: {result.get('error', 'Unknown error')}")
+        print(f"❌ Scan failed: {result.get('error', 'Unknown error')}")
         return None
 
 
-# Example 3: Direct Target Scanning
+# Example 3: Direct Target Scanning with Custom Configuration
 def example_target_scanning():
     """Example of scanning specific targets directly."""
-    from lib import load_config, Scanner
+    from lib import Scanner, Config
     
     # Setup
-    config = load_config("config.json")
+    config = Config.from_file("config.json")
     
-    # Create scanner with protocol filter
-    scanner = Scanner(
-        config=config,
-        protocol_filter='sui',
-        debug=True
+    # Create scanner
+    scanner = Scanner(config)
+    
+    # Scan a specific target with custom parameters
+    target_result = scanner.scan(
+        target="139.84.148.36",
+        protocol="filecoin",
+        scan_level=2
     )
     
-    # Scan a specific target
-    target_result = scanner.scan_target("139.84.148.36")
-    
-    if target_result['success']:
+    if target_result.get('success', False):
         print(f"✅ Target scan successful")
-        print(f"   Target: {target_result['target']}")
-        print(f"   Resolved IP: {target_result['resolved_ip']}")
+        print(f"   Target: {target_result.get('target')}")
+        print(f"   Scan level: {target_result.get('scan_level')}")
+        print(f"   Results: {len(target_result.get('results', []))} findings")
     else:
         print(f"❌ Target scan failed: {target_result.get('error')}")
 
@@ -91,6 +82,10 @@ if __name__ == "__main__":
         # Basic setup example
         config = example_basic_setup()
         print(f"Configuration loaded: {type(config)}")
+        
+        # Run a simple scan
+        print("\n🔍 Running example scan...")
+        example_full_scan()
         
     except Exception as e:
         print(f"❌ Example failed: {e}")

@@ -3,7 +3,7 @@ Web scanner for HTTP/HTTPS specific testing.
 """
 
 from typing import Dict, Any, List, Optional
-from pgdn.scanning.base_scanner import BaseScanner
+from .base_scanner import BaseScanner
 
 # Optional import for HTTP functionality
 try:

@@ -28,6 +28,7 @@ class ScanOrchestrator:
         self.config = config or {}
         self.scanner_registry = ScannerRegistry(config)
         
+        
         # Get orchestrator-specific config
         orchestrator_config = self.config.get('orchestrator', {})
         self.enabled_scanners = orchestrator_config.get('enabled_scanners', ['generic', 'web', 'vulnerability'])

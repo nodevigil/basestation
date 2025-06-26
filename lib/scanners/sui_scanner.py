@@ -1,21 +1,32 @@
 import httpx
 import logging
+from .base_scanner import BaseScanner
 
-class SuiSpecificScanner:
+class SuiSpecificScanner(BaseScanner):
     """
     Sui-specific scanner for custom checks (metrics, version, open RPC, debug endpoints).
     """
 
-    def __init__(self, rpc_ports=(9000, 443, 80), metrics_port=9184, timeout: int = 10, debug: bool = False):
+    def __init__(self, config=None, rpc_ports=(9000, 443, 80), metrics_port=9184, timeout: int = 10, debug: bool = False):
         """
         Initialize Sui scanner.
         
         Args:
+            config: Scanner configuration
             rpc_ports: Ports to check for RPC endpoints
             metrics_port: Port to check for metrics
             timeout: Request timeout in seconds
             debug: Enable debug logging
         """
+        super().__init__(config)
+        
+        # Extract config values if provided
+        if config:
+            rpc_ports = config.get('rpc_ports', rpc_ports)
+            metrics_port = config.get('metrics_port', metrics_port)
+            timeout = config.get('timeout', timeout)
+            debug = config.get('debug', debug)
+        
         self.rpc_ports = rpc_ports
         self.metrics_port = metrics_port
         self.timeout = timeout
@@ -158,43 +169,52 @@ class SuiSpecificScanner:
         self.logger.debug(f"❌ No version endpoints found for {ip}")
         return {"version_exposed": False}
 
-    def scan(self, ip, scan_level: int = 1):
+    @property
+    def scanner_type(self) -> str:
+        """Return the type of scanner."""
+        return "sui"
+
+    def scan(self, target: str, **kwargs):
         """
         Runs Sui-specific checks based on scan level.
         
         Args:
-            ip: Target IP address
-            scan_level: Scan level (1-3) determining aggressiveness
+            target: Target IP address or hostname
+            **kwargs: Additional scan parameters including scan_level
+        
+        Returns:
+            Scan results dictionary
         """
-        self.logger.info(f"🚀 Starting Sui scan for {ip} at level {scan_level}")
+        scan_level = kwargs.get('scan_level', 1)
+        self.logger.info(f"🚀 Starting Sui scan for {target} at level {scan_level}")
         
         if scan_level == 1:
-            return self._scan_level_1(ip)
+            return self._scan_level_1(target)
         elif scan_level == 2:
-            return self._scan_level_2(ip)
+            return self._scan_level_2(target)
         elif scan_level == 3:
-            return self._scan_level_3(ip)
+            return self._scan_level_3(target)
         else:
             raise ValueError(f"Invalid scan_level: {scan_level}. Must be 1, 2, or 3.")
     
-    def _scan_level_1(self, ip):
+    def _scan_level_1(self, target):
         """Level 1: Basic node metadata and version check."""
-        self.logger.info(f"🔍 Level 1 Sui scan for {ip}")
+        self.logger.info(f"🔍 Level 1 Sui scan for {target}")
         
         result = {
-            "ip": ip, 
+            "target": target, 
             "scan_level": 1,
             "scanner_type": "sui"
         }
         
         # Basic version and node info
-        result.update(self.check_version(ip))
+        result.update(self.check_version(target))
         
         # Basic metrics check
-        metrics_result = self.check_metrics_endpoint(ip)
+        metrics_result = self.check_metrics_endpoint(target)
         result.update(metrics_result)
         
-        self.logger.info(f"✅ Level 1 Sui scan completed for {ip}")
+        self.logger.info(f"✅ Level 1 Sui scan completed for {target}")
         return result
     
     def _scan_level_2(self, ip):

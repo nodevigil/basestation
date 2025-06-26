@@ -20,6 +20,9 @@ class BaseScanner(ABC):
             config: Scanner-specific configuration
         """
         self.config = config or {}
+        # Debug logging to see what type of config is being passed
+        if hasattr(config, '__class__') and 'ScanConfig' in str(config.__class__):
+            print(f"ERROR: BaseScanner received ScanConfig object instead of dict: {type(config)}")
         self.logger = get_logger(self.__class__.__name__)
     
     @abstractmethod
@@ -51,6 +54,11 @@ class ScannerRegistry:
         Args:
             config: Global configuration
         """
+        # Convert config to dict if it's a dataclass
+        if config and hasattr(config, '__class__') and hasattr(config, '__dataclass_fields__'):
+            # It's a dataclass, convert to dict
+            config = vars(config)
+        
         self.config = config or {}
         self._scanners = {}
         self.logger = get_logger(__name__)

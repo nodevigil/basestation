@@ -82,29 +82,22 @@ def install_pgdn(method='pip', source_path=None, git_url=None):
         # Test installation
         print("🧪 Testing installation...")
         try:
-            import pgdn
+            from lib import Scanner, Config
             print("✅ PGDN library imported successfully")
             
             # Show available components
             components = [
-                'ApplicationCore', 'PipelineOrchestrator', 'Scanner', 
-                'ReportManager', 'CVEManager', 'SignatureManager',
-                'QueueManager', 'AgentManager', 'ParallelOperations'
+                'Scanner', 'Config'
             ]
             
-            available = []
-            for component in components:
-                if hasattr(pgdn, component):
-                    available.append(component)
-            
-            print(f"📦 Available components: {', '.join(available)}")
+            print(f"📦 Available components: {', '.join(components)}")
             print("\n🎉 Installation completed successfully!")
             
             print("\n📋 Quick start:")
-            print("   import pgdn")
-            print("   config = pgdn.initialize_application()")
-            print("   scanner = pgdn.Scanner(config)")
-            print("   result = scanner.scan_target('127.0.0.1')")
+            print("   from lib import Scanner, Config")
+            print("   config = Config.from_file('config.json')")
+            print("   scanner = Scanner(config)")
+            print("   result = scanner.scan(target='example.com', org_id='test', protocol='sui')")
             
             return True
             
