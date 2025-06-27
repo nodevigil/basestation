@@ -1,16 +1,7 @@
 include README.md
 include requirements.txt
-include config.example.json
+include CLAUDE.md
 recursive-include pgdn *.py
-recursive-include pgdn/core *.py
-recursive-include pgdn/utils *.py
-recursive-include pgdn/repositories *.py
-recursive-include pgdn/services *.py
-recursive-include pgdn/models *.py
-recursive-include pgdn/scanning *.py
-recursive-include pgdn/storage *.py
-recursive-include pgdn/memory *.py
-recursive-include pgdn/tasks *.py
-recursive-include pgdn/tools *.py
-recursive-include pgdn/web_probes *.py
-recursive-include pgdn/agent_modules *.py
+recursive-include pgdn *.json
+global-exclude __pycache__
+global-exclude *.py[co]

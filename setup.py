@@ -17,7 +17,7 @@ setup(
     author="DePIN Team",
     author_email="",
     url="",
-    packages=find_packages(include=['pgdn', 'pgdn.*']),
+    packages=find_packages(),
     py_modules=['cli', 'pgdn_entry'],
     install_requires=read_requirements(),
     entry_points={

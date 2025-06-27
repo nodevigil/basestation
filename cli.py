@@ -10,9 +10,9 @@ import json
 import traceback
 from typing import Dict, Any
 
-from lib.scanner import Scanner
-from lib.core.config import Config
-from lib.core.result import Result, DictResult
+from pgdn.scanner import Scanner
+from pgdn.core.config import Config
+from pgdn.core.result import Result, DictResult
 
 
 def main():
@@ -267,10 +267,10 @@ def print_human_readable(result: DictResult):
 def list_protocol_scanners():
     """List available protocol scanners and their supported levels."""
     try:
-        from lib.scanners.protocols.sui_scanner import EnhancedSuiScanner
-        from lib.scanners.protocols.filecoin_scanner import FilecoinScanner
-        from lib.scanners.protocols.arweave_scanner import EnhancedArweaveScanner
-        # from lib.scanners.protocols.ethereum_scanner import EthereumScanner
+        from pgdn.scanners.protocols.sui_scanner import EnhancedSuiScanner
+        from pgdn.scanners.protocols.filecoin_scanner import FilecoinScanner
+        from pgdn.scanners.protocols.arweave_scanner import EnhancedArweaveScanner
+        # from pgdn.scanners.protocols.ethereum_scanner import EthereumScanner
         
         print("📋 Available Protocol Scanners:")
         print("=" * 50)
