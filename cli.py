@@ -45,7 +45,13 @@ def main():
             result = DictResult.from_error(f"Scanner returned unexpected type: {type(result)}")
         
         if args.json:
-            print(result.to_json(indent=2))
+            import json
+            if result.is_success() and isinstance(result.data, dict):
+                # Output the scanner's structured data directly (already has "data" and "meta" at root)
+                print(json.dumps(result.data, indent=2))
+            else:
+                # Fallback to the Result structure for errors/warnings
+                print(result.to_json(indent=2))
         elif args.human:
             print_human_readable(result)
         else:

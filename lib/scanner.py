@@ -84,7 +84,6 @@ class Scanner:
                         "timestamp_unix": timestamp_unix,
                         "scan_start_timestamp_unix": timestamp_unix,
                         "scan_end_timestamp_unix": timestamp_unix,
-                        "node_id": str(uuid.uuid4()),
                         "error": f"DNS resolution failed: {str(e)}"
                     }
                 }
@@ -94,7 +93,7 @@ class Scanner:
             if enabled_scanners is not None or enabled_external_tools is not None:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
-            # Perform the scan
+            # Perform the scan - orchestrator now returns structured format directly
             scan_results = self.orchestrator.scan(
                 target=ip_address,
                 scan_level=scan_level,
@@ -102,33 +101,8 @@ class Scanner:
                 scan_timestamp=datetime.now().isoformat()
             )
 
-            # Return formatted results in new structured format
-            timestamp = datetime.now().isoformat()
-            timestamp_unix = int(time.time())
-            scan_start_timestamp_unix = scan_results.get("scan_start_time", timestamp_unix)
-            scan_end_timestamp_unix = scan_results.get("scan_end_time", timestamp_unix)
-            
-            structured_result = {
-                "data": self._restructure_scan_data(scan_results, ip_address),
-                "meta": {
-                    "operation": "target_scan",
-                    "stage": "scan",
-                    "scan_level": scan_level,
-                    "scan_duration": None,
-                    "scanners_used": enabled_scanners or [],
-                    "tools_used": enabled_external_tools or [],
-                    "total_scan_duration": scan_end_timestamp_unix - scan_start_timestamp_unix,
-                    "target": target,
-                    "protocol": protocol,
-                    "timestamp": timestamp,
-                    "timestamp_unix": timestamp_unix,
-                    "scan_start_timestamp_unix": scan_start_timestamp_unix,
-                    "scan_end_timestamp_unix": scan_end_timestamp_unix,
-                    "node_id": str(uuid.uuid4())
-                }
-            }
-
-            return DictResult.success(structured_result)
+            # Return the orchestrator's structured results directly
+            return DictResult.success(scan_results)
             
         except Exception as e:
             timestamp = datetime.now().isoformat()

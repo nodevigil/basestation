@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "PGDN - Agentic DePIN Infrastructure Scanner"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "DePIN Team"},
 ]
@@ -16,7 +16,6 @@ keywords = ["depin", "infrastructure", "scanner", "security", "blockchain"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -40,7 +39,7 @@ Documentation = "https://github.com/your-org/pgdn/docs"
 Issues = "https://github.com/your-org/pgdn/issues"
 
 [tool.setuptools]
-packages = ["lib", "lib.core", "lib.scanners", "lib.tools", "lib.utils"]
+packages = ["lib", "lib.core", "lib.scanners", "lib.tools"]
 include-package-data = true
 
 [tool.setuptools.dynamic]

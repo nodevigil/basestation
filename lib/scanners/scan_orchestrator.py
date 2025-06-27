@@ -133,10 +133,10 @@ class ScanOrchestrator:
         
         self.logger.info(f"Scan completed in {scan_end_time - scan_start_time} seconds")
         
-        # Post-process results to match legacy format
-        legacy_results = self._convert_to_legacy_format(results)
+        # Convert to new structured format
+        structured_results = self._convert_to_structured_format(results)
         
-        return legacy_results
+        return structured_results
     
     def _filter_infrastructure_scanners(self, enabled_scanners: List[str]) -> List[str]:
         """Filter out protocol-specific scanners, keeping only infrastructure scanners.
@@ -449,6 +449,110 @@ class ScanOrchestrator:
         
         return legacy
     
+    def _convert_to_structured_format(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert scan results to new structured format with data array and meta object.
+        
+        Args:
+            results: Raw scan results from orchestrator
+            
+        Returns:
+            Structured format with "data" array and "meta" object
+        """
+        target = results["target"]
+        scan_level = results.get("scan_level", 1)
+        scan_results = results.get("scan_results", {})
+        external_tools = results.get("external_tools", {})
+        
+        # Extract data from different scanners
+        generic_results = scan_results.get("generic", {})
+        web_results = scan_results.get("web", {})
+        vuln_results = scan_results.get("vulnerability", {})
+        geo_results = scan_results.get("geo", {})
+        
+        # Build structured data array
+        data = []
+        
+        # Network data (basic connectivity, ports, banners, TLS, headers)
+        nmap_data = external_tools.get("nmap", {})
+        open_ports = []
+        if nmap_data and "ports" in nmap_data:
+            open_ports = [port_info["port"] for port_info in nmap_data["ports"] if port_info.get("state") == "open"]
+        else:
+            open_ports = generic_results.get("open_ports", [])
+        
+        network_payload = {
+            "ip": target,
+            "resolved_ip": target,
+            "open_ports": open_ports,
+            "banners": generic_results.get("banners", {}),
+            "tls": generic_results.get("tls", {}),
+            "http_headers": self._extract_http_headers(web_results)
+        }
+        data.append({"type": "network", "payload": network_payload})
+        
+        # Infrastructure data (docker, nmap)
+        infra_payload = {
+            "docker_exposure": external_tools.get("docker_exposure", {"exposed": False}),
+            "nmap": external_tools.get("nmap", {})
+        }
+        data.append({"type": "infra", "payload": infra_payload})
+        
+        # Web data (whatweb, ssl testing)
+        web_payload = {
+            "whatweb": external_tools.get("whatweb", {}),
+            "ssl_test": external_tools.get("ssl_test", {})
+        }
+        data.append({"type": "web", "payload": web_payload})
+        
+        # Analysis data (vulnerabilities)
+        analysis_payload = {
+            "vulns": self._format_vulnerabilities(vuln_results)
+        }
+        data.append({"type": "analysis", "payload": analysis_payload})
+        
+        # Location data (GeoIP)
+        location_payload = {"geoip": {}}
+        if geo_results and not geo_results.get("error"):
+            location_payload["geoip"] = {
+                "country_name": geo_results.get("country_name"),
+                "city_name": geo_results.get("city_name"),
+                "latitude": geo_results.get("latitude"),
+                "longitude": geo_results.get("longitude"),
+                "asn_number": geo_results.get("asn_number"),
+                "asn_organization": geo_results.get("asn_organization")
+            }
+        data.append({"type": "location", "payload": location_payload})
+        
+        # Build meta object
+        import uuid
+        from datetime import datetime
+        import time
+        
+        timestamp = datetime.now().isoformat()
+        timestamp_unix = int(time.time())
+        
+        meta = {
+            "operation": "target_scan",
+            "stage": "scan",
+            "scan_level": scan_level,
+            "scan_duration": None,
+            "scanners_used": list(scan_results.keys()),
+            "tools_used": list(external_tools.keys()),
+            "total_scan_duration": results.get("scan_end_time", timestamp_unix) - results.get("scan_start_time", timestamp_unix),
+            "target": target,
+            "protocol": results.get("protocol"),
+            "timestamp": timestamp,
+            "timestamp_unix": timestamp_unix,
+            "scan_start_timestamp_unix": results.get("scan_start_time", timestamp_unix),
+            "scan_end_timestamp_unix": results.get("scan_end_time", timestamp_unix),
+            "node_id": str(uuid.uuid4())
+        }
+        
+        return {
+            "data": data,
+            "meta": meta
+        }
+
     def _extract_http_headers(self, web_results: Dict[str, Any]) -> Dict[str, Any]:
         """Extract HTTP headers from web scan results.
         
