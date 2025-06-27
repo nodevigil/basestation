@@ -73,6 +73,15 @@ class ScanOrchestrator:
         # Separate internal scanners from external tools
         internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
         external_tools = [s for s in scanners_to_run if s not in internal_scanners]
+        
+        # Filter out protocol-specific scanners when no protocol is specified
+        if not protocol:
+            original_scanners = internal_scanners.copy()
+            internal_scanners = self._filter_infrastructure_scanners(internal_scanners)
+            if len(internal_scanners) != len(original_scanners):
+                filtered_out = [s for s in original_scanners if s not in internal_scanners]
+                self.logger.info(f"Filtered out protocol-specific scanners (no protocol specified): {filtered_out}")
+                self.logger.debug(f"Running infrastructure scanners only: {internal_scanners}")
 
         # Run internal scanners with timing
         if internal_scanners:
@@ -167,7 +176,11 @@ class ScanOrchestrator:
             List of infrastructure scanners only
         """
         # Define protocol-specific scanners that should not run during infrastructure scanning
-        protocol_scanners = {'sui', 'filecoin', 'ethereum', 'solana', 'cosmos', 'polkadot'}
+        protocol_scanners = {
+            'sui', 'filecoin', 'ethereum', 'solana', 'cosmos', 'polkadot', 
+            'avalanche', 'cardano', 'algorand', 'near', 'chainlink',
+            'bitcoin', 'litecoin', 'dogecoin', 'monero', 'zcash'
+        }
         
         # Return only infrastructure scanners
         infrastructure_scanners = [
