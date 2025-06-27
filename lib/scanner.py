@@ -58,21 +58,43 @@ class Scanner:
             debug: Enable debug logging
             
         Returns:
-            DictResult: Success with scan data or error message
+            DictResult: Success with structured scan data or error message
         """
         try:
             # Resolve hostname to IP if needed
             try:
                 ip_address = socket.gethostbyname(target)
             except socket.gaierror as e:
-                return DictResult.from_error(f"DNS resolution failed for {target}: {str(e)}")
+                timestamp = datetime.now().isoformat()
+                timestamp_unix = int(time.time())
+                
+                error_result = {
+                    "data": [],
+                    "meta": {
+                        "operation": "target_scan",
+                        "stage": "scan",
+                        "scan_level": scan_level,
+                        "scan_duration": None,
+                        "scanners_used": [],
+                        "tools_used": [],
+                        "total_scan_duration": 0,
+                        "target": target,
+                        "protocol": protocol,
+                        "timestamp": timestamp,
+                        "timestamp_unix": timestamp_unix,
+                        "scan_start_timestamp_unix": timestamp_unix,
+                        "scan_end_timestamp_unix": timestamp_unix,
+                        "node_id": str(uuid.uuid4()),
+                        "error": f"DNS resolution failed: {str(e)}"
+                    }
+                }
+                return DictResult.success(error_result)
 
             # Override scanner/tool configuration if specified
             if enabled_scanners is not None or enabled_external_tools is not None:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
-            # Perform the scan with Unix timestamp
-            scan_timestamp_unix = int(time.time())
+            # Perform the scan
             scan_results = self.orchestrator.scan(
                 target=ip_address,
                 scan_level=scan_level,
@@ -80,35 +102,59 @@ class Scanner:
                 scan_timestamp=datetime.now().isoformat()
             )
 
-            # Prepare scan data with Unix timestamps
-            scan_data = {
-                "target": target,
-                "resolved_ip": ip_address,
-                "scan_level": scan_level,
-                "protocol": protocol,
-                "timestamp": datetime.now().isoformat(),
-                "timestamp_unix": int(time.time()),
-                "scan_start_timestamp_unix": scan_results.get("scan_start_time", scan_timestamp_unix),
-                "scan_end_timestamp_unix": scan_results.get("scan_end_time", int(time.time())),
-                "node_id": str(uuid.uuid4()),
-                "scan_result": scan_results,
-                "stage_timings": scan_results.get("stage_timings", {})
+            # Return formatted results in new structured format
+            timestamp = datetime.now().isoformat()
+            timestamp_unix = int(time.time())
+            scan_start_timestamp_unix = scan_results.get("scan_start_time", timestamp_unix)
+            scan_end_timestamp_unix = scan_results.get("scan_end_time", timestamp_unix)
+            
+            structured_result = {
+                "data": self._restructure_scan_data(scan_results, ip_address),
+                "meta": {
+                    "operation": "target_scan",
+                    "stage": "scan",
+                    "scan_level": scan_level,
+                    "scan_duration": None,
+                    "scanners_used": enabled_scanners or [],
+                    "tools_used": enabled_external_tools or [],
+                    "total_scan_duration": scan_end_timestamp_unix - scan_start_timestamp_unix,
+                    "target": target,
+                    "protocol": protocol,
+                    "timestamp": timestamp,
+                    "timestamp_unix": timestamp_unix,
+                    "scan_start_timestamp_unix": scan_start_timestamp_unix,
+                    "scan_end_timestamp_unix": scan_end_timestamp_unix,
+                    "node_id": str(uuid.uuid4())
+                }
             }
 
-            # Prepare meta information with timing details
-            meta = {
-                "operation": "target_scan",
-                "stage": "scan",
-                "scan_duration": getattr(scan_results, 'scan_duration', None),
-                "scanners_used": enabled_scanners or [],
-                "tools_used": enabled_external_tools or [],
-                "total_scan_duration": scan_data["scan_end_timestamp_unix"] - scan_data["scan_start_timestamp_unix"]
-            }
-
-            return DictResult.success(scan_data, meta)
+            return DictResult.success(structured_result)
             
         except Exception as e:
-            return DictResult.from_error(f"Scan failed for {target}: {str(e)}")
+            timestamp = datetime.now().isoformat()
+            timestamp_unix = int(time.time())
+            
+            error_result = {
+                "data": [],
+                "meta": {
+                    "operation": "target_scan",
+                    "stage": "scan",
+                    "scan_level": scan_level,
+                    "scan_duration": None,
+                    "scanners_used": [],
+                    "tools_used": [],
+                    "total_scan_duration": 0,
+                    "target": target,
+                    "protocol": protocol,
+                    "timestamp": timestamp,
+                    "timestamp_unix": timestamp_unix,
+                    "scan_start_timestamp_unix": timestamp_unix,
+                    "scan_end_timestamp_unix": timestamp_unix,
+                    "node_id": str(uuid.uuid4()),
+                    "error": f"Orchestration error: {str(e)}"
+                }
+            }
+            return DictResult.success(error_result)
     
     def _prepare_scan_config(self, config: Config) -> Dict[str, Any]:
         """
