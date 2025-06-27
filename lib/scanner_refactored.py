@@ -10,7 +10,6 @@ import socket
 import uuid
 
 from .core.config import Config
-from .core.result import Result, DictResult
 from .scanners.scan_orchestrator import ScanOrchestrator
 
 
@@ -40,16 +39,18 @@ class Scanner:
     
     def scan(self, 
              target: str, 
+             org_id: str,
              scan_level: int = 1,
              protocol: Optional[str] = None,
              enabled_scanners: Optional[List[str]] = None,
              enabled_external_tools: Optional[List[str]] = None,
-             debug: bool = False) -> DictResult:
+             debug: bool = False) -> Dict[str, Any]:
         """
         Scan a target.
         
         Args:
             target: IP address or hostname to scan
+            org_id: Organization ID (required)
             scan_level: Scan intensity level (1-3)
             protocol: Optional protocol-specific scanner (sui, filecoin)
             enabled_scanners: Override which scanners to run
@@ -57,14 +58,20 @@ class Scanner:
             debug: Enable debug logging
             
         Returns:
-            DictResult: Success with scan data or error message
+            Complete scan results
         """
         try:
             # Resolve hostname to IP if needed
             try:
                 ip_address = socket.gethostbyname(target)
             except socket.gaierror as e:
-                return DictResult.from_error(f"DNS resolution failed for {target}: {str(e)}")
+                return {
+                    "success": False,
+                    "target": target,
+                    "error": f"DNS resolution failed: {str(e)}",
+                    "timestamp": datetime.now().isoformat(),
+                    "operation": "target_scan"
+                }
             
             # Override scanner/tool configuration if specified
             if enabled_scanners is not None or enabled_external_tools is not None:
@@ -78,30 +85,32 @@ class Scanner:
                 scan_timestamp=datetime.now().isoformat()
             )
             
-            # Prepare scan data
-            scan_data = {
+            # Return formatted results
+            return {
+                "success": True,
+                "stage": "scan",
+                "scan_level": scan_level,
+                "timestamp": datetime.now().isoformat(),
+                "scan_result": scan_results,
                 "target": target,
                 "resolved_ip": ip_address,
-                "scan_level": scan_level,
-                "protocol": protocol,
-                "timestamp": datetime.now().isoformat(),
                 "node_id": str(uuid.uuid4()),
-                "scan_result": scan_results
+                "org_id": org_id,
+                "protocol": protocol,
+                "operation": "target_scan"
             }
-            
-            # Prepare meta information
-            meta = {
-                "operation": "target_scan",
-                "stage": "scan",
-                "scan_duration": getattr(scan_results, 'scan_duration', None),
-                "scanners_used": enabled_scanners or [],
-                "tools_used": enabled_external_tools or []
-            }
-            
-            return DictResult.success(scan_data, meta)
             
         except Exception as e:
-            return DictResult.from_error(f"Scan failed for {target}: {str(e)}")
+            return {
+                "success": False,
+                "stage": "scan",
+                "scan_level": scan_level,
+                "timestamp": datetime.now().isoformat(),
+                "scan_result": None,
+                "target": target,
+                "error": f"Orchestration error: {str(e)}",
+                "operation": "target_scan"
+            }
     
     def _prepare_scan_config(self, config: Config) -> Dict[str, Any]:
         """

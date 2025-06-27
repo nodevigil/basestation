@@ -7,10 +7,12 @@ Clean, single entry point that uses the refactored Scanner class.
 import argparse
 import sys
 import json
+import traceback
 from typing import Dict, Any
 
 from lib.scanner import Scanner
 from lib.core.config import Config
+from lib.core.result import Result, DictResult
 
 
 def main():
@@ -37,28 +39,44 @@ def main():
         )
         
         # Output results
+        # Validate that we got a Result object
+        if not isinstance(result, Result):
+            # Handle case where scanner returns unexpected type
+            result = DictResult.from_error(f"Scanner returned unexpected type: {type(result)}")
+        
         if args.json:
-            print(json.dumps(result, indent=2))
-        else:
+            print(result.to_json(indent=2))
+        elif args.human:
             print_human_readable(result)
+        else:
+            # Default: Result structure (not JSON)
+            print(result)
             
         # Exit with appropriate code
-        sys.exit(0 if result.get('success', False) else 1)
+        sys.exit(0 if result.is_success() else 1)
         
     except KeyboardInterrupt:
-        error_msg = "Operation cancelled by user"
+        error_result = DictResult.from_error("Operation cancelled by user")
         if args.json:
-            print(json.dumps({"error": error_msg}))
+            print(error_result.to_json())
+        elif args.human:
+            print(f"\n⚠️  {error_result.error}")
         else:
-            print(f"\n⚠️  {error_msg}")
+            print(error_result.to_json())
         sys.exit(1)
         
     except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
+        # Log raw traceback optionally if debug mode is on
+        if args.debug:
+            print(f"Debug traceback:\n{traceback.format_exc()}", file=sys.stderr)
+        
+        error_result = DictResult.from_error(f"Unexpected error: {str(e)}")
         if args.json:
-            print(json.dumps({"error": error_msg}))
+            print(error_result.to_json())
+        elif args.human:
+            print(f"❌ {error_result.error}")
         else:
-            print(f"❌ {error_msg}")
+            print(error_result.to_json())
         sys.exit(1)
 
 
@@ -69,7 +87,7 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic scans
+  # Basic scans (default output: Result structure)
   pgdn --target example.com
   pgdn --target example.com --protocol sui
   pgdn --target example.com --scan-level 3
@@ -77,6 +95,10 @@ Examples:
   # Scanner selection
   pgdn --target example.com --scanners generic web
   pgdn --target example.com --external-tools nmap
+  
+  # Output formats
+  pgdn --target example.com --json     # Pure JSON
+  pgdn --target example.com --human    # Human-readable
         """
     )
     
@@ -122,7 +144,13 @@ Examples:
     parser.add_argument(
         '--json',
         action='store_true',
-        help='Return results in JSON format'
+        help='Return results in pure JSON format'
+    )
+    
+    parser.add_argument(
+        '--human',
+        action='store_true',
+        help='Return results in human-readable format'
     )
     
     parser.add_argument(
@@ -134,17 +162,20 @@ Examples:
     return parser.parse_args()
 
 
-def print_human_readable(result: Dict[str, Any]):
+def print_human_readable(result: DictResult):
     """Print results in human-readable format."""
-    if result.get('success'):
+    if result.is_success():
+        data = result.data
+        meta = result.meta or {}
+        
         print("✅ Scan completed successfully")
-        print(f"🎯 Target: {result.get('target')} → {result.get('resolved_ip')}")
-        print(f"📊 Scan Level: {result.get('scan_level')}")
+        print(f"🎯 Target: {data.get('target')} → {data.get('resolved_ip')}")
+        print(f"📊 Scan Level: {data.get('scan_level')}")
         
-        if result.get('protocol'):
-            print(f"🔧 Protocol: {result.get('protocol')}")
+        if data.get('protocol'):
+            print(f"🔧 Protocol: {data.get('protocol')}")
         
-        scan_result = result.get('scan_result', {})
+        scan_result = data.get('scan_result', {})
         if scan_result.get('open_ports'):
             print(f"🔓 Open Ports: {scan_result['open_ports']}")
         
@@ -152,14 +183,42 @@ def print_human_readable(result: Dict[str, Any]):
             geo = scan_result['geoip']
             print(f"🌍 Location: {geo.get('city_name', 'Unknown')}, {geo.get('country_name', 'Unknown')}")
         
-        print(f"⏰ Timestamp: {result.get('timestamp')}")
-        print(f"🆔 Node ID: {result.get('node_id')}")
+        print(f"⏰ Timestamp: {data.get('timestamp')}")
+        print(f"🆔 Node ID: {data.get('node_id')}")
+        
+        if meta:
+            print(f"📈 Meta: {meta}")
+            
+    elif result.is_warning():
+        data = result.data
+        meta = result.meta or {}
+        
+        print("⚠️  Scan completed with warnings")
+        print(f"🎯 Target: {data.get('target')} → {data.get('resolved_ip')}")
+        print(f"📊 Scan Level: {data.get('scan_level')}")
+        print(f"⚠️  Warning: {result.error}")
+        
+        if data and data.get('protocol'):
+            print(f"🔧 Protocol: {data.get('protocol')}")
+        
+        if data:
+            scan_result = data.get('scan_result', {})
+            if scan_result.get('open_ports'):
+                print(f"🔓 Open Ports: {scan_result['open_ports']}")
+            
+            if scan_result.get('geoip'):
+                geo = scan_result['geoip']
+                print(f"🌍 Location: {geo.get('city_name', 'Unknown')}, {geo.get('country_name', 'Unknown')}")
+            
+            print(f"⏰ Timestamp: {data.get('timestamp')}")
+            print(f"🆔 Node ID: {data.get('node_id')}")
+        
+        if meta:
+            print(f"📈 Meta: {meta}")
         
     else:
         print("❌ Scan failed")
-        print(f"🎯 Target: {result.get('target')}")
-        print(f"⚠️  Error: {result.get('error')}")
-        print(f"⏰ Timestamp: {result.get('timestamp')}")
+        print(f"⚠️  Error: {result.error}")
 
 
 if __name__ == "__main__":
