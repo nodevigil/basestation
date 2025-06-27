@@ -69,33 +69,31 @@ pgdn --target example.com --org-id myorg --type whatweb    # Web tech fingerprin
 ### Library Usage
 
 ```python
-from cli import ScannerLibrary
+from lib import Scanner, Config
 
 # Initialize scanner
-scanner = ScannerLibrary(config_file='config.json')
+config = Config.from_file('config.json')
+scanner = Scanner(config)
 
 # Basic target scanning
-result = scanner.run_scan(
+result = scanner.scan(
     target='192.168.1.100',
-    org_id='myorg',
     scan_level=2
 )
 
 # Protocol-specific scanning
-result = scanner.run_scan(
+result = scanner.scan(
     target='192.168.1.100',
-    org_id='myorg',
     scan_level=2,
     protocol='sui'
 )
 
-# Custom scanner configuration
-result = scanner.run_scan(
-    target='192.168.1.100',
-    org_id='myorg',
-    enabled_scanners=['web', 'vulnerability'],
-    enabled_external_tools=['nmap', 'ssl_test']
-)
+# Custom scanner configuration with config options
+config = Config.from_file('config.json')
+config.scanning.orchestrator.enabled_scanners = ['web', 'vulnerability']
+config.scanning.orchestrator.enabled_external_tools = ['nmap', 'ssl_test']
+scanner = Scanner(config)
+result = scanner.scan(target='192.168.1.100', scan_level=2)
 ```
 
 ## 🔧 Configuration
