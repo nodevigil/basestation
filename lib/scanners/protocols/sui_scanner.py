@@ -1853,45 +1853,45 @@ class SuiNetworkAnalyzer:
             upper = sorted_data[int(index) + 1]
             return lower + (upper - lower) * (index - int(index))
 
-# Example usage
-async def example_sui_network_scan():
-    """Example of how to use the enhanced Sui scanner"""
+# # Example usage
+# async def example_sui_network_scan():
+#     """Example of how to use the enhanced Sui scanner"""
     
-    # Initialize scanner with ferocious level scanning
-    config = {
-        'timeout': 20,
-        'max_retries': 3,
-        'rate_limit_delay': 2.0,
-        'scan_level': 3  # Ferocious
-    }
+#     # Initialize scanner with ferocious level scanning
+#     config = {
+#         'timeout': 20,
+#         'max_retries': 3,
+#         'rate_limit_delay': 2.0,
+#         'scan_level': 3  # Ferocious
+#     }
     
-    scanner = EnhancedSuiScanner(
-        config=config,
-        scan_level=ScanLevel.FEROCIOUS,
-        enable_reputation=True,
-        enable_behavioral=True
-    )
+#     scanner = EnhancedSuiScanner(
+#         config=config,
+#         scan_level=ScanLevel.FEROCIOUS,
+#         enable_reputation=True,
+#         enable_behavioral=True
+#     )
     
-    # Scan a Sui node
-    sui_node_ips = ["192.168.1.100", "10.0.0.50"]
+#     # Scan a Sui node
+#     sui_node_ips = ["192.168.1.100", "10.0.0.50"]
     
-    all_results = []
-    for ip in sui_node_ips:
-        results = await scanner.scan(ip)
-        all_results.extend(results)
+#     all_results = []
+#     for ip in sui_node_ips:
+#         results = await scanner.scan(ip)
+#         all_results.extend(results)
     
-    # Export results for trust scoring
-    trust_scoring_data = scanner.export_results(all_results, format='trust_scoring')
-    print("Trust scoring data:", trust_scoring_data)
+#     # Export results for trust scoring
+#     trust_scoring_data = scanner.export_results(all_results, format='trust_scoring')
+#     print("Trust scoring data:", trust_scoring_data)
     
-    # Generate validator-specific report
-    validator_report = scanner.export_results(all_results, format='validator_report')
-    print("Validator report:", validator_report)
+#     # Generate validator-specific report
+#     validator_report = scanner.export_results(all_results, format='validator_report')
+#     print("Validator report:", validator_report)
     
-    # High-level network analysis
-    analyzer = SuiNetworkAnalyzer(scanner)
-    network_health = await analyzer.analyze_network_health(sui_node_ips)
-    print("Network health analysis:", json.dumps(network_health, indent=2, default=str))
+#     # High-level network analysis
+#     analyzer = SuiNetworkAnalyzer(scanner)
+#     network_health = await analyzer.analyze_network_health(sui_node_ips)
+#     print("Network health analysis:", json.dumps(network_health, indent=2, default=str))
 
-if __name__ == "__main__":
-    asyncio.run(example_sui_network_scan())
+# if __name__ == "__main__":
+#     asyncio.run(example_sui_network_scan())
