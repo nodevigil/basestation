@@ -40,19 +40,19 @@ python setup.py develop   # Development mode installation
 ### Basic Usage
 
 ```bash
-# Basic infrastructure scan (org-id and target required)
-pgdn --target example.com --org-id myorg
+# Basic infrastructure scan
+pgdn --target example.com
 
 # With protocol-specific scanning
-pgdn --target example.com --org-id myorg --protocol sui --scan-level 2
+pgdn --target example.com --protocol sui --scan-level 2
 
 # List available protocol scanners and their levels
 pgdn --list-protocols
 
 # Different scan levels
-pgdn --target example.com --org-id myorg --scan-level 1    # Basic (legal, passive)
-pgdn --target example.com --org-id myorg --scan-level 2    # Standard with GeoIP
-pgdn --target example.com --org-id myorg --scan-level 3    # Comprehensive analysis
+pgdn --target example.com --scan-level 1    # Basic (legal, passive)
+pgdn --target example.com --scan-level 2    # Standard with GeoIP
+pgdn --target example.com --scan-level 3    # Comprehensive analysis
 
 # Protocol-specific scanning with different levels
 pgdn --target sui-node.com --protocol sui --scan-level 1   # Basic health check
@@ -60,16 +60,16 @@ pgdn --target sui-node.com --protocol sui --scan-level 2   # Metrics + validator
 pgdn --target sui-node.com --protocol sui --scan-level 3   # Aggressive probing
 
 # Specific scan types for testing/debugging
-pgdn --target example.com --org-id myorg --type nmap       # Port scan only
-pgdn --target example.com --org-id myorg --type web        # Web analysis only
-pgdn --target example.com --org-id myorg --type ssl        # SSL/TLS testing only
-pgdn --target example.com --org-id myorg --type whatweb    # Web tech fingerprinting
+pgdn --target example.com --type nmap       # Port scan only
+pgdn --target example.com --type web        # Web analysis only
+pgdn --target example.com --type ssl        # SSL/TLS testing only
+pgdn --target example.com --type whatweb    # Web tech fingerprinting
 ```
 
 ### Library Usage
 
 ```python
-from lib import Scanner, Config
+from pgdn import Scanner, Config
 
 # Initialize scanner
 config = Config.from_file('config.json')
@@ -176,7 +176,7 @@ PGDN provides a template-based system for easily adding support for new DePIN pr
 
 5. **Test your scanner**:
    ```bash
-   pgdn --target arweave-node.com --org-id myorg --protocol arweave
+   pgdn --target arweave-node.com --protocol arweave
    ```
 
 ### Template Features
