@@ -4,14 +4,11 @@ import logging
 import time
 import hashlib
 import json
-import numpy as np
+import statistics
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime, timedelta
-from .base_scanner import BaseScanner
-from .reputation_client import ReputationClient
-from .behavioral_analyzer import BehaviorAnalyzer
 
 class ScanLevel(Enum):
     LITE = 1
@@ -117,7 +114,12 @@ class ArweaveScanResult:
         if self.peer_list is None:
             self.peer_list = []
 
-class ArweaveScanner(BaseScanner):
+class BaseScanner:
+    """Base scanner class for all protocol scanners"""
+    def __init__(self, config=None):
+        self.config = config or {}
+
+class EnhancedArweaveScanner(BaseScanner):
     """
     Production-grade Arweave scanner focused on comprehensive data collection
     for external trust scoring systems.
@@ -133,7 +135,7 @@ class ArweaveScanner(BaseScanner):
         self.max_retries = config.get('max_retries', 3) if config else 3
         self.rate_limit_delay = config.get('rate_limit_delay', 1.0) if config else 1.0
         
-        # External services
+        # External services (optional - can be None)
         self.reputation_client = ReputationClient() if enable_reputation else None
         self.behavioral_analyzer = BehaviorAnalyzer() if enable_behavioral else None
         
@@ -784,9 +786,9 @@ class ArweaveScanner(BaseScanner):
             sync_gaps = [r.sync_gap for r in healthy_nodes if r.sync_gap is not None]
             
             self.network_baseline.update({
-                'avg_latency': np.mean(latencies) if latencies else None,
-                'avg_peer_count': np.mean(peer_counts) if peer_counts else None,
-                'avg_sync_gap': np.mean(sync_gaps) if sync_gaps else None,
+                'avg_latency': statistics.mean(latencies) if latencies else None,
+                'avg_peer_count': statistics.mean(peer_counts) if peer_counts else None,
+                'avg_sync_gap': statistics.mean(sync_gaps) if sync_gaps else None,
                 'healthy_node_percentage': len(healthy_nodes) / len(results),
                 'last_updated': datetime.utcnow()
             })
