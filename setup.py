@@ -17,8 +17,7 @@ setup(
     author="DePIN Team",
     author_email="",
     url="",
-    packages=['pgdn', 'pgdn.core', 'pgdn.scanners', 'pgdn.tools'],
-    package_dir={'pgdn': 'lib'},
+    packages=find_packages(include=['pgdn', 'pgdn.*']),
     py_modules=['cli', 'pgdn_entry'],
     install_requires=read_requirements(),
     entry_points={
