@@ -1,0 +1,54 @@
+2025-06-27 09:45:08,065 INFO [lib.scanners.scan_orchestrator]: Starting comprehensive scan of 127.0.0.1 (level 1, protocol: None)
+2025-06-27 09:45:08,065 INFO [lib.scanners.scan_orchestrator]: Starting scanner stage with 3 scanners
+2025-06-27 09:45:08,094 INFO [lib.scanners.scan_orchestrator]: Starting external tools stage with 2 tools
+2025-06-27 09:45:08,105 INFO [lib.scanners.scan_orchestrator]: Scan completed in 0 seconds
+{
+  "data": {
+    "target": "127.0.0.1",
+    "resolved_ip": "127.0.0.1",
+    "scan_level": 1,
+    "protocol": null,
+    "timestamp": "2025-06-27T09:45:08.106004",
+    "timestamp_unix": 1751013908,
+    "scan_start_timestamp_unix": 1751013908,
+    "scan_end_timestamp_unix": 1751013908,
+    "node_id": "09c70096-4865-423b-848c-51496bb9d764",
+    "scan_result": {
+      "ip": "127.0.0.1",
+      "scan_level": 1,
+      "open_ports": [],
+      "banners": {},
+      "tls": {},
+      "http_headers": {},
+      "vulns": {},
+      "docker_exposure": {
+        "exposed": false
+      },
+      "nmap": {},
+      "whatweb": {},
+      "ssl_test": {
+        "openssl_raw": "",
+        "issues": [
+          "SSL certificate not valid or expired"
+        ]
+      },
+      "geoip": {
+        "country_name": "Private Network",
+        "city_name": "Private Network",
+        "latitude": null,
+        "longitude": null,
+        "asn_number": null,
+        "asn_organization": "Private Network"
+      }
+    },
+    "stage_timings": {}
+  },
+  "meta": {
+    "operation": "target_scan",
+    "stage": "scan",
+    "scan_duration": null,
+    "scanners_used": [],
+    "tools_used": [],
+    "total_scan_duration": 0
+  }
+}

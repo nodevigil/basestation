@@ -175,6 +175,21 @@ def print_human_readable(result: DictResult):
         if data.get('protocol'):
             print(f"🔧 Protocol: {data.get('protocol')}")
         
+        # Show timing information
+        if data.get('scan_start_timestamp_unix') and data.get('scan_end_timestamp_unix'):
+            duration = data.get('scan_end_timestamp_unix') - data.get('scan_start_timestamp_unix')
+            print(f"⏱️  Scan Duration: {duration} seconds")
+            print(f"🕐 Start Time: {data.get('scan_start_timestamp_unix')} (Unix)")
+            print(f"🕑 End Time: {data.get('scan_end_timestamp_unix')} (Unix)")
+        
+        # Show stage timings if available
+        stage_timings = data.get('stage_timings', {})
+        if stage_timings:
+            print("📈 Stage Timings:")
+            for stage_name, timing in stage_timings.items():
+                if isinstance(timing, dict) and 'start_time' in timing and 'end_time' in timing:
+                    print(f"   • {stage_name}: {timing['duration']}s ({timing['start_time']} → {timing['end_time']})")
+        
         scan_result = data.get('scan_result', {})
         if scan_result.get('open_ports'):
             print(f"🔓 Open Ports: {scan_result['open_ports']}")
@@ -200,6 +215,13 @@ def print_human_readable(result: DictResult):
         
         if data and data.get('protocol'):
             print(f"🔧 Protocol: {data.get('protocol')}")
+        
+        # Show timing information for warnings too
+        if data and data.get('scan_start_timestamp_unix') and data.get('scan_end_timestamp_unix'):
+            duration = data.get('scan_end_timestamp_unix') - data.get('scan_start_timestamp_unix')
+            print(f"⏱️  Scan Duration: {duration} seconds")
+            print(f"🕐 Start Time: {data.get('scan_start_timestamp_unix')} (Unix)")
+            print(f"🕑 End Time: {data.get('scan_end_timestamp_unix')} (Unix)")
         
         if data:
             scan_result = data.get('scan_result', {})

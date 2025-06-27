@@ -5,6 +5,7 @@ This replaces the old scanner.py with a modular, configurable approach.
 
 from typing import Dict, Any, List, Optional, Tuple
 import logging
+import time
 from .base_scanner import ScannerRegistry
 from .routing import get_scanners_for_level
 from ..tools.nmap import nmap_scan
@@ -49,6 +50,9 @@ class ScanOrchestrator:
         Returns:
             Comprehensive scan results
         """
+        # Track overall scan timing
+        scan_start_time = int(time.time())
+        
         self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level}, protocol: {protocol})")
         
         # Get the list of scanners to run based on level and protocol
@@ -60,31 +64,93 @@ class ScanOrchestrator:
             "scan_level": scan_level,
             "protocol": protocol,
             "scan_timestamp": kwargs.get('scan_timestamp'),
+            "scan_start_time": scan_start_time,
             "scan_results": {},
-            "external_tools": {}
+            "external_tools": {},
+            "stage_timings": {}
         }
         
         # Separate internal scanners from external tools
         internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
         external_tools = [s for s in scanners_to_run if s not in internal_scanners]
 
-        # Run internal scanners
-        for scanner_type in internal_scanners:
-            try:
-                scanner = self.scanner_registry.get_scanner(scanner_type)
-                if scanner:
-                    self.logger.debug(f"Running {scanner_type} scanner (level {scan_level})")
-                    scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
-                    results["scan_results"][scanner_type] = scan_result
-                else:
-                    self.logger.warning(f"Scanner {scanner_type} not available")
-            except Exception as e:
-                self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
-                results["scan_results"][scanner_type] = {"error": str(e)}
+        # Run internal scanners with timing
+        if internal_scanners:
+            scanners_stage_start = int(time.time())
+            self.logger.info(f"Starting scanner stage with {len(internal_scanners)} scanners")
+            
+            for scanner_type in internal_scanners:
+                try:
+                    scanner = self.scanner_registry.get_scanner(scanner_type)
+                    if scanner:
+                        scanner_start = int(time.time())
+                        self.logger.debug(f"Running {scanner_type} scanner (level {scan_level})")
+                        scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
+                        scanner_end = int(time.time())
+                        
+                        results["scan_results"][scanner_type] = scan_result
+                        
+                        # Only add timing if scan produced meaningful results
+                        if self._has_meaningful_results(scan_result):
+                            results["stage_timings"][f"scanner_{scanner_type}"] = {
+                                "start_time": scanner_start,
+                                "end_time": scanner_end,
+                                "duration": scanner_end - scanner_start
+                            }
+                    else:
+                        self.logger.warning(f"Scanner {scanner_type} not available")
+                except Exception as e:
+                    self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
+                    results["scan_results"][scanner_type] = {"error": str(e)}
+            
+            scanners_stage_end = int(time.time())
+            
+            # Only add scanners stage timing if any scanner produced meaningful results
+            scanner_had_results = any(
+                f"scanner_{scanner_type}" in results["stage_timings"] 
+                for scanner_type in internal_scanners
+            )
+            if scanner_had_results:
+                results["stage_timings"]["scanners_stage"] = {
+                    "start_time": scanners_stage_start,
+                    "end_time": scanners_stage_end,
+                    "duration": scanners_stage_end - scanners_stage_start
+                }
         
-        # Run external tools
-        if self.use_external_tools:
+        # Run external tools with timing
+        if self.use_external_tools and external_tools:
+            external_tools_stage_start = int(time.time())
+            self.logger.info(f"Starting external tools stage with {len(external_tools)} tools")
+            
             results["external_tools"] = self._run_external_tools(target, results, external_tools)
+            
+            external_tools_stage_end = int(time.time())
+            
+            # Only add external tools stage timing if any tool produced meaningful results
+            tool_had_results = any(
+                key.startswith("tool_") and key in results["stage_timings"]
+                for key in results["stage_timings"]
+            )
+            if tool_had_results:
+                results["stage_timings"]["external_tools_stage"] = {
+                    "start_time": external_tools_stage_start,
+                    "end_time": external_tools_stage_end,
+                    "duration": external_tools_stage_end - external_tools_stage_start
+                }
+        
+        # Record total scan timing only if any meaningful results were found
+        scan_end_time = int(time.time())
+        results["scan_end_time"] = scan_end_time
+        
+        # Only add total scan timing if there were any meaningful stage results
+        if results["stage_timings"]:
+            results["stage_timings"]["total_scan"] = {
+                "start_time": scan_start_time,
+                "end_time": scan_end_time,
+                "duration": scan_end_time - scan_start_time
+            }
+        
+        self.logger.info(f"Scan completed in {scan_end_time - scan_start_time} seconds")
         
         # Post-process results to match legacy format
         legacy_results = self._convert_to_legacy_format(results)
@@ -127,17 +193,31 @@ class ScanOrchestrator:
         
         # Nmap scan
         if 'nmap' in enabled_tools:
+            nmap_start = int(time.time())
             try:
                 self.logger.info(f"Running nmap scan for {target}")
                 nmap_results = nmap_scan(target)
+                nmap_end = int(time.time())
+                
                 external_results["nmap"] = nmap_results
+                
+                # Only add timing if nmap found meaningful results
+                if self._has_meaningful_results(nmap_results):
+                    scan_results["stage_timings"]["tool_nmap"] = {
+                        "start_time": nmap_start,
+                        "end_time": nmap_end,
+                        "duration": nmap_end - nmap_start
+                    }
+                    
                 self.logger.debug(f"Nmap results: {nmap_results}")
             except Exception as e:
+                nmap_end = int(time.time())
                 self.logger.error(f"Nmap scan failed for {target}: {e}")
                 external_results["nmap"] = {"error": str(e)}
         
         # WhatWeb scan
         if 'whatweb' in enabled_tools:
+            whatweb_start = int(time.time())
             web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
             
             whatweb_results = {}
@@ -150,43 +230,92 @@ class ScanOrchestrator:
                 except Exception as e:
                     self.logger.debug(f"WhatWeb scan failed for {target}:{port}: {e}")
             
+            whatweb_end = int(time.time())
             if whatweb_results:
                 external_results["whatweb"] = whatweb_results
+                
+                # Only add timing if whatweb found results
+                scan_results["stage_timings"]["tool_whatweb"] = {
+                    "start_time": whatweb_start,
+                    "end_time": whatweb_end,
+                    "duration": whatweb_end - whatweb_start
+                }
         
         # SSL test
         if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
+            ssl_start = int(time.time())
             try:
                 self.logger.debug(f"Running SSL test for {target}")
                 ssl_results = ssl_test(target, port=443)
+                ssl_end = int(time.time())
+                
                 external_results["ssl_test"] = ssl_results
+                
+                # Only add timing if SSL test found meaningful results
+                if self._has_meaningful_results(ssl_results):
+                    scan_results["stage_timings"]["tool_ssl_test"] = {
+                        "start_time": ssl_start,
+                        "end_time": ssl_end,
+                        "duration": ssl_end - ssl_start
+                    }
             except Exception as e:
+                ssl_end = int(time.time())
                 self.logger.debug(f"SSL test failed for {target}: {e}")
                 external_results["ssl_test"] = {"error": str(e)}
         
         # Dirbuster scan
         if 'dirbuster' in enabled_tools:
+            dirbuster_start = int(time.time())
             # Placeholder for dirbuster logic
             self.logger.info(f"Dirbuster scan requested for {target}, but not yet implemented.")
+            dirbuster_end = int(time.time())
+            
             external_results["dirbuster"] = {"status": "not_implemented"}
+            scan_results["stage_timings"]["tool_dirbuster"] = {
+                "start_time": dirbuster_start,
+                "end_time": dirbuster_end,
+                "duration": dirbuster_end - dirbuster_start
+            }
 
         # DNSDumpster scan
         if 'dnsdumpster' in enabled_tools:
+            dnsdumpster_start = int(time.time())
             # Placeholder for dnsdumpster logic
             self.logger.info(f"DNSDumpster scan requested for {target}, but not yet implemented.")
+            dnsdumpster_end = int(time.time())
+            
             external_results["dnsdumpster"] = {"status": "not_implemented"}
+            scan_results["stage_timings"]["tool_dnsdumpster"] = {
+                "start_time": dnsdumpster_start,
+                "end_time": dnsdumpster_end,
+                "duration": dnsdumpster_end - dnsdumpster_start
+            }
 
         # Docker exposure check
         if 'docker' in enabled_tools or 'docker_exposure' in enabled_tools:
+            docker_start = int(time.time())
             open_ports = self._extract_open_ports(scan_results)
             if 2375 in open_ports:
                 try:
                     self.logger.debug(f"Running Docker exposure check for {target}")
                     docker_exposure = DockerExposureChecker.check(target)
+                    docker_end = int(time.time())
+                    
                     external_results["docker_exposure"] = docker_exposure
+                    
+                    # Only add timing if Docker check found exposure
+                    if docker_exposure.get("exposed", False):
+                        scan_results["stage_timings"]["tool_docker_exposure"] = {
+                            "start_time": docker_start,
+                            "end_time": docker_end,
+                            "duration": docker_end - docker_start
+                        }
                 except Exception as e:
+                    docker_end = int(time.time())
                     self.logger.debug(f"Docker exposure check failed for {target}: {e}")
                     external_results["docker_exposure"] = {"error": str(e)}
             else:
+                docker_end = int(time.time())
                 external_results["docker_exposure"] = {"exposed": False}
         
         return external_results
@@ -282,7 +411,11 @@ class ScanOrchestrator:
             "docker_exposure": external_tools.get("docker_exposure", {"exposed": False}),
             "nmap": external_tools.get("nmap", {}),
             "whatweb": external_tools.get("whatweb", {}),
-            "ssl_test": external_tools.get("ssl_test", {})
+            "ssl_test": external_tools.get("ssl_test", {}),
+            # Preserve timing information
+            "scan_start_time": results.get("scan_start_time"),
+            "scan_end_time": results.get("scan_end_time"),
+            "stage_timings": results.get("stage_timings", {})
         }
         
         # Add GeoIP data if available
@@ -359,6 +492,66 @@ class ScanOrchestrator:
                     web_ports.append((port, "http"))
         return web_ports
 
+    def _has_meaningful_results(self, results: Dict[str, Any]) -> bool:
+        """Check if scan results contain meaningful data.
+        
+        Args:
+            results: Scan results dictionary
+            
+        Returns:
+            True if results contain meaningful data, False otherwise
+        """
+        if not results or not isinstance(results, dict):
+            return False
+            
+        # Check for error conditions
+        if results.get("error"):
+            return False
+            
+        # Check for meaningful content based on result type
+        
+        # For nmap results
+        if "ports" in results:
+            ports = results.get("ports", [])
+            return len(ports) > 0
+            
+        # For scanner results with open_ports
+        if "open_ports" in results:
+            open_ports = results.get("open_ports", [])
+            return len(open_ports) > 0
+            
+        # For web results
+        if "web_results" in results:
+            web_results = results.get("web_results", {})
+            return len(web_results) > 0
+            
+        # For vulnerability results
+        if "vulnerabilities" in results:
+            vulns = results.get("vulnerabilities", {})
+            return len(vulns) > 0
+            
+        # For banners
+        if "banners" in results:
+            banners = results.get("banners", {})
+            return len(banners) > 0
+            
+        # For SSL results - check if there's meaningful SSL data
+        if "certificate" in results or "openssl_raw" in results:
+            cert = results.get("certificate")
+            openssl = results.get("openssl_raw", "")
+            return bool(cert) or bool(openssl.strip())
+            
+        # For GeoIP results
+        if "country_name" in results or "city_name" in results:
+            country = results.get("country_name", "")
+            city = results.get("city_name", "")
+            # Don't consider "Private Network" as meaningful
+            return bool(country and country != "Private Network") or bool(city and city != "Private Network")
+            
+        # Default: if there are any non-empty values (excluding common empty indicators)
+        meaningful_keys = [k for k, v in results.items() 
+                          if v and v != {} and v != "" and k not in ["error", "timestamp"]]
+        return len(meaningful_keys) > 0
 
 # Legacy compatibility: provide the old Scanner class interface
 class Scanner(ScanOrchestrator):

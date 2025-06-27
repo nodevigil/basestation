@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import socket
 import uuid
+import time
 
 from .core.config import Config
 from .core.result import Result, DictResult
@@ -65,39 +66,45 @@ class Scanner:
                 ip_address = socket.gethostbyname(target)
             except socket.gaierror as e:
                 return DictResult.from_error(f"DNS resolution failed for {target}: {str(e)}")
-            
+
             # Override scanner/tool configuration if specified
             if enabled_scanners is not None or enabled_external_tools is not None:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
-            
-            # Perform the scan
+
+            # Perform the scan with Unix timestamp
+            scan_timestamp_unix = int(time.time())
             scan_results = self.orchestrator.scan(
                 target=ip_address,
                 scan_level=scan_level,
                 protocol=protocol,
                 scan_timestamp=datetime.now().isoformat()
             )
-            
-            # Prepare scan data
+
+            # Prepare scan data with Unix timestamps
             scan_data = {
                 "target": target,
                 "resolved_ip": ip_address,
                 "scan_level": scan_level,
                 "protocol": protocol,
                 "timestamp": datetime.now().isoformat(),
+                "timestamp_unix": int(time.time()),
+                "scan_start_timestamp_unix": scan_results.get("scan_start_time", scan_timestamp_unix),
+                "scan_end_timestamp_unix": scan_results.get("scan_end_time", int(time.time())),
                 "node_id": str(uuid.uuid4()),
-                "scan_result": scan_results
+                "scan_result": scan_results,
+                "stage_timings": scan_results.get("stage_timings", {})
             }
-            
-            # Prepare meta information
+
+            # Prepare meta information with timing details
             meta = {
                 "operation": "target_scan",
                 "stage": "scan",
                 "scan_duration": getattr(scan_results, 'scan_duration', None),
                 "scanners_used": enabled_scanners or [],
-                "tools_used": enabled_external_tools or []
+                "tools_used": enabled_external_tools or [],
+                "total_scan_duration": scan_data["scan_end_timestamp_unix"] - scan_data["scan_start_timestamp_unix"]
             }
-            
+
             return DictResult.success(scan_data, meta)
             
         except Exception as e:
