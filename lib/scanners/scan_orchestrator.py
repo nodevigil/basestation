@@ -57,7 +57,7 @@ class ScanOrchestrator:
         
         # Get the list of scanners to run based on level and protocol
         scanners_to_run = get_scanners_for_level(scan_level, protocol)
-        self.logger.debug(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
+        self.logger.info(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
 
         results = {
             "target": target,
@@ -80,7 +80,7 @@ class ScanOrchestrator:
             if len(internal_scanners) != len(original_scanners):
                 filtered_out = [s for s in original_scanners if s not in internal_scanners]
                 self.logger.info(f"Filtered out protocol-specific scanners (no protocol specified): {filtered_out}")
-                self.logger.debug(f"Running infrastructure scanners only: {internal_scanners}")
+                self.logger.info(f"Running infrastructure scanners only: {internal_scanners}")
 
         # Run internal scanners with timing
         if internal_scanners:
@@ -92,9 +92,10 @@ class ScanOrchestrator:
                     scanner = self.scanner_registry.get_scanner(scanner_type)
                     if scanner:
                         scanner_start = int(time.time())
-                        self.logger.debug(f"Running {scanner_type} scanner (level {scan_level})")
+                        self.logger.info(f"Running {scanner_type} scanner")
                         scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
                         scanner_end = int(time.time())
+                        self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")
                         
                         # Embed timing directly into the scan result if it has meaningful results
                         if self._has_meaningful_results(scan_result):
@@ -180,9 +181,10 @@ class ScanOrchestrator:
         if 'nmap' in enabled_tools:
             nmap_start = int(time.time())
             try:
-                self.logger.info(f"Running nmap scan for {target}")
+                self.logger.info(f"Running nmap scan")
                 nmap_results = nmap_scan(target)
                 nmap_end = int(time.time())
+                self.logger.info(f"Completed nmap scan in {nmap_end - nmap_start} seconds")
                 
                 # Embed timing directly into nmap results if meaningful
                 if self._has_meaningful_results(nmap_results):
@@ -205,6 +207,7 @@ class ScanOrchestrator:
         # WhatWeb scan
         if 'whatweb' in enabled_tools:
             whatweb_start = int(time.time())
+            self.logger.info(f"Running whatweb scan")
             web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
             
             whatweb_results = {}
@@ -218,6 +221,7 @@ class ScanOrchestrator:
                     self.logger.debug(f"WhatWeb scan failed for {target}:{port}: {e}")
             
             whatweb_end = int(time.time())
+            self.logger.info(f"Completed whatweb scan in {whatweb_end - whatweb_start} seconds")
             if whatweb_results:
                 # Embed timing directly into whatweb results
                 whatweb_results["start_time"] = whatweb_start
@@ -236,9 +240,10 @@ class ScanOrchestrator:
         if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
             ssl_start = int(time.time())
             try:
-                self.logger.debug(f"Running SSL test for {target}")
+                self.logger.info(f"Running SSL test")
                 ssl_results = ssl_test(target, port=443)
                 ssl_end = int(time.time())
+                self.logger.info(f"Completed SSL test in {ssl_end - ssl_start} seconds")
                 
                 # Always embed timing directly into SSL results
                 ssl_results["start_time"] = ssl_start
@@ -260,8 +265,9 @@ class ScanOrchestrator:
         if 'dirbuster' in enabled_tools:
             dirbuster_start = int(time.time())
             # Placeholder for dirbuster logic
-            self.logger.info(f"Dirbuster scan requested for {target}, but not yet implemented.")
+            self.logger.info(f"Running dirbuster scan (not yet implemented)")
             dirbuster_end = int(time.time())
+            self.logger.info(f"Completed dirbuster scan in {dirbuster_end - dirbuster_start} seconds")
             
             external_results["dirbuster"] = {
                 "status": "not_implemented",
@@ -274,8 +280,9 @@ class ScanOrchestrator:
         if 'dnsdumpster' in enabled_tools:
             dnsdumpster_start = int(time.time())
             # Placeholder for dnsdumpster logic
-            self.logger.info(f"DNSDumpster scan requested for {target}, but not yet implemented.")
+            self.logger.info(f"Running DNSDumpster scan (not yet implemented)")
             dnsdumpster_end = int(time.time())
+            self.logger.info(f"Completed DNSDumpster scan in {dnsdumpster_end - dnsdumpster_start} seconds")
             
             external_results["dnsdumpster"] = {
                 "status": "not_implemented",
@@ -287,12 +294,14 @@ class ScanOrchestrator:
         # Docker exposure check
         if 'docker' in enabled_tools or 'docker_exposure' in enabled_tools:
             docker_start = int(time.time())
+            self.logger.info(f"Running Docker exposure check")
             open_ports = self._extract_open_ports(scan_results)
             if 2375 in open_ports:
                 try:
                     self.logger.debug(f"Running Docker exposure check for {target}")
                     docker_exposure = DockerExposureChecker.check(target)
                     docker_end = int(time.time())
+                    self.logger.info(f"Completed Docker exposure check in {docker_end - docker_start} seconds")
                     
                     # Embed timing directly into docker results
                     docker_exposure["start_time"] = docker_start
@@ -311,6 +320,7 @@ class ScanOrchestrator:
                     }
             else:
                 docker_end = int(time.time())
+                self.logger.info(f"Completed Docker exposure check in {docker_end - docker_start} seconds (port 2375 not open)")
                 external_results["docker_exposure"] = {
                     "exposed": False,
                     "start_time": docker_start,

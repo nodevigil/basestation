@@ -124,7 +124,6 @@ class Scanner:
                     "timestamp_unix": timestamp_unix,
                     "scan_start_timestamp_unix": timestamp_unix,
                     "scan_end_timestamp_unix": timestamp_unix,
-                    "node_id": str(uuid.uuid4()),
                     "error": f"Orchestration error: {str(e)}"
                 }
             }
