@@ -66,8 +66,7 @@ class ScanOrchestrator:
             "scan_timestamp": kwargs.get('scan_timestamp'),
             "scan_start_time": scan_start_time,
             "scan_results": {},
-            "external_tools": {},
-            "stage_timings": {}
+            "external_tools": {}
         }
         
         # Separate internal scanners from external tools
@@ -97,34 +96,27 @@ class ScanOrchestrator:
                         scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
                         scanner_end = int(time.time())
                         
-                        results["scan_results"][scanner_type] = scan_result
-                        
-                        # Only add timing if scan produced meaningful results
+                        # Embed timing directly into the scan result if it has meaningful results
                         if self._has_meaningful_results(scan_result):
-                            results["stage_timings"][f"scanner_{scanner_type}"] = {
-                                "start_time": scanner_start,
-                                "end_time": scanner_end,
-                                "duration": scanner_end - scanner_start
-                            }
+                            scan_result["start_time"] = scanner_start
+                            scan_result["end_time"] = scanner_end
+                            scan_result["duration"] = scanner_end - scanner_start
+                        
+                        results["scan_results"][scanner_type] = scan_result
                     else:
                         self.logger.warning(f"Scanner {scanner_type} not available")
                 except Exception as e:
                     self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
-                    results["scan_results"][scanner_type] = {"error": str(e)}
+                    # Include timing and error info for failed scans
+                    scanner_end = int(time.time())
+                    results["scan_results"][scanner_type] = {
+                        "error": str(e),
+                        "start_time": scanner_start if 'scanner_start' in locals() else None,
+                        "end_time": scanner_end,
+                        "duration": scanner_end - scanner_start if 'scanner_start' in locals() else None
+                    }
             
             scanners_stage_end = int(time.time())
-            
-            # Only add scanners stage timing if any scanner produced meaningful results
-            scanner_had_results = any(
-                f"scanner_{scanner_type}" in results["stage_timings"] 
-                for scanner_type in internal_scanners
-            )
-            if scanner_had_results:
-                results["stage_timings"]["scanners_stage"] = {
-                    "start_time": scanners_stage_start,
-                    "end_time": scanners_stage_end,
-                    "duration": scanners_stage_end - scanners_stage_start
-                }
         
         # Run external tools with timing
         if self.use_external_tools and external_tools:
@@ -134,30 +126,10 @@ class ScanOrchestrator:
             results["external_tools"] = self._run_external_tools(target, results, external_tools)
             
             external_tools_stage_end = int(time.time())
-            
-            # Only add external tools stage timing if any tool produced meaningful results
-            tool_had_results = any(
-                key.startswith("tool_") and key in results["stage_timings"]
-                for key in results["stage_timings"]
-            )
-            if tool_had_results:
-                results["stage_timings"]["external_tools_stage"] = {
-                    "start_time": external_tools_stage_start,
-                    "end_time": external_tools_stage_end,
-                    "duration": external_tools_stage_end - external_tools_stage_start
-                }
         
         # Record total scan timing only if any meaningful results were found
         scan_end_time = int(time.time())
         results["scan_end_time"] = scan_end_time
-        
-        # Only add total scan timing if there were any meaningful stage results
-        if results["stage_timings"]:
-            results["stage_timings"]["total_scan"] = {
-                "start_time": scan_start_time,
-                "end_time": scan_end_time,
-                "duration": scan_end_time - scan_start_time
-            }
         
         self.logger.info(f"Scan completed in {scan_end_time - scan_start_time} seconds")
         
@@ -212,21 +184,23 @@ class ScanOrchestrator:
                 nmap_results = nmap_scan(target)
                 nmap_end = int(time.time())
                 
-                external_results["nmap"] = nmap_results
-                
-                # Only add timing if nmap found meaningful results
+                # Embed timing directly into nmap results if meaningful
                 if self._has_meaningful_results(nmap_results):
-                    scan_results["stage_timings"]["tool_nmap"] = {
-                        "start_time": nmap_start,
-                        "end_time": nmap_end,
-                        "duration": nmap_end - nmap_start
-                    }
-                    
+                    nmap_results["start_time"] = nmap_start
+                    nmap_results["end_time"] = nmap_end
+                    nmap_results["duration"] = nmap_end - nmap_start
+                
+                external_results["nmap"] = nmap_results
                 self.logger.debug(f"Nmap results: {nmap_results}")
             except Exception as e:
                 nmap_end = int(time.time())
                 self.logger.error(f"Nmap scan failed for {target}: {e}")
-                external_results["nmap"] = {"error": str(e)}
+                external_results["nmap"] = {
+                    "error": str(e),
+                    "start_time": nmap_start,
+                    "end_time": nmap_end,
+                    "duration": nmap_end - nmap_start
+                }
         
         # WhatWeb scan
         if 'whatweb' in enabled_tools:
@@ -245,10 +219,14 @@ class ScanOrchestrator:
             
             whatweb_end = int(time.time())
             if whatweb_results:
+                # Embed timing directly into whatweb results
+                whatweb_results["start_time"] = whatweb_start
+                whatweb_results["end_time"] = whatweb_end
+                whatweb_results["duration"] = whatweb_end - whatweb_start
                 external_results["whatweb"] = whatweb_results
-                
-                # Only add timing if whatweb found results
-                scan_results["stage_timings"]["tool_whatweb"] = {
+            else:
+                # Even if no results, include timing for empty results
+                external_results["whatweb"] = {
                     "start_time": whatweb_start,
                     "end_time": whatweb_end,
                     "duration": whatweb_end - whatweb_start
@@ -262,19 +240,21 @@ class ScanOrchestrator:
                 ssl_results = ssl_test(target, port=443)
                 ssl_end = int(time.time())
                 
-                external_results["ssl_test"] = ssl_results
+                # Always embed timing directly into SSL results
+                ssl_results["start_time"] = ssl_start
+                ssl_results["end_time"] = ssl_end
+                ssl_results["duration"] = ssl_end - ssl_start
                 
-                # Only add timing if SSL test found meaningful results
-                if self._has_meaningful_results(ssl_results):
-                    scan_results["stage_timings"]["tool_ssl_test"] = {
-                        "start_time": ssl_start,
-                        "end_time": ssl_end,
-                        "duration": ssl_end - ssl_start
-                    }
+                external_results["ssl_test"] = ssl_results
             except Exception as e:
                 ssl_end = int(time.time())
                 self.logger.debug(f"SSL test failed for {target}: {e}")
-                external_results["ssl_test"] = {"error": str(e)}
+                external_results["ssl_test"] = {
+                    "error": str(e),
+                    "start_time": ssl_start,
+                    "end_time": ssl_end,
+                    "duration": ssl_end - ssl_start
+                }
         
         # Dirbuster scan
         if 'dirbuster' in enabled_tools:
@@ -283,8 +263,8 @@ class ScanOrchestrator:
             self.logger.info(f"Dirbuster scan requested for {target}, but not yet implemented.")
             dirbuster_end = int(time.time())
             
-            external_results["dirbuster"] = {"status": "not_implemented"}
-            scan_results["stage_timings"]["tool_dirbuster"] = {
+            external_results["dirbuster"] = {
+                "status": "not_implemented",
                 "start_time": dirbuster_start,
                 "end_time": dirbuster_end,
                 "duration": dirbuster_end - dirbuster_start
@@ -297,8 +277,8 @@ class ScanOrchestrator:
             self.logger.info(f"DNSDumpster scan requested for {target}, but not yet implemented.")
             dnsdumpster_end = int(time.time())
             
-            external_results["dnsdumpster"] = {"status": "not_implemented"}
-            scan_results["stage_timings"]["tool_dnsdumpster"] = {
+            external_results["dnsdumpster"] = {
+                "status": "not_implemented",
                 "start_time": dnsdumpster_start,
                 "end_time": dnsdumpster_end,
                 "duration": dnsdumpster_end - dnsdumpster_start
@@ -314,22 +294,29 @@ class ScanOrchestrator:
                     docker_exposure = DockerExposureChecker.check(target)
                     docker_end = int(time.time())
                     
-                    external_results["docker_exposure"] = docker_exposure
+                    # Embed timing directly into docker results
+                    docker_exposure["start_time"] = docker_start
+                    docker_exposure["end_time"] = docker_end
+                    docker_exposure["duration"] = docker_end - docker_start
                     
-                    # Only add timing if Docker check found exposure
-                    if docker_exposure.get("exposed", False):
-                        scan_results["stage_timings"]["tool_docker_exposure"] = {
-                            "start_time": docker_start,
-                            "end_time": docker_end,
-                            "duration": docker_end - docker_start
-                        }
+                    external_results["docker_exposure"] = docker_exposure
                 except Exception as e:
                     docker_end = int(time.time())
                     self.logger.debug(f"Docker exposure check failed for {target}: {e}")
-                    external_results["docker_exposure"] = {"error": str(e)}
+                    external_results["docker_exposure"] = {
+                        "error": str(e),
+                        "start_time": docker_start,
+                        "end_time": docker_end,
+                        "duration": docker_end - docker_start
+                    }
             else:
                 docker_end = int(time.time())
-                external_results["docker_exposure"] = {"exposed": False}
+                external_results["docker_exposure"] = {
+                    "exposed": False,
+                    "start_time": docker_start,
+                    "end_time": docker_end,
+                    "duration": docker_end - docker_start
+                }
         
         return external_results
     
@@ -427,13 +414,12 @@ class ScanOrchestrator:
             "ssl_test": external_tools.get("ssl_test", {}),
             # Preserve timing information
             "scan_start_time": results.get("scan_start_time"),
-            "scan_end_time": results.get("scan_end_time"),
-            "stage_timings": results.get("stage_timings", {})
+            "scan_end_time": results.get("scan_end_time")
         }
         
         # Add GeoIP data if available
         if geo_results and not geo_results.get("error"):
-            legacy["geoip"] = {
+            geoip_data = {
                 "country_name": geo_results.get("country_name"),
                 "city_name": geo_results.get("city_name"),
                 "latitude": geo_results.get("latitude"),
@@ -441,6 +427,15 @@ class ScanOrchestrator:
                 "asn_number": geo_results.get("asn_number"),
                 "asn_organization": geo_results.get("asn_organization")
             }
+            
+            # Include timing information if available
+            if "start_time" in geo_results:
+                geoip_data["start_time"] = geo_results["start_time"]
+                geoip_data["end_time"] = geo_results["end_time"]
+                if "duration" in geo_results:
+                    geoip_data["duration"] = geo_results["duration"]
+                    
+            legacy["geoip"] = geoip_data
         
         # Add debugging information if in debug mode  
         if self.logger.isEnabledFor(logging.DEBUG):
