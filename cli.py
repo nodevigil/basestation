@@ -19,6 +19,16 @@ def main():
     """Main CLI entry point."""
     args = parse_arguments()
     
+    # Handle list-protocols command
+    if args.list_protocols:
+        list_protocol_scanners()
+        return
+    
+    # Require target for normal scanning
+    if not args.target:
+        print("❌ Error: --target is required unless using --list-protocols")
+        sys.exit(1)
+    
     try:
         # Load configuration
         config = None
@@ -110,8 +120,13 @@ Examples:
     
     parser.add_argument(
         '--target',
-        required=True,
         help='Target IP address or hostname to scan'
+    )
+    
+    parser.add_argument(
+        '--list-protocols',
+        action='store_true',
+        help='List available protocol scanners and their supported levels'
     )
     
     parser.add_argument(
@@ -124,14 +139,14 @@ Examples:
     
     parser.add_argument(
         '--protocol',
-        choices=['filecoin', 'sui'],
+        choices=['filecoin', 'sui', 'ethereum'],
         help='Run protocol-specific scanner'
     )
     
     parser.add_argument(
         '--scanners',
         nargs='*',
-        choices=['generic', 'web', 'vulnerability', 'geo', 'sui', 'filecoin'],
+        choices=['generic', 'web', 'vulnerability', 'geo', 'sui', 'filecoin', 'ethereum'],
         help='Specific scanner modules to run'
     )
     
@@ -247,6 +262,49 @@ def print_human_readable(result: DictResult):
     else:
         print("❌ Scan failed")
         print(f"⚠️  Error: {result.error}")
+
+
+def list_protocol_scanners():
+    """List available protocol scanners and their supported levels."""
+    try:
+        from lib.scanners.protocols.sui_scanner import SuiScanner
+        from lib.scanners.protocols.filecoin_scanner import FilecoinScanner
+        from lib.scanners.protocols.arweave_scanner import ArweaveScanner
+        # from lib.scanners.protocols.ethereum_scanner import EthereumScanner
+        
+        print("📋 Available Protocol Scanners:")
+        print("=" * 50)
+        
+        scanners = [
+            (SuiScanner, "Sui blockchain nodes"),
+            (FilecoinScanner, "Filecoin network nodes"),
+            (ArweaveScanner, "Arweave network nodes"),
+            # (EthereumScanner, "Ethereum blockchain nodes")
+        ]
+        
+        for scanner_class, description in scanners:
+            scanner = scanner_class()
+            protocol_name = scanner.protocol_name
+            supported_levels = scanner.get_supported_levels()
+            level_descriptions = scanner.describe_levels()
+            
+            print(f"\n🔧 {protocol_name.upper()}")
+            print(f"   Description: {description}")
+            print(f"   Supported Levels: {supported_levels}")
+            
+            for level in supported_levels:
+                desc = level_descriptions.get(level, "No description available")
+                print(f"   • Level {level}: {desc}")
+                
+        print("\n📝 Usage:")
+        print("   pgdn --target <ip> --protocol sui --scan-level 2")
+        print("   pgdn --target <ip> --protocol filecoin --scan-level 3")
+        print("   pgdn --target <ip> --protocol ethereum --scan-level 1")
+        
+    except Exception as e:
+        print(f"❌ Error listing protocol scanners: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

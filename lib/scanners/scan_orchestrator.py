@@ -91,9 +91,27 @@ class ScanOrchestrator:
                 try:
                     scanner = self.scanner_registry.get_scanner(scanner_type)
                     if scanner:
+                        # Check if protocol scanner supports the requested level
+                        if hasattr(scanner, 'can_handle_level') and not scanner.can_handle_level(scan_level):
+                            supported_levels = scanner.get_supported_levels() if hasattr(scanner, 'get_supported_levels') else [1]
+                            self.logger.warning(
+                                f"Scanner {scanner_type} does not support level {scan_level}. "
+                                f"Supported levels: {supported_levels}. Skipping scanner."
+                            )
+                            continue
+                            
                         scanner_start = int(time.time())
-                        self.logger.info(f"Running {scanner_type} scanner")
-                        scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
+                        self.logger.info(f"Running {scanner_type} scanner at level {scan_level}")
+                        
+                        # Check if this is an async protocol scanner
+                        if hasattr(scanner, 'scan_protocol'):
+                            # This is a protocol scanner with async support
+                            import asyncio
+                            scan_result = asyncio.run(scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs))
+                        else:
+                            # Regular scanner
+                            scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
+                            
                         scanner_end = int(time.time())
                         self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")
                         
@@ -150,9 +168,23 @@ class ScanOrchestrator:
         """
         # Define protocol-specific scanners that should not run during infrastructure scanning
         protocol_scanners = {
-            'sui', 'filecoin', 'ethereum', 'solana', 'cosmos', 'polkadot', 
-            'avalanche', 'cardano', 'algorand', 'near', 'chainlink',
-            'bitcoin', 'litecoin', 'dogecoin', 'monero', 'zcash'
+            'sui',      # Sui blockchain protocol scanner
+            'filecoin', # Filecoin blockchain protocol scanner
+            'ethereum', # Future Ethereum protocol scanner
+            'bitcoin',  # Future Bitcoin protocol scanner
+            'solana',   # Future Solana protocol scanner
+            'polygon',  # Future Polygon protocol scanner
+            'avalanche', # Future Avalanche protocol scanner
+            'cosmos',   # Future Cosmos protocol scanner
+            'polkadot', # Future Polkadot protocol scanner
+            'cardano',  # Future Cardano protocol scanner
+            'algorand', # Future Algorand protocol scanner
+            'near',     # Future NEAR protocol scanner
+            'chainlink', # Future Chainlink protocol scanner
+            'litecoin', # Future Litecoin protocol scanner
+            'dogecoin', # Future Dogecoin protocol scanner
+            'monero',   # Future Monero protocol scanner
+            'zcash'     # Future Zcash protocol scanner
         }
         
         # Return only infrastructure scanners

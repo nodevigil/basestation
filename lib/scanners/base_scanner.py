@@ -43,6 +43,28 @@ class BaseScanner(ABC):
     def scanner_type(self) -> str:
         """Return the type of scanner."""
         pass
+    
+    def get_supported_levels(self) -> List[int]:
+        """Return list of supported scan levels.
+        
+        Default implementation supports level 1 only.
+        Protocol-specific scanners should override this.
+        
+        Returns:
+            List of supported scan levels (1-3)
+        """
+        return [1]
+    
+    def can_handle_level(self, level: int) -> bool:
+        """Check if scanner can handle a specific scan level.
+        
+        Args:
+            level: Scan level to check
+            
+        Returns:
+            True if scanner supports the level
+        """
+        return level in self.get_supported_levels()
 
 
 class ScannerRegistry:
@@ -99,6 +121,9 @@ class ScannerRegistry:
         """Register external/protocol-specific scanners."""
         scanner_configs = self.config.get('scanners', {})
         
+        # Register protocol scanners from the protocols folder
+        self._register_protocol_scanners()
+        
         for scanner_name, scanner_config in scanner_configs.items():
             if not scanner_config.get('enabled', True):
                 continue
@@ -113,6 +138,29 @@ class ScannerRegistry:
                 self.logger.info(f"✅ Registered external scanner: {scanner_name} ({module_path})")
             except Exception as e:
                 self.logger.warning(f"Failed to register external scanner {scanner_name}: {e}")
+    
+    def _register_protocol_scanners(self):
+        """Register protocol-specific scanners."""
+        try:
+            from .protocols.sui_scanner import SuiScanner
+            self._scanners['sui'] = SuiScanner
+            self.logger.debug("Registered protocol scanner: SuiScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register SuiScanner: {e}")
+            
+        try:
+            from .protocols.filecoin_scanner import FilecoinScanner
+            self._scanners['filecoin'] = FilecoinScanner
+            self.logger.debug("Registered protocol scanner: FilecoinScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register FilecoinScanner: {e}")
+            
+        try:
+            from .protocols.ethereum_scanner import EthereumScanner
+            self._scanners['ethereum'] = EthereumScanner
+            self.logger.debug("Registered protocol scanner: EthereumScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register EthereumScanner: {e}")
     
     def _load_scanner_class(self, module_path: str):
         """Load scanner class from module path.

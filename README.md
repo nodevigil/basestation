@@ -44,12 +44,20 @@ python setup.py develop   # Development mode installation
 pgdn --target example.com --org-id myorg
 
 # With protocol-specific scanning
-pgdn --target example.com --org-id myorg --protocol sui
+pgdn --target example.com --org-id myorg --protocol sui --scan-level 2
+
+# List available protocol scanners and their levels
+pgdn --list-protocols
 
 # Different scan levels
 pgdn --target example.com --org-id myorg --scan-level 1    # Basic (legal, passive)
 pgdn --target example.com --org-id myorg --scan-level 2    # Standard with GeoIP
 pgdn --target example.com --org-id myorg --scan-level 3    # Comprehensive analysis
+
+# Protocol-specific scanning with different levels
+pgdn --target sui-node.com --protocol sui --scan-level 1   # Basic health check
+pgdn --target sui-node.com --protocol sui --scan-level 2   # Metrics + validator analysis
+pgdn --target sui-node.com --protocol sui --scan-level 3   # Aggressive probing
 
 # Specific scan types for testing/debugging
 pgdn --target example.com --org-id myorg --type nmap       # Port scan only
@@ -225,9 +233,45 @@ All protocol scanners must:
   - `scan_orchestrator.py`: Infrastructure scanning coordination
   - `base_scanner.py`: Scanner registry and interface
   - `protocol_template.py`: Template for new protocol scanners
-  - Protocol-specific scanners (Sui, Filecoin, etc.)
+  - `protocols/`: Protocol-specific scanners with level support
+    - `sui_scanner.py`: Sui blockchain protocol scanner (levels 1-3)
+    - `filecoin_scanner.py`: Filecoin network protocol scanner (levels 1-3)
+    - `base_protocol_scanner.py`: Base class for protocol scanners
 - **`lib/tools/`**: External tool integrations (nmap, whatweb, ssl)
 - **`cli.py`**: Command-line interface and library wrapper
+
+### Protocol Scanner Levels
+
+Protocol scanners now support multiple scan levels with different intensities:
+
+**Level 1**: Basic protocol health checks
+- Basic endpoint connectivity
+- Version detection
+- Core service availability
+
+**Level 2**: Standard protocol analysis  
+- Extended metrics collection
+- Service enumeration
+- Configuration validation
+- Anomaly detection
+
+**Level 3**: Comprehensive protocol assessment
+- Aggressive probing and testing
+- Latency analysis
+- Security configuration review
+- Edge case validation
+
+### Listing Available Protocol Scanners
+
+```bash
+# List all available protocol scanners and their supported levels
+pgdn --list-protocols
+```
+
+This will show you:
+- Available protocol scanners
+- Supported scan levels for each protocol
+- Description of what each level does
 
 ### Scanning Flow
 
