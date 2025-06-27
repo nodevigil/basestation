@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime, timedelta
+from .base_protocol_scanner import ProtocolScanner
 
 class ScanLevel(Enum):
     LITE = 1
@@ -114,16 +115,28 @@ class ArweaveScanResult:
         if self.peer_list is None:
             self.peer_list = []
 
-class BaseScanner:
-    """Base scanner class for all protocol scanners"""
-    def __init__(self, config=None):
-        self.config = config or {}
-
-class EnhancedArweaveScanner(BaseScanner):
+class EnhancedArweaveScanner(ProtocolScanner):
     """
     Production-grade Arweave scanner focused on comprehensive data collection
     for external trust scoring systems.
     """
+    
+    @property
+    def protocol_name(self) -> str:
+        """Return the protocol name."""
+        return "arweave"
+    
+    def get_supported_levels(self) -> List[int]:
+        """Return supported scan levels."""
+        return [1, 2, 3]
+    
+    def describe_levels(self) -> Dict[int, str]:
+        """Return description of what each scan level does."""
+        return {
+            1: "Basic Arweave node health check, version, and network status",
+            2: "Extended metrics, peer analysis, and sync monitoring", 
+            3: "Comprehensive security analysis, behavioral patterns, and threat intelligence"
+        }
     
     def __init__(self, config=None, scan_level: ScanLevel = ScanLevel.LITE, 
                  enable_reputation=True, enable_behavioral=True):
@@ -155,6 +168,53 @@ class EnhancedArweaveScanner(BaseScanner):
         # Vulnerability and configuration databases
         self.known_vulnerabilities = self._load_vulnerability_db()
         self.security_baselines = self._load_security_baselines()
+
+    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+        """Perform Arweave protocol-specific scan.
+        
+        Args:
+            target: Target IP address or hostname to scan
+            scan_level: Scan intensity level (1-3)
+            **kwargs: Additional scan parameters
+            
+        Returns:
+            Dictionary containing scan results
+        """
+        # Extract ports from kwargs or use defaults
+        ports = kwargs.get('ports', self.default_ports)
+        
+        # Convert scan_level to ScanLevel enum
+        scan_level_enum = ScanLevel.LITE
+        if scan_level == 2:
+            scan_level_enum = ScanLevel.MEDIUM
+        elif scan_level == 3:
+            scan_level_enum = ScanLevel.FEROCIOUS
+        
+        # Temporarily update scan level
+        original_scan_level = self.scan_level
+        self.scan_level = scan_level_enum
+        
+        try:
+            # Perform the scan using the existing scan method
+            results = await self.scan(target, ports)
+            
+            # Convert results to dictionary format expected by the framework
+            return {
+                'target': target,
+                'scan_level': scan_level,
+                'protocol': self.protocol_name,
+                'timestamp': datetime.utcnow().isoformat(),
+                'results': [asdict(result) for result in results],
+                'summary': {
+                    'total_ports_scanned': len(ports),
+                    'successful_scans': len(results),
+                    'healthy_nodes': sum(1 for r in results if r.healthy),
+                    'scan_success_rate': len(results) / len(ports) if ports else 0
+                }
+            }
+        finally:
+            # Restore original scan level
+            self.scan_level = original_scan_level
 
     async def scan(self, ip: str, ports: List[int] = None) -> List[ArweaveScanResult]:
         """Enhanced scan with comprehensive data collection"""
@@ -396,9 +456,9 @@ class EnhancedArweaveScanner(BaseScanner):
                 await asyncio.sleep(0.1)
             
             if latencies:
-                result.latency_ms = np.mean(latencies)
-                result.latency_variance = np.var(latencies)
-                result.response_time_p95 = np.percentile(latencies, 95)
+                result.latency_ms = statistics.mean(latencies)
+                result.latency_variance = statistics.variance(latencies) if len(latencies) > 1 else 0
+                result.response_time_p95 = sorted(latencies)[int(0.95 * len(latencies))] if latencies else 0
                 
                 # Latency analysis
                 if result.latency_variance > 100:
@@ -1043,8 +1103,8 @@ class EnhancedArweaveScanner(BaseScanner):
         previous_latency = [s.latency_ms for s in previous_5 if s.latency_ms]
         
         if recent_latency and previous_latency:
-            recent_avg = np.mean(recent_latency)
-            previous_avg = np.mean(previous_latency)
+            recent_avg = statistics.mean(recent_latency)
+            previous_avg = statistics.mean(previous_latency)
             
             if recent_avg < previous_avg * 0.9:
                 return "improving"
@@ -1058,9 +1118,9 @@ class EnhancedArweaveScanner(BaseScanner):
         previous_sync = [s.sync_gap for s in previous_5 if s.sync_gap is not None]
         
         if recent_sync and previous_sync:
-            if np.mean(recent_sync) < np.mean(previous_sync):
+            if statistics.mean(recent_sync) < statistics.mean(previous_sync):
                 return "improving"
-            elif np.mean(recent_sync) > np.mean(previous_sync):
+            elif statistics.mean(recent_sync) > statistics.mean(previous_sync):
                 return "declining"
         
         return "stable"
@@ -1313,15 +1373,15 @@ class BehaviorAnalyzer:
         
         # Latency anomaly
         if current.latency_ms:
-            latency_mean = np.mean(baseline_latencies)
-            latency_std = np.std(baseline_latencies)
+            latency_mean = statistics.mean(baseline_latencies)
+            latency_std = statistics.stdev(baseline_latencies) if len(baseline_latencies) > 1 else 1
             if latency_std > 0:
                 latency_zscore = abs(current.latency_ms - latency_mean) / latency_std
                 anomaly_score += min(1.0, latency_zscore / 3.0) * 0.4
         
         # Peer count anomaly
-        peer_mean = np.mean(baseline_peer_counts)
-        peer_std = np.std(baseline_peer_counts)
+        peer_mean = statistics.mean(baseline_peer_counts)
+        peer_std = statistics.stdev(baseline_peer_counts) if len(baseline_peer_counts) > 1 else 1
         if peer_std > 0:
             peer_zscore = abs(current.peer_count - peer_mean) / peer_std
             anomaly_score += min(1.0, peer_zscore / 3.0) * 0.3

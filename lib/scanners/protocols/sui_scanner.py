@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime, timedelta
+from .base_protocol_scanner import ProtocolScanner
+from datetime import datetime, timedelta
 
 class ScanLevel(Enum):
     LITE = 1
@@ -155,11 +157,28 @@ class BaseScanner:
     def __init__(self, config=None):
         self.config = config or {}
 
-class EnhancedSuiScanner(BaseScanner):
+class EnhancedSuiScanner(ProtocolScanner):
     """
     Production-grade Sui scanner focused on comprehensive data collection
     for external trust scoring systems, with deep Sui protocol understanding.
     """
+    
+    @property
+    def protocol_name(self) -> str:
+        """Return the protocol name."""
+        return "sui"
+    
+    def get_supported_levels(self) -> List[int]:
+        """Return supported scan levels."""
+        return [1, 2, 3]
+    
+    def describe_levels(self) -> Dict[int, str]:
+        """Return description of what each scan level does."""
+        return {
+            1: "Basic Sui node health check, version, and epoch status",
+            2: "Extended metrics, validator analysis, and consensus monitoring",
+            3: "Comprehensive security analysis, behavioral patterns, and threat intelligence"
+        }
     
     def __init__(self, config=None, scan_level: ScanLevel = ScanLevel.LITE, 
                  enable_reputation=True, enable_behavioral=True):
@@ -198,6 +217,53 @@ class EnhancedSuiScanner(BaseScanner):
         # Vulnerability and configuration databases
         self.known_vulnerabilities = self._load_sui_vulnerability_db()
         self.security_baselines = self._load_sui_security_baselines()
+
+    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+        """Perform Sui protocol-specific scan.
+        
+        Args:
+            target: Target IP address or hostname to scan
+            scan_level: Scan intensity level (1-3)
+            **kwargs: Additional scan parameters
+            
+        Returns:
+            Dictionary containing scan results
+        """
+        # Extract ports from kwargs or use defaults
+        ports = kwargs.get('ports', self.default_ports)
+        
+        # Convert scan_level to ScanLevel enum
+        scan_level_enum = ScanLevel.LITE
+        if scan_level == 2:
+            scan_level_enum = ScanLevel.MEDIUM
+        elif scan_level == 3:
+            scan_level_enum = ScanLevel.FEROCIOUS
+        
+        # Temporarily update scan level
+        original_scan_level = self.scan_level
+        self.scan_level = scan_level_enum
+        
+        try:
+            # Perform the scan using the existing scan method
+            results = await self.scan(target, ports)
+            
+            # Convert results to dictionary format expected by the framework
+            return {
+                'target': target,
+                'scan_level': scan_level,
+                'protocol': self.protocol_name,
+                'timestamp': datetime.utcnow().isoformat(),
+                'results': [asdict(result) for result in results],
+                'summary': {
+                    'total_ports_scanned': len(ports),
+                    'successful_scans': len(results),
+                    'healthy_nodes': sum(1 for r in results if r.healthy),
+                    'scan_success_rate': len(results) / len(ports) if ports else 0
+                }
+            }
+        finally:
+            # Restore original scan level
+            self.scan_level = original_scan_level
 
     async def scan(self, ip: str, ports: List[int] = None) -> List[SuiScanResult]:
         """Enhanced Sui scan with comprehensive protocol analysis"""
@@ -849,7 +915,13 @@ class EnhancedSuiScanner(BaseScanner):
         
         sorted_values = sorted(values)
         n = len(sorted_values)
-        cumsum = np.cumsum(sorted_values)
+        
+        # Calculate cumulative sum for Gini coefficient
+        cumsum = []
+        running_sum = 0
+        for val in sorted_values:
+            running_sum += val
+            cumsum.append(running_sum)
         
         return (n + 1 - 2 * sum(cumsum) / cumsum[-1]) / n
 
@@ -936,8 +1008,8 @@ class EnhancedSuiScanner(BaseScanner):
             return 0.5  # Unknown stability
         
         all_prices = historical_prices + [current_price]
-        mean_price = np.mean(all_prices)
-        std_price = np.std(all_prices)
+        mean_price = statistics.mean(all_prices)
+        std_price = statistics.stdev(all_prices) if len(all_prices) > 1 else 0
         
         if mean_price == 0:
             return 0.0
@@ -1387,13 +1459,13 @@ class EnhancedSuiScanner(BaseScanner):
                     'total_nodes_scanned': len(results),
                     'healthy_nodes': sum(1 for r in results if r.healthy),
                     'total_validators': sum(r.validator_count for r in results if r.validator_count),
-                    'avg_stake_distribution_gini': np.mean([r.voting_power_distribution for r in results if r.voting_power_distribution]),
+                    'avg_stake_distribution_gini': statistics.mean([r.voting_power_distribution for r in results if r.voting_power_distribution]),
                     'scan_timestamp': datetime.utcnow().isoformat()
                 },
                 'consensus_health': {
-                    'avg_consensus_latency_ms': np.mean([r.consensus_latency_ms for r in results if r.consensus_latency_ms]),
+                    'avg_consensus_latency_ms': statistics.mean([r.consensus_latency_ms for r in results if r.consensus_latency_ms]),
                     'nodes_with_consensus_issues': sum(1 for r in results if r.consensus_anomalies),
-                    'avg_checkpoint_lag': np.mean([r.checkpoint_lag for r in results if r.checkpoint_lag])
+                    'avg_checkpoint_lag': statistics.mean([r.checkpoint_lag for r in results if r.checkpoint_lag])
                 },
                 'security_findings': {
                     'nodes_with_public_metrics': sum(1 for r in results if r.metrics_publicly_exposed),
@@ -1637,9 +1709,9 @@ class SuiNetworkAnalyzer:
         checkpoint_lags = [n.checkpoint_lag for n in healthy_nodes if n.checkpoint_lag is not None]
         
         return {
-            'avg_consensus_latency_ms': np.mean(consensus_latencies) if consensus_latencies else None,
-            'max_consensus_latency_ms': np.max(consensus_latencies) if consensus_latencies else None,
-            'avg_checkpoint_lag': np.mean(checkpoint_lags) if checkpoint_lags else None,
+            'avg_consensus_latency_ms': statistics.mean(consensus_latencies) if consensus_latencies else None,
+            'max_consensus_latency_ms': max(consensus_latencies) if consensus_latencies else None,
+            'avg_checkpoint_lag': statistics.mean(checkpoint_lags) if checkpoint_lags else None,
             'nodes_with_consensus_issues': sum(1 for n in healthy_nodes if n.consensus_anomalies),
             'consensus_stability_score': self._calculate_consensus_stability(healthy_nodes)
         }
@@ -1763,18 +1835,10 @@ class SuiNetworkAnalyzer:
         total_flags = sum(len(r.compliance_flags) for r in all_results)
         max_possible_flags = len(all_results) * 10  # Assume max 10 flags per node
         
-    def _calculate_network_compliance_score(self, all_results: List[SuiScanResult]) -> float:
-        """Calculate overall network compliance score"""
-        if not all_results:
-            return 0.0
-        
-        total_flags = sum(len(r.compliance_flags) for r in all_results)
-        max_possible_flags = len(all_results) * 10  # Assume max 10 flags per node
-        
         return max(0.0, 1.0 - (total_flags / max_possible_flags))
 
     def _calculate_percentile(self, data: List[float], percentile: float) -> float:
-        """Calculate percentile without numpy"""
+        """Calculate percentile"""
         if not data:
             return 0.0
         

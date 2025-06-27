@@ -267,18 +267,18 @@ def print_human_readable(result: DictResult):
 def list_protocol_scanners():
     """List available protocol scanners and their supported levels."""
     try:
-        from lib.scanners.protocols.sui_scanner import SuiScanner
+        from lib.scanners.protocols.sui_scanner import EnhancedSuiScanner
         from lib.scanners.protocols.filecoin_scanner import FilecoinScanner
-        from lib.scanners.protocols.arweave_scanner import ArweaveScanner
+        from lib.scanners.protocols.arweave_scanner import EnhancedArweaveScanner
         # from lib.scanners.protocols.ethereum_scanner import EthereumScanner
         
         print("📋 Available Protocol Scanners:")
         print("=" * 50)
         
         scanners = [
-            (SuiScanner, "Sui blockchain nodes"),
+            (EnhancedSuiScanner, "Sui blockchain nodes"),
             (FilecoinScanner, "Filecoin network nodes"),
-            (ArweaveScanner, "Arweave network nodes"),
+            (EnhancedArweaveScanner, "Arweave network nodes"),
             # (EthereumScanner, "Ethereum blockchain nodes")
         ]
         
