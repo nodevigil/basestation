@@ -41,6 +41,7 @@ class Scanner:
     
     def scan(self, 
              target: str, 
+             hostname: Optional[str] = None,
              scan_level: int = 1,
              protocol: Optional[str] = None,
              enabled_scanners: Optional[List[str]] = None,
@@ -51,6 +52,7 @@ class Scanner:
         
         Args:
             target: IP address or hostname to scan
+            hostname: Optional hostname for target IP (for hostname-based scans)
             scan_level: Scan intensity level (1-3)
             protocol: Optional protocol-specific scanner (sui, filecoin)
             enabled_scanners: Override which scanners to run
@@ -96,6 +98,7 @@ class Scanner:
             # Perform the scan - orchestrator now returns structured format directly
             scan_results = self.orchestrator.scan(
                 target=ip_address,
+                hostname=hostname,
                 scan_level=scan_level,
                 protocol=protocol,
                 scan_timestamp=datetime.now().isoformat()

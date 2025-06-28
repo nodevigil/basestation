@@ -37,11 +37,12 @@ class ScanOrchestrator:
         self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
     
-    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, hostname: Optional[str] = None, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive scan using multiple scanner types.
         
         Args:
             target: Target IP address or hostname
+            hostname: Optional hostname for target IP (for hostname-based scans)
             ports: List of ports to scan
             scan_level: Scan level (1-3, default: 1)
             protocol: Optional protocol name for routing
@@ -61,6 +62,7 @@ class ScanOrchestrator:
 
         results = {
             "target": target,
+            "hostname": hostname,
             "scan_level": scan_level,
             "protocol": protocol,
             "scan_timestamp": kwargs.get('scan_timestamp'),
@@ -107,10 +109,10 @@ class ScanOrchestrator:
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
                             import asyncio
-                            scan_result = asyncio.run(scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs))
+                            scan_result = asyncio.run(scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **kwargs))
                         else:
                             # Regular scanner
-                            scan_result = scanner.scan(target, ports=ports, scan_level=scan_level, **kwargs)
+                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **kwargs)
                             
                         scanner_end = int(time.time())
                         self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")
@@ -142,7 +144,7 @@ class ScanOrchestrator:
             external_tools_stage_start = int(time.time())
             self.logger.info(f"Starting external tools stage with {len(external_tools)} tools")
             
-            results["external_tools"] = self._run_external_tools(target, results, external_tools)
+            results["external_tools"] = self._run_external_tools(target, hostname, results, external_tools)
             
             external_tools_stage_end = int(time.time())
         
@@ -196,11 +198,12 @@ class ScanOrchestrator:
         self.logger.debug(f"Filtered infrastructure scanners: {infrastructure_scanners}")
         return infrastructure_scanners
     
-    def _run_external_tools(self, target: str, scan_results: Dict[str, Any], enabled_tools: List[str]) -> Dict[str, Any]:
+    def _run_external_tools(self, target: str, hostname: Optional[str], scan_results: Dict[str, Any], enabled_tools: List[str]) -> Dict[str, Any]:
         """Run external scanning tools based on the routing function's output.
         
         Args:
             target: Target to scan
+            hostname: Optional hostname for target IP (for hostname-based scans)
             scan_results: Results from modular scanners
             enabled_tools: List of external tools to run for this scan
             

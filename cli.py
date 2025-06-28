@@ -41,6 +41,7 @@ def main():
         # Perform scan
         result = scanner.scan(
             target=args.target,
+            hostname=args.hostname,
             scan_level=args.scan_level,
             protocol=args.protocol,
             enabled_scanners=args.scanners,
@@ -121,6 +122,11 @@ Examples:
     parser.add_argument(
         '--target',
         help='Target IP address or hostname to scan'
+    )
+    
+    parser.add_argument(
+        '--hostname',
+        help='Hostname associated with the target IP (optional, for scans that work better with hostnames)'
     )
     
     parser.add_argument(
