@@ -229,9 +229,23 @@ class EnhancedSuiScanner(ProtocolScanner):
         Returns:
             Dictionary containing scan results
         """
+        # Validate target parameter
+        if not target:
+            raise ValueError("Target parameter cannot be None or empty")
+        
         # Extract ports and hostname from kwargs or use defaults
         ports = kwargs.get('ports', self.default_ports)
         hostname = kwargs.get('hostname', None)
+        
+        # Ensure ports is not None and has valid values
+        if ports is None:
+            ports = self.default_ports
+        elif not isinstance(ports, (list, tuple)):
+            self.logger.warning(f"Invalid ports parameter type: {type(ports)}, using defaults")
+            ports = self.default_ports
+        elif len(ports) == 0:
+            self.logger.warning("Empty ports list provided, using defaults")
+            ports = self.default_ports
         
         # Convert scan_level to ScanLevel enum
         scan_level_enum = ScanLevel.LITE
@@ -249,12 +263,25 @@ class EnhancedSuiScanner(ProtocolScanner):
             results = await self.scan(target, hostname, ports)
             
             # Convert results to dictionary format expected by the framework
+            def serialize_result(result):
+                """Convert SuiScanResult to serializable dict."""
+                result_dict = asdict(result)
+                # Convert datetime objects to ISO strings
+                if 'timestamp' in result_dict and result_dict['timestamp']:
+                    result_dict['timestamp'] = result_dict['timestamp'].isoformat()
+                if 'last_seen' in result_dict and result_dict['last_seen']:
+                    result_dict['last_seen'] = result_dict['last_seen'].isoformat()
+                # Convert ScanLevel enum to its value
+                if 'scan_level' in result_dict and hasattr(result_dict['scan_level'], 'value'):
+                    result_dict['scan_level'] = result_dict['scan_level'].value
+                return result_dict
+            
             return {
                 'target': target,
                 'scan_level': scan_level,
                 'protocol': self.protocol_name,
                 'timestamp': datetime.utcnow().isoformat(),
-                'results': [asdict(result) for result in results],
+                'results': [serialize_result(result) for result in results],
                 'summary': {
                     'total_ports_scanned': len(ports),
                     'successful_scans': len(results),
@@ -275,7 +302,19 @@ class EnhancedSuiScanner(ProtocolScanner):
             ports: List of ports to scan (defaults to Sui ports)
             **kwargs: Additional scan parameters
         """
+        # Validate IP parameter
+        if not ip:
+            self.logger.error("IP parameter cannot be None or empty")
+            return []
+        
+        # Ensure ports is properly initialized
         if ports is None:
+            ports = self.default_ports
+        elif not isinstance(ports, (list, tuple)):
+            self.logger.warning(f"Invalid ports parameter type: {type(ports)}, using defaults")
+            ports = self.default_ports
+        elif len(ports) == 0:
+            self.logger.warning("Empty ports list provided, using defaults")
             ports = self.default_ports
             
         self.logger.info(f"🔍 Starting Sui enhanced scan on {ip}" + (f" (hostname: {hostname})" if hostname else ""))
@@ -290,6 +329,16 @@ class EnhancedSuiScanner(ProtocolScanner):
 
     async def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[SuiScanResult]:
         """Internal scan method with timeout protection"""
+        
+        # Ensure ports is properly initialized
+        if ports is None:
+            ports = self.default_ports
+        elif not isinstance(ports, (list, tuple)):
+            self.logger.warning(f"Invalid ports parameter in _perform_scan: {type(ports)}, using defaults")
+            ports = self.default_ports
+        elif len(ports) == 0:
+            self.logger.warning("Empty ports list in _perform_scan, using defaults")
+            ports = self.default_ports
         
         # Rate limiting
         if self.rate_limit_delay > 0:

@@ -57,9 +57,20 @@ def main():
         
         if args.json:
             import json
+            from datetime import datetime
+            
+            def datetime_serializer(obj):
+                """Custom JSON serializer for datetime objects and enums."""
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                from enum import Enum
+                if isinstance(obj, Enum):
+                    return obj.value
+                raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+            
             if result.is_success() and isinstance(result.data, dict):
                 # Output the scanner's structured data directly (already has "data" and "meta" at root)
-                print(json.dumps(result.data, indent=2))
+                print(json.dumps(result.data, indent=2, default=datetime_serializer))
             else:
                 # Fallback to the Result structure for errors/warnings
                 print(result.to_json(indent=2))
