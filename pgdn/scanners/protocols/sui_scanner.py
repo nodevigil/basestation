@@ -186,8 +186,8 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         # Configuration
         self.scan_level = scan_level
-        self.timeout = config.get('timeout', 15) if config else 15
-        self.max_retries = config.get('max_retries', 3) if config else 3
+        self.timeout = config.get('timeout', 5) if config else 5  # Reduced from 15 to 5 seconds
+        self.max_retries = config.get('max_retries', 2) if config else 2  # Reduced from 3 to 2 retries
         self.rate_limit_delay = config.get('rate_limit_delay', 1.0) if config else 1.0
         
         # External services (optional - can be None)
@@ -277,24 +277,51 @@ class EnhancedSuiScanner(ProtocolScanner):
         if ports is None:
             ports = self.default_ports
             
+        self.logger.info(f"🔍 Starting Sui enhanced scan on {ip}" + (f" (hostname: {hostname})" if hostname else ""))
+        self.logger.info(f"📊 Scan configuration: level={self.scan_level.name}, ports={ports}, timeout={self.timeout}s")
+        
+        # Add overall timeout to prevent hanging (5 minutes max)
+        try:
+            return await asyncio.wait_for(self._perform_scan(ip, hostname, ports), timeout=300)
+        except asyncio.TimeoutError:
+            self.logger.warning(f"⏰ Sui scan timeout after 5 minutes for {ip}")
+            return []
+
+    async def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[SuiScanResult]:
+        """Internal scan method with timeout protection"""
+        
         # Rate limiting
-        await asyncio.sleep(self.rate_limit_delay)
+        if self.rate_limit_delay > 0:
+            self.logger.debug(f"⏱️  Rate limiting: waiting {self.rate_limit_delay}s before scan")
+            await asyncio.sleep(self.rate_limit_delay)
         
         scan_start = time.time()
         results = []
         
-        for port in ports:
+        self.logger.info(f"🚀 Beginning port scanning on {len(ports)} Sui ports")
+        for i, port in enumerate(ports, 1):
+            self.logger.info(f"📡 Scanning port {port} ({i}/{len(ports)})")
             result = await self._scan_port(ip, port, hostname)
             if result:
+                self.logger.info(f"✅ Port {port}: Sui node detected (healthy: {result.healthy})")
                 results.append(result)
+            else:
+                self.logger.debug(f"❌ Port {port}: No Sui node detected")
         
-        # Update network baseline for comparative analysis
-        self._update_sui_network_baseline(results)
+        if results:
+            self.logger.info(f"🎯 Found {len(results)} active Sui node(s)")
+            # Update network baseline for comparative analysis
+            self.logger.debug("📈 Updating Sui network baseline with scan results")
+            self._update_sui_network_baseline(results)
+        else:
+            self.logger.warning(f"⚠️  No Sui nodes detected on {ip}")
         
         # Calculate scan metadata
         scan_duration = (time.time() - scan_start) * 1000
         for result in results:
             result.scan_duration_ms = scan_duration
+        
+        self.logger.info(f"⏱️  Sui scan completed in {scan_duration:.2f}ms")
         
         return results
 
@@ -303,6 +330,9 @@ class EnhancedSuiScanner(ProtocolScanner):
         # Use hostname for URL if provided (for SNI/virtual host support)
         host_for_url = hostname if hostname else ip
         base_url = f"http://{host_for_url}:{port}"
+        
+        self.logger.debug(f"🔍 Analyzing port {port} on {ip}" + (f" via hostname {hostname}" if hostname else ""))
+        self.logger.debug(f"🌐 Base URL: {base_url}")
         
         # Initialize result with comprehensive structure
         result = SuiScanResult(
@@ -316,50 +346,80 @@ class EnhancedSuiScanner(ProtocolScanner):
         cache_key = f"{ip}:{port}"
         if self._should_use_cache(cache_key):
             cached = self.node_cache[cache_key]
-            self.logger.debug(f"Using cached result for {cache_key}")
+            self.logger.debug(f"💾 Using cached result for {cache_key}")
             return cached
         
         successful_requests = 0
         total_requests = 0
         
         try:
+            self.logger.debug(f"🚀 Starting multi-level Sui scan on port {port}")
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout),
                 limits=httpx.Limits(max_connections=10)
             ) as client:
                 
                 # Level 1: Basic Sui node health and blockchain state
+                self.logger.debug(f"🟢 Level 1: Basic Sui node health check")
                 success = await self._scan_sui_basic(client, base_url, result)
                 total_requests += 5
                 successful_requests += success
+                self.logger.debug(f"📊 Level 1 completed: {success}/5 requests successful")
                 
                 if self.scan_level.value >= 2:
+                    self.logger.debug(f"🟡 Level 2: Medium scan - enhanced metrics and consensus data")
                     success = await self._scan_sui_medium(client, base_url, result)
                     total_requests += 8
                     successful_requests += success
+                    self.logger.debug(f"📊 Level 2 completed: {success}/8 requests successful")
                 
                 if self.scan_level.value >= 3:
+                    self.logger.debug(f"🔴 Level 3: Ferocious scan - deep security analysis")
                     success = await self._scan_sui_ferocious(client, base_url, result, hostname)
                     total_requests += 12
                     successful_requests += success
+                    self.logger.debug(f"📊 Level 3 completed: {success}/12 requests successful")
                 
                 # Enhanced Sui-specific analysis phases
+                self.logger.debug(f"🧠 Starting advanced Sui analysis phases")
+                
+                self.logger.debug(f"🔄 Analyzing consensus health")
                 await self._analyze_sui_consensus_health(result)
+                
+                self.logger.debug(f"👥 Analyzing validator ecosystem")
                 await self._analyze_validator_ecosystem(result)
+                
+                self.logger.debug(f"📋 Analyzing checkpoint consistency")
                 await self._analyze_checkpoint_consistency(result)
+                
+                self.logger.debug(f"🛡️  Analyzing security posture")
                 await self._analyze_security_posture(result)
+                
+                self.logger.debug(f"🎭 Analyzing behavioral patterns")
                 await self._analyze_behavioral_patterns(result)
+                
+                self.logger.debug(f"🕵️  Checking reputation intelligence")
                 await self._check_reputation_intelligence(result)
+                
+                self.logger.debug(f"📜 Assessing Sui compliance")
                 await self._assess_sui_compliance(result)
                 
         except Exception as e:
-            self.logger.warning(f"Sui scan failed for {ip}:{port} - {e}")
+            self.logger.warning(f"❌ Sui scan failed for {ip}:{port} - {e}")
             result.misconfigs.append(f"scan_error: {str(e)}")
         
         # Calculate scan success rate
         result.scan_success_rate = successful_requests / total_requests if total_requests > 0 else 0.0
+        success_rate_pct = result.scan_success_rate * 100
+        self.logger.debug(f"📈 Scan success rate: {success_rate_pct:.1f}% ({successful_requests}/{total_requests})")
+        
+        # Determine if node is healthy based on success rate and basic checks
+        result.healthy = result.scan_success_rate >= 0.3 and successful_requests > 0
+        health_status = "🟢 HEALTHY" if result.healthy else "🔴 UNHEALTHY"
+        self.logger.debug(f"💚 Node health assessment: {health_status}")
         
         # Cache result and update history
+        self.logger.debug(f"💾 Caching result for {cache_key}")
         self.node_cache[cache_key] = result
         self._update_scan_history(ip, port, result)
         
@@ -371,6 +431,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         try:
             # System state - core Sui blockchain info
+            self.logger.debug(f"📊 Fetching Sui system state from {base_url}/v1/system_state")
             system_state = await self._robust_fetch(client, f"{base_url}/v1/system_state")
             result.endpoints_status['/v1/system_state'] = system_state is not None
             
@@ -384,6 +445,8 @@ class EnhancedSuiScanner(ProtocolScanner):
                 result.sui_version = system_state.get("systemStateVersion")
                 result.validator_count = len(system_state.get("activeValidators", []))
                 
+                self.logger.debug(f"🏗️  System state: epoch={result.epoch}, version={result.sui_version}, validators={result.validator_count}")
+                
                 # Calculate total stake from system state
                 validators = system_state.get("activeValidators", [])
                 if validators:
@@ -393,11 +456,17 @@ class EnhancedSuiScanner(ProtocolScanner):
                     # Voting power distribution analysis (Gini coefficient)
                     result.voting_power_distribution = self._calculate_gini_coefficient(stakes)
                     
+                    self.logger.debug(f"💰 Total stake: {result.total_stake:.2e} SUI, Gini coefficient: {result.voting_power_distribution:.3f}")
+                    
                     if result.voting_power_distribution > 0.8:
                         result.misconfigs.append("high_centralization_gini")
                         result.compliance_flags.append("centralization_risk")
+                        self.logger.warning(f"⚠️  High centralization detected (Gini: {result.voting_power_distribution:.3f})")
+            else:
+                self.logger.warning(f"❌ Failed to fetch system state from {base_url}")
             
             # Checkpoint state - sync and consensus health
+            self.logger.debug(f"🔍 Fetching checkpoint data from {base_url}/v1/checkpoints")
             checkpoints = await self._robust_fetch(client, f"{base_url}/v1/checkpoints")
             result.endpoints_status['/v1/checkpoints'] = checkpoints is not None
             
@@ -408,6 +477,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                 if "data" in checkpoints and checkpoints["data"]:
                     latest_checkpoint = checkpoints["data"][0]
                     result.checkpoint_height = int(latest_checkpoint.get("sequenceNumber", 0))
+                    self.logger.debug(f"📋 Latest checkpoint: {result.checkpoint_height}")
                     
                     # Calculate transaction density per checkpoint
                     tx_count = len(latest_checkpoint.get("transactions", []))
@@ -416,6 +486,10 @@ class EnhancedSuiScanner(ProtocolScanner):
                     if result.transactions_per_checkpoint == 0:
                         result.misconfigs.append("empty_checkpoints")
                         result.compliance_flags.append("low_throughput")
+                else:
+                    self.logger.warning(f"❌ Checkpoint data format unexpected")
+            else:
+                self.logger.warning(f"❌ Failed to fetch checkpoint data")
             
             # Basic validator endpoint check
             validators_response = await self._robust_fetch(client, f"{base_url}/v1/validators")
@@ -1225,6 +1299,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             retries = self.max_retries
             
         last_exception = None
+        first_failure_logged = False
         
         for attempt in range(retries):
             try:
@@ -1235,18 +1310,28 @@ class EnhancedSuiScanner(ProtocolScanner):
                     except json.JSONDecodeError:
                         return {"text_response": response.text}
                 elif response.status_code in [404, 501]:
+                    if not first_failure_logged:
+                        self.logger.debug(f"❌ Endpoint not found: {url} (HTTP {response.status_code})")
+                        first_failure_logged = True
                     return None
+                else:
+                    if not first_failure_logged:
+                        self.logger.debug(f"❌ HTTP {response.status_code} from {url}")
+                        first_failure_logged = True
                     
             except (httpx.TimeoutException, httpx.ConnectError) as e:
+                if not first_failure_logged:
+                    self.logger.debug(f"❌ Connection failed to {url}: {type(e).__name__}")
+                    first_failure_logged = True
                 last_exception = e
                 if attempt < retries - 1:
-                    await asyncio.sleep(0.5 * (2 ** attempt))
+                    await asyncio.sleep(0.2 * (2 ** attempt))  # Reduced sleep time
             except Exception as e:
+                if not first_failure_logged:
+                    self.logger.debug(f"❌ Error fetching {url}: {type(e).__name__}")
+                    first_failure_logged = True
                 last_exception = e
                 break
-        
-        if last_exception:
-            self.logger.debug(f"Failed to fetch {url} after {retries} attempts: {last_exception}")
         
         return None
 

@@ -90,13 +90,15 @@ class FilecoinScanner(ProtocolScanner):
             scan_level: Scan intensity level (1-3)
             **kwargs: Additional scan parameters
         """
-        self.logger.info(f"Starting Filecoin scan of {target} at level {scan_level}")
+        self.logger.info(f"🔍 Starting Filecoin protocol scan on {target}" + (f" (hostname: {hostname})" if hostname else ""))
+        self.logger.info(f"📊 Scan configuration: level={scan_level}, timeout={self.timeout}s")
         scan_start_time = time.time()
         
         results = {
             'scan_type': 'filecoin_specific',
             'scan_level': scan_level,
             'target_ip': target,
+            'hostname': hostname,
             'lotus_api_exposed': False,
             'node_info': None,
             'lotus_auth_required': True,
@@ -104,11 +106,15 @@ class FilecoinScanner(ProtocolScanner):
         }
         
         try:
+            self.logger.info(f"🚀 Executing Filecoin scan level {scan_level}")
             if scan_level == 1:
+                self.logger.debug(f"🟢 Level 1: Basic Lotus API detection and node info")
                 level_results = await self._scan_level_1(target, hostname)
             elif scan_level == 2:
+                self.logger.debug(f"🟡 Level 2: Extended API checks including storage and market APIs")
                 level_results = await self._scan_level_2(target, hostname)
             elif scan_level == 3:
+                self.logger.debug(f"🔴 Level 3: Comprehensive security analysis with deep protocol inspection")
                 level_results = await self._scan_level_3(target, hostname)
             else:
                 raise ValueError(f"Invalid scan_level: {scan_level}")
@@ -118,10 +124,22 @@ class FilecoinScanner(ProtocolScanner):
             scan_duration = time.time() - scan_start_time
             results['scan_duration'] = scan_duration
             
-            self.logger.info(f"Completed Filecoin scan of {target} at level {scan_level} in {scan_duration:.2f}s")
+            # Log scan results summary
+            apis_found = []
+            if results.get('lotus_api_exposed'): apis_found.append("Lotus API")
+            if results.get('storage_api_exposed'): apis_found.append("Storage API")
+            if results.get('market_api_exposed'): apis_found.append("Market API")
+            if results.get('metrics_exposed'): apis_found.append("Metrics")
+            
+            if apis_found:
+                self.logger.info(f"✅ Found Filecoin APIs: {', '.join(apis_found)}")
+            else:
+                self.logger.warning(f"❌ No Filecoin APIs detected on {target}")
+            
+            self.logger.info(f"⏱️  Filecoin scan completed in {scan_duration:.2f}s")
             
         except Exception as e:
-            self.logger.error(f"Filecoin scan failed for {target}: {str(e)}")
+            self.logger.error(f"❌ Filecoin scan failed for {target}: {str(e)}")
             results['errors'].append(f"Scan error: {str(e)}")
             results['scan_duration'] = time.time() - scan_start_time
         
@@ -129,7 +147,7 @@ class FilecoinScanner(ProtocolScanner):
 
     async def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 1: Basic node info and RPC auth check."""
-        self.logger.info(f"Level 1 Filecoin scan for {target}")
+        self.logger.debug(f"🔍 Level 1 Filecoin scan for {target}" + (f" via {hostname}" if hostname else ""))
         
         results = {
             'lotus_api_exposed': False,
@@ -140,12 +158,15 @@ class FilecoinScanner(ProtocolScanner):
         
         # Only check common ports for level 1
         common_ports = [1234, 3453, 8080]
+        self.logger.debug(f"📡 Checking common Filecoin ports: {common_ports}")
         
-        for port in common_ports:
+        for i, port in enumerate(common_ports, 1):
+            self.logger.debug(f"🔍 Scanning port {port} ({i}/{len(common_ports)})")
             for scheme in ['http', 'https']:
                 # Use hostname for URL if provided (for SNI/virtual host support)
                 host_for_url = hostname if hostname else target
                 url = f"{scheme}://{host_for_url}:{port}/rpc/v0"
+                self.logger.debug(f"🌐 Testing Lotus API at {url}")
                 try:
                     node_data = {
                         "jsonrpc": "2.0",
@@ -166,18 +187,27 @@ class FilecoinScanner(ProtocolScanner):
                         try:
                             data = response.json()
                             if 'result' in data:
+                                version_info = data['result']
+                                self.logger.info(f"✅ Lotus API found at {url}")
+                                self.logger.debug(f"📋 Node version: {version_info.get('Version', 'unknown')}")
+                                
                                 results['lotus_api_exposed'] = True
                                 results['lotus_api_url'] = url
-                                results['node_info'] = data['result']
+                                results['node_info'] = version_info
                                 results['lotus_auth_required'] = False
                                 return results
+                            else:
+                                self.logger.debug(f"❌ Unexpected response format from {url}")
                         except json.JSONDecodeError:
-                            pass
+                            self.logger.debug(f"❌ Invalid JSON response from {url}")
                     elif response.status_code == 401:
+                        self.logger.debug(f"🔒 Authentication required at {url}")
                         results['lotus_api_exposed'] = True
                         results['lotus_api_url'] = url
                         results['lotus_auth_required'] = True
                         return results
+                    else:
+                        self.logger.debug(f"❌ HTTP {response.status_code} from {url}")
                         
                 except Exception:
                     continue
