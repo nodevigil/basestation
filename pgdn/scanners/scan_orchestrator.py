@@ -718,9 +718,38 @@ class ScanOrchestrator:
             # Don't consider "Private Network" as meaningful
             return bool(country and country != "Private Network") or bool(city and city != "Private Network")
             
-        # Default: if there are any non-empty values (excluding common empty indicators)
+        # For protocol scanner results (Sui, Filecoin, etc.)
+        if "protocol" in results and "results" in results:
+            protocol_results = results.get("results", [])
+            # Check if there are any actual scan results
+            if isinstance(protocol_results, list) and len(protocol_results) > 0:
+                return True
+            # Also check summary for successful scans
+            summary = results.get("summary", {})
+            if isinstance(summary, dict) and summary.get("successful_scans", 0) > 0:
+                return True
+            
+        # For protocol results with summary data
+        if "summary" in results:
+            summary = results.get("summary", {})
+            if isinstance(summary, dict):
+                # Check for meaningful summary metrics (must have non-zero values)
+                meaningful_summary_keys = ["successful_scans", "healthy_nodes", "total_ports_scanned"]
+                if any(summary.get(key, 0) > 0 for key in meaningful_summary_keys):
+                    return True
+            
+        # Default: if there are any non-empty values (excluding common empty indicators and summary-only results)
         meaningful_keys = [k for k, v in results.items() 
-                          if v and v != {} and v != "" and k not in ["error", "timestamp"]]
+                          if v and v != {} and v != "" and k not in ["error", "timestamp", "summary"]]
+        
+        # If we only have a summary, make sure it has meaningful data
+        if not meaningful_keys and "summary" in results:
+            summary = results.get("summary", {})
+            if isinstance(summary, dict):
+                # Only consider summary meaningful if it has non-zero values
+                meaningful_summary_keys = ["successful_scans", "healthy_nodes", "total_ports_scanned"]
+                return any(summary.get(key, 0) > 0 for key in meaningful_summary_keys)
+            
         return len(meaningful_keys) > 0
 
 # Legacy compatibility: provide the old Scanner class interface
