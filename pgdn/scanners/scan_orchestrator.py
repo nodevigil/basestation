@@ -568,6 +568,19 @@ class ScanOrchestrator:
             }
         data.append({"type": "location", "payload": location_payload})
         
+        # Protocol data (blockchain/DePIN specific scanners)
+        protocol_results = {}
+        protocol_scanners = ['sui', 'filecoin', 'arweave', 'ethereum', 'bitcoin', 'solana', 'polygon', 'avalanche', 'cosmos', 'polkadot', 'cardano', 'algorand', 'near', 'chainlink', 'litecoin', 'dogecoin', 'monero', 'zcash']
+        
+        for protocol_scanner in protocol_scanners:
+            if protocol_scanner in scan_results:
+                protocol_data = scan_results[protocol_scanner]
+                if protocol_data and self._has_meaningful_data(protocol_data):
+                    protocol_results[protocol_scanner] = protocol_data
+        
+        if protocol_results:
+            data.append({"type": "protocol", "payload": protocol_results})
+        
         # Build meta object
         import uuid
         from datetime import datetime
