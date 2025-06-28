@@ -575,7 +575,7 @@ class ScanOrchestrator:
         for protocol_scanner in protocol_scanners:
             if protocol_scanner in scan_results:
                 protocol_data = scan_results[protocol_scanner]
-                if protocol_data and self._has_meaningful_data(protocol_data):
+                if protocol_data and self._has_meaningful_results(protocol_data):
                     protocol_results[protocol_scanner] = protocol_data
         
         if protocol_results:
