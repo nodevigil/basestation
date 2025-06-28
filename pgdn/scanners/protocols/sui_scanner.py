@@ -265,8 +265,15 @@ class EnhancedSuiScanner(ProtocolScanner):
             # Restore original scan level
             self.scan_level = original_scan_level
 
-    async def scan(self, ip: str, ports: List[int] = None) -> List[SuiScanResult]:
-        """Enhanced Sui scan with comprehensive protocol analysis"""
+    async def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[SuiScanResult]:
+        """Enhanced Sui scan with comprehensive protocol analysis
+        
+        Args:
+            ip: Target IP address
+            hostname: Optional hostname for SNI/virtual host support
+            ports: List of ports to scan (defaults to Sui ports)
+            **kwargs: Additional scan parameters
+        """
         if ports is None:
             ports = self.default_ports
             
@@ -277,7 +284,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         results = []
         
         for port in ports:
-            result = await self._scan_port(ip, port)
+            result = await self._scan_port(ip, port, hostname)
             if result:
                 results.append(result)
         
@@ -291,9 +298,11 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_port(self, ip: str, port: int) -> Optional[SuiScanResult]:
+    async def _scan_port(self, ip: str, port: int, hostname: Optional[str] = None) -> Optional[SuiScanResult]:
         """Comprehensive Sui port scanning with protocol-specific analysis"""
-        base_url = f"http://{ip}:{port}"
+        # Use hostname for URL if provided (for SNI/virtual host support)
+        host_for_url = hostname if hostname else ip
+        base_url = f"http://{host_for_url}:{port}"
         
         # Initialize result with comprehensive structure
         result = SuiScanResult(
@@ -330,7 +339,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     successful_requests += success
                 
                 if self.scan_level.value >= 3:
-                    success = await self._scan_sui_ferocious(client, base_url, result)
+                    success = await self._scan_sui_ferocious(client, base_url, result, hostname)
                     total_requests += 12
                     successful_requests += success
                 
@@ -546,7 +555,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _scan_sui_ferocious(self, client: httpx.AsyncClient, base_url: str, result: SuiScanResult) -> int:
+    async def _scan_sui_ferocious(self, client: httpx.AsyncClient, base_url: str, result: SuiScanResult, hostname: Optional[str] = None) -> int:
         """Level 3: Deep behavioral analysis, security probing, and anomaly detection"""
         successful_requests = 0
         
@@ -630,7 +639,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             # TLS analysis for HTTPS endpoints
             if 443 in result.open_ports or 9184 in result.open_ports:
                 tls_port = 443 if 443 in result.open_ports else 9184
-                tls_analysis = await self._analyze_tls_config(result.ip, tls_port)
+                tls_analysis = await self._analyze_tls_config(result.ip, tls_port, hostname)
                 result.tls_grade = tls_analysis.get('grade')
                 
                 if result.tls_grade in ['C', 'D', 'F']:
@@ -1273,7 +1282,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         except Exception:
             return None
 
-    async def _analyze_tls_config(self, ip: str, port: int) -> Dict[str, Any]:
+    async def _analyze_tls_config(self, ip: str, port: int, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Analyze TLS/SSL configuration"""
         try:
             import ssl
@@ -1284,7 +1293,9 @@ class EnhancedSuiScanner(ProtocolScanner):
             context.verify_mode = ssl.CERT_NONE
             
             with socket.create_connection((ip, port), timeout=10) as sock:
-                with context.wrap_socket(sock, server_hostname=ip) as ssock:
+                # Use hostname for SNI if provided, otherwise use IP
+                server_hostname = hostname if hostname else ip
+                with context.wrap_socket(sock, server_hostname=server_hostname) as ssock:
                     cert = ssock.getpeercert()
                     cipher = ssock.cipher()
                     

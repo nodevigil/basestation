@@ -81,8 +81,15 @@ class FilecoinScanner(ProtocolScanner):
             3: "Comprehensive security analysis with deep protocol inspection and vulnerability testing"
         }
 
-    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
-        """Perform Filecoin-specific scan at the specified level."""
+    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+        """Perform Filecoin-specific scan at the specified level.
+        
+        Args:
+            target: Target IP address
+            hostname: Optional hostname for SNI/virtual host support
+            scan_level: Scan intensity level (1-3)
+            **kwargs: Additional scan parameters
+        """
         self.logger.info(f"Starting Filecoin scan of {target} at level {scan_level}")
         scan_start_time = time.time()
         
@@ -98,11 +105,11 @@ class FilecoinScanner(ProtocolScanner):
         
         try:
             if scan_level == 1:
-                level_results = await self._scan_level_1(target)
+                level_results = await self._scan_level_1(target, hostname)
             elif scan_level == 2:
-                level_results = await self._scan_level_2(target)
+                level_results = await self._scan_level_2(target, hostname)
             elif scan_level == 3:
-                level_results = await self._scan_level_3(target)
+                level_results = await self._scan_level_3(target, hostname)
             else:
                 raise ValueError(f"Invalid scan_level: {scan_level}")
             
@@ -120,7 +127,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_1(self, target: str) -> Dict[str, Any]:
+    async def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 1: Basic node info and RPC auth check."""
         self.logger.info(f"Level 1 Filecoin scan for {target}")
         
@@ -136,7 +143,9 @@ class FilecoinScanner(ProtocolScanner):
         
         for port in common_ports:
             for scheme in ['http', 'https']:
-                url = f"{scheme}://{target}:{port}/rpc/v0"
+                # Use hostname for URL if provided (for SNI/virtual host support)
+                host_for_url = hostname if hostname else target
+                url = f"{scheme}://{host_for_url}:{port}/rpc/v0"
                 try:
                     node_data = {
                         "jsonrpc": "2.0",
@@ -175,7 +184,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_2(self, target: str) -> Dict[str, Any]:
+    async def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 2: Enhanced API checks and metrics detection."""
         self.logger.info(f"Level 2 Filecoin scan for {target}")
         
@@ -195,20 +204,20 @@ class FilecoinScanner(ProtocolScanner):
         results.update(lotus_result)
         
         # Check Storage API
-        storage_result = await self._check_storage_api(target)
+        storage_result = await self._check_storage_api(target, hostname)
         results.update(storage_result)
         
         # Check Market API
-        market_result = await self._check_market_api(target)
+        market_result = await self._check_market_api(target, hostname)
         results.update(market_result)
         
         # Check metrics
-        metrics_result = await self._check_metrics(target)
+        metrics_result = await self._check_metrics(target, hostname)
         results.update(metrics_result)
         
         return results
 
-    async def _scan_level_3(self, target: str) -> Dict[str, Any]:
+    async def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 3: Deep protocol inspection with security analysis."""
         self.logger.info(f"Level 3 Filecoin scan for {target}")
         
@@ -232,10 +241,10 @@ class FilecoinScanner(ProtocolScanner):
         lotus_result = await self._check_lotus_api_comprehensive(target)
         results.update(lotus_result)
         
-        storage_result = await self._check_storage_api(target)
+        storage_result = await self._check_storage_api(target, hostname)
         results.update(storage_result)
         
-        market_result = await self._check_market_api(target)
+        market_result = await self._check_market_api(target, hostname)
         results.update(market_result)
         
         # Network analysis
@@ -260,7 +269,9 @@ class FilecoinScanner(ProtocolScanner):
         for port in self.lotus_api_ports[:3]:  # Limit to first 3 ports for level 2
             for endpoint in ["/rpc/v0", "/rpc/v1"]:
                 for scheme in ['http', 'https']:
-                    url = f"{scheme}://{target}:{port}{endpoint}"
+                    # Use hostname for URL if provided (for SNI/virtual host support)
+                    host_for_url = hostname if hostname else target
+                    url = f"{scheme}://{host_for_url}:{port}{endpoint}"
                     try:
                         version_data = {
                             "jsonrpc": "2.0",
@@ -316,7 +327,9 @@ class FilecoinScanner(ProtocolScanner):
                     schemes = ['https', 'http'] if port in [443, 8443] else ['http', 'https']
                     
                     for scheme in schemes:
-                        url = f"{scheme}://{target}:{port}{endpoint}"
+                        # Use hostname for URL if provided (for SNI/virtual host support)
+                        host_for_url = hostname if hostname else target
+                        url = f"{scheme}://{host_for_url}:{port}{endpoint}"
                         
                         # Test version method
                         version_data = {
@@ -363,7 +376,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_storage_api(self, target: str) -> Dict[str, Any]:
+    async def _check_storage_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for Storage Provider API."""
         result = {
             'storage_api_exposed': False,
@@ -373,7 +386,9 @@ class FilecoinScanner(ProtocolScanner):
         
         for port in self.storage_api_ports:
             for scheme in ['http', 'https']:
-                url = f"{scheme}://{target}:{port}/rpc/v0"
+                # Use hostname for URL if provided (for SNI/virtual host support)
+                host_for_url = hostname if hostname else target
+                url = f"{scheme}://{host_for_url}:{port}/rpc/v0"
                 try:
                     response = requests.post(
                         url,
@@ -392,7 +407,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_market_api(self, target: str) -> Dict[str, Any]:
+    async def _check_market_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for Market API."""
         result = {
             'market_api_exposed': False,
@@ -402,7 +417,9 @@ class FilecoinScanner(ProtocolScanner):
         
         for port in self.market_api_ports:
             for scheme in ['http', 'https']:
-                url = f"{scheme}://{target}:{port}/rpc/v0"
+                # Use hostname for URL if provided (for SNI/virtual host support)
+                host_for_url = hostname if hostname else target
+                url = f"{scheme}://{host_for_url}:{port}/rpc/v0"
                 try:
                     response = requests.post(
                         url,
@@ -421,7 +438,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_metrics(self, target: str) -> Dict[str, Any]:
+    async def _check_metrics(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for metrics endpoints."""
         result = {
             'metrics_exposed': False,
@@ -431,7 +448,9 @@ class FilecoinScanner(ProtocolScanner):
         for port in self.metrics_ports:
             try:
                 for scheme in ['http', 'https']:
-                    url = f"{scheme}://{target}:{port}/metrics"
+                    # Use hostname for URL if provided (for SNI/virtual host support)
+                    host_for_url = hostname if hostname else target
+                    url = f"{scheme}://{host_for_url}:{port}/metrics"
                     response = requests.get(url, timeout=self.timeout, verify=False)
                     if response.status_code == 200 and 'prometheus' in response.text.lower():
                         result['metrics_exposed'] = True

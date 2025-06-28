@@ -169,7 +169,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         self.known_vulnerabilities = self._load_vulnerability_db()
         self.security_baselines = self._load_security_baselines()
 
-    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Arweave protocol-specific scan.
         
         Args:
@@ -216,7 +216,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             # Restore original scan level
             self.scan_level = original_scan_level
 
-    async def scan(self, ip: str, ports: List[int] = None) -> List[ArweaveScanResult]:
+    async def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[ArweaveScanResult]:
         """Enhanced scan with comprehensive data collection"""
         if ports is None:
             ports = self.default_ports

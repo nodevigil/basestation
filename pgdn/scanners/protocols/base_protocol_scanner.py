@@ -47,11 +47,12 @@ class ProtocolScanner(BaseScanner):
         """
         return [1, 2, 3]  # Default: support all levels
     
-    async def scan(self, target: str, scan_level: int = None, **kwargs) -> Dict[str, Any]:
+    async def scan(self, target: str, hostname: Optional[str] = None, scan_level: int = None, **kwargs) -> Dict[str, Any]:
         """Perform protocol-specific scan.
         
         Args:
             target: Target to scan (IP address, hostname)
+            hostname: Optional hostname for SNI/virtual host support
             scan_level: Scan intensity level (1-3)
             **kwargs: Additional scan parameters
             
@@ -72,16 +73,17 @@ class ProtocolScanner(BaseScanner):
             scan_level = min(supported_levels)
         
         # Call the protocol-specific implementation
-        return await self.scan_protocol(target, scan_level, **kwargs)
+        return await self.scan_protocol(target, hostname=hostname, scan_level=scan_level, **kwargs)
     
     @abstractmethod
-    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform the actual protocol-specific scan.
         
         This method should be implemented by each protocol scanner.
         
         Args:
             target: Target to scan
+            hostname: Optional hostname for SNI/virtual host support
             scan_level: Validated scan level
             **kwargs: Additional parameters
             

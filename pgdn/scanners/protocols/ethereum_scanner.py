@@ -62,7 +62,7 @@ class EthereumScanner(ProtocolScanner):
             3: "Comprehensive node analysis with security assessment and performance metrics"
         }
 
-    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Ethereum-specific scan at the specified level."""
         self.logger.info(f"Starting Ethereum scan of {target} at level {scan_level}")
         scan_start_time = time.time()
