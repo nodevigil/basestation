@@ -109,7 +109,7 @@ class ScanOrchestrator:
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
                             import asyncio
-                            scan_result = asyncio.run(scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **kwargs))
+                            scan_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, scan_level=scan_level, ports=ports, **kwargs))
                         else:
                             # Regular scanner
                             scan_result = scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **kwargs)
