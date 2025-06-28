@@ -229,8 +229,9 @@ class EnhancedSuiScanner(ProtocolScanner):
         Returns:
             Dictionary containing scan results
         """
-        # Extract ports from kwargs or use defaults
+        # Extract ports and hostname from kwargs or use defaults
         ports = kwargs.get('ports', self.default_ports)
+        hostname = kwargs.get('hostname', None)
         
         # Convert scan_level to ScanLevel enum
         scan_level_enum = ScanLevel.LITE
@@ -245,7 +246,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         try:
             # Perform the scan using the existing scan method
-            results = await self.scan(target, ports)
+            results = await self.scan(target, hostname, ports)
             
             # Convert results to dictionary format expected by the framework
             return {
