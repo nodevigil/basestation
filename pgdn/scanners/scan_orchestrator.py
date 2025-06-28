@@ -586,8 +586,7 @@ class ScanOrchestrator:
         from datetime import datetime
         import time
         
-        timestamp = datetime.now().isoformat()
-        timestamp_unix = int(time.time())
+        current_timestamp_unix = int(time.time())
         
         meta = {
             "operation": "target_scan",
@@ -596,13 +595,11 @@ class ScanOrchestrator:
             "scan_duration": None,
             "scanners_used": list(scan_results.keys()),
             "tools_used": list(external_tools.keys()),
-            "total_scan_duration": results.get("scan_end_time", timestamp_unix) - results.get("scan_start_time", timestamp_unix),
+            "total_scan_duration": results.get("scan_end_time", current_timestamp_unix) - results.get("scan_start_time", current_timestamp_unix),
             "target": target,
             "protocol": results.get("protocol"),
-            "timestamp": timestamp,
-            "timestamp_unix": timestamp_unix,
-            "scan_start_timestamp_unix": results.get("scan_start_time", timestamp_unix),
-            "scan_end_timestamp_unix": results.get("scan_end_time", timestamp_unix),
+            "scan_start": results.get("scan_start_time", current_timestamp_unix),
+            "scan_end": results.get("scan_end_time", current_timestamp_unix),
             "node_id": str(uuid.uuid4())
         }
         
@@ -728,6 +725,8 @@ class ScanOrchestrator:
             summary = results.get("summary", {})
             if isinstance(summary, dict) and summary.get("successful_scans", 0) > 0:
                 return True
+            # If protocol result has empty results and empty summary, it's not meaningful
+            return False
             
         # For protocol results with summary data
         if "summary" in results:
@@ -740,7 +739,7 @@ class ScanOrchestrator:
             
         # Default: if there are any non-empty values (excluding common empty indicators and summary-only results)
         meaningful_keys = [k for k, v in results.items() 
-                          if v and v != {} and v != "" and k not in ["error", "timestamp", "summary"]]
+                          if v and v != {} and v != "" and k not in ["error", "timestamp", "summary", "protocol", "target", "hostname"]]
         
         # If we only have a summary, make sure it has meaningful data
         if not meaningful_keys and "summary" in results:
