@@ -57,7 +57,8 @@ def get_supported_protocols() -> List[str]:
     return [
         'sui',
         'filecoin',
-        'arweave'
+        'arweave',
+        'web'
         # 'ethereum',  # Newly added
         # Future protocols can be added here
         # 'bitcoin', 

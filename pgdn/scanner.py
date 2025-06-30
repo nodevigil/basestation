@@ -65,7 +65,12 @@ class Scanner:
         try:
             # Resolve hostname to IP if needed
             try:
-                ip_address = socket.gethostbyname(target)
+                # Check if target is already an IP address
+                socket.inet_aton(target)
+                resolved_ip = target  # Already an IP address
+            except socket.error:
+                # Not an IP address, resolve hostname
+                resolved_ip = socket.gethostbyname(target)
             except socket.gaierror as e:
                 timestamp = datetime.now().isoformat()
                 timestamp_unix = int(time.time())
@@ -97,7 +102,7 @@ class Scanner:
 
             # Perform the scan - orchestrator now returns structured format directly
             scan_results = self.orchestrator.scan(
-                target=ip_address,
+                target=resolved_ip,
                 hostname=hostname,
                 scan_level=scan_level,
                 protocol=protocol,

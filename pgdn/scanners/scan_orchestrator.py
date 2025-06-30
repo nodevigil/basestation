@@ -173,6 +173,7 @@ class ScanOrchestrator:
             'sui',      # Sui blockchain protocol scanner
             'filecoin', # Filecoin blockchain protocol scanner
             'ethereum', # Future Ethereum protocol scanner
+            'web',      # Web server protocol scanner
             'bitcoin',  # Future Bitcoin protocol scanner
             'solana',   # Future Solana protocol scanner
             'polygon',  # Future Polygon protocol scanner
@@ -570,7 +571,7 @@ class ScanOrchestrator:
         
         # Protocol data (blockchain/DePIN specific scanners)
         protocol_results = {}
-        protocol_scanners = ['sui', 'filecoin', 'arweave', 'ethereum', 'bitcoin', 'solana', 'polygon', 'avalanche', 'cosmos', 'polkadot', 'cardano', 'algorand', 'near', 'chainlink', 'litecoin', 'dogecoin', 'monero', 'zcash']
+        protocol_scanners = ['sui', 'filecoin', 'arweave', 'web', 'ethereum', 'bitcoin', 'solana', 'polygon', 'avalanche', 'cosmos', 'polkadot', 'cardano', 'algorand', 'near', 'chainlink', 'litecoin', 'dogecoin', 'monero', 'zcash']
         
         for protocol_scanner in protocol_scanners:
             if protocol_scanner in scan_results:

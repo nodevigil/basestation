@@ -168,6 +168,13 @@ class ScannerRegistry:
             self.logger.debug("Registered protocol scanner: EnhancedArweaveScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register EnhancedArweaveScanner: {e}")
+            
+        try:
+            from .protocols.webserver_scanner import WebServerScanner
+            self._scanners['web'] = WebServerScanner
+            self.logger.debug("Registered protocol scanner: WebServerScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register WebServerScanner: {e}")
     
     def _load_scanner_class(self, module_path: str):
         """Load scanner class from module path.

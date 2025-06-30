@@ -156,7 +156,7 @@ Examples:
     
     parser.add_argument(
         '--protocol',
-        choices=['filecoin', 'sui', 'ethereum'],
+        choices=['filecoin', 'sui', 'ethereum', 'web'],
         help='Run protocol-specific scanner'
     )
     
@@ -287,6 +287,7 @@ def list_protocol_scanners():
         from pgdn.scanners.protocols.sui_scanner import EnhancedSuiScanner
         from pgdn.scanners.protocols.filecoin_scanner import FilecoinScanner
         from pgdn.scanners.protocols.arweave_scanner import EnhancedArweaveScanner
+        from pgdn.scanners.protocols.webserver_scanner import WebServerScanner
         # from pgdn.scanners.protocols.ethereum_scanner import EthereumScanner
         
         print("📋 Available Protocol Scanners:")
@@ -296,6 +297,7 @@ def list_protocol_scanners():
             (EnhancedSuiScanner, "Sui blockchain nodes"),
             (FilecoinScanner, "Filecoin network nodes"),
             (EnhancedArweaveScanner, "Arweave network nodes"),
+            (WebServerScanner, "Web servers and HTTP services"),
             # (EthereumScanner, "Ethereum blockchain nodes")
         ]
         
@@ -316,6 +318,7 @@ def list_protocol_scanners():
         print("\n📝 Usage:")
         print("   pgdn --target <ip> --protocol sui --scan-level 2")
         print("   pgdn --target <ip> --protocol filecoin --scan-level 3")
+        print("   pgdn --target <ip> --protocol web --scan-level 2")
         print("   pgdn --target <ip> --protocol ethereum --scan-level 1")
         
     except Exception as e:
