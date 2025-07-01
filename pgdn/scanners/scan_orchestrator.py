@@ -33,7 +33,7 @@ class ScanOrchestrator:
         
         # Get orchestrator-specific config
         orchestrator_config = self.config.get('orchestrator', {})
-        self.enabled_scanners = orchestrator_config.get('enabled_scanners', ['generic', 'web', 'vulnerability'])
+        self.enabled_scanners = orchestrator_config.get('enabled_scanners', ['web', 'vulnerability'])
         self.use_external_tools = orchestrator_config.get('use_external_tools', True)
         self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
@@ -69,6 +69,7 @@ class ScanOrchestrator:
 
         results = {
             "target": target,
+            "resolved_ip": resolved_ip,
             "hostname": hostname,
             "scan_level": scan_level,
             "protocol": protocol,
@@ -545,6 +546,7 @@ class ScanOrchestrator:
             Structured format with "data" array and "meta" object
         """
         target = results["target"]
+        resolved_ip = results.get("resolved_ip", target)
         scan_level = results.get("scan_level", 1)
         scan_results = results.get("scan_results", {})
         external_tools = results.get("external_tools", {})
@@ -563,12 +565,16 @@ class ScanOrchestrator:
         open_ports = []
         if nmap_data and "ports" in nmap_data:
             open_ports = [port_info["port"] for port_info in nmap_data["ports"] if port_info.get("state") == "open"]
-        else:
+        elif generic_results.get("open_ports"):
             open_ports = generic_results.get("open_ports", [])
+        else:
+            # Fall back to node scanner results if available
+            node_results = scan_results.get("node", {})
+            open_ports = node_results.get("open_ports", [])
         
         network_payload = {
             "ip": target,
-            "resolved_ip": target,
+            "resolved_ip": resolved_ip,
             "open_ports": open_ports,
             "banners": generic_results.get("banners", {}),
             "tls": generic_results.get("tls", {}),
