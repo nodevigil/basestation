@@ -90,13 +90,6 @@ class ScannerRegistry:
     def _register_builtin_scanners(self):
         """Register built-in scanners."""
         try:
-            from .generic_scanner import GenericScanner
-            self._scanners['generic'] = GenericScanner
-            self.logger.debug("Registered built-in GenericScanner")
-        except ImportError as e:
-            self.logger.warning(f"Failed to register GenericScanner: {e}")
-        
-        try:
             from .web_scanner import WebScanner
             self._scanners['web'] = WebScanner
             self.logger.debug("Registered built-in WebScanner")
@@ -116,6 +109,20 @@ class ScannerRegistry:
             self.logger.debug("Registered built-in GeoScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register GeoScanner: {e}")
+            
+        try:
+            from .compliance_scanner import ComplianceScanner
+            self._scanners['compliance'] = ComplianceScanner
+            self.logger.debug("Registered built-in ComplianceScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register ComplianceScanner: {e}")
+            
+        try:
+            from .node_scanner import NodeScanner
+            self._scanners['node'] = NodeScanner
+            self.logger.debug("Registered built-in NodeScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register NodeScanner: {e}")
     
     def _register_external_scanners(self):
         """Register external/protocol-specific scanners."""
@@ -142,35 +149,35 @@ class ScannerRegistry:
     def _register_protocol_scanners(self):
         """Register protocol-specific scanners."""
         try:
-            from .protocols.sui_scanner import EnhancedSuiScanner
+            from .protocol_scanners.sui_scanner import EnhancedSuiScanner
             self._scanners['sui'] = EnhancedSuiScanner
             self.logger.debug("Registered protocol scanner: EnhancedSuiScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register EnhancedSuiScanner: {e}")
             
         try:
-            from .protocols.filecoin_scanner import FilecoinScanner
+            from .protocol_scanners.filecoin_scanner import FilecoinScanner
             self._scanners['filecoin'] = FilecoinScanner
             self.logger.debug("Registered protocol scanner: FilecoinScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register FilecoinScanner: {e}")
             
         try:
-            from .protocols.ethereum_scanner import EthereumScanner
+            from .protocol_scanners.ethereum_scanner import EthereumScanner
             self._scanners['ethereum'] = EthereumScanner
             self.logger.debug("Registered protocol scanner: EthereumScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register EthereumScanner: {e}")
             
         try:
-            from .protocols.arweave_scanner import EnhancedArweaveScanner
+            from .protocol_scanners.arweave_scanner import EnhancedArweaveScanner
             self._scanners['arweave'] = EnhancedArweaveScanner
             self.logger.debug("Registered protocol scanner: EnhancedArweaveScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register EnhancedArweaveScanner: {e}")
             
         try:
-            from .protocols.webserver_scanner import WebServerScanner
+            from .protocol_scanners.webserver_scanner import WebServerScanner
             self._scanners['web'] = WebServerScanner
             self.logger.debug("Registered protocol scanner: WebServerScanner")
         except ImportError as e:

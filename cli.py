@@ -15,6 +15,96 @@ from pgdn.core.config import Config
 from pgdn.core.result import Result, DictResult
 
 
+def perform_scan(scanner, target: str, hostname: str, run_type: str, 
+                protocol: str, scan_level: int, debug: bool) -> Result:
+    """
+    Perform scan based on run type.
+    
+    Args:
+        scanner: Scanner instance
+        target: Target IP or hostname
+        hostname: Optional hostname
+        run_type: Type of scan to run
+        protocol: Protocol for compliance scans
+        scan_level: Scan level
+        debug: Debug mode
+        
+    Returns:
+        Result object
+    """
+    if run_type == 'web':
+        # Run web scanner only - no external tools
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=['web'],
+            enabled_external_tools=[],
+            debug=debug
+        )
+    
+    elif run_type == 'whatweb':
+        # Run whatweb external tool only - no scanners
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=[],
+            enabled_external_tools=['whatweb'],
+            debug=debug
+        )
+    
+    elif run_type == 'geo':
+        # Run geo scanner only - no external tools
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=['geo'],
+            enabled_external_tools=[],
+            debug=debug
+        )
+    
+    elif run_type == 'ssl_test':
+        # Run SSL test external tool only - no scanners
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=[],
+            enabled_external_tools=['ssl_test'],
+            debug=debug
+        )
+    
+    elif run_type == 'compliance':
+        # Run compliance scanner with protocol validation
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=['compliance'],
+            enabled_external_tools=[],
+            scan_level=scan_level,
+            protocol=protocol,
+            debug=debug
+        )
+    
+    elif run_type == 'node_scan':
+        # Run node scanner with protocol validation
+        if not protocol:
+            from pgdn.core.result import DictResult
+            return DictResult.from_error("Protocol is required for node_scan. Use --protocol to specify the DePIN protocol (sui, arweave, filecoin, etc.)")
+        
+        return scanner.scan(
+            target=target,
+            hostname=hostname,
+            enabled_scanners=['node'],
+            enabled_external_tools=[],
+            scan_level=scan_level,
+            protocol=protocol,
+            debug=debug
+        )
+    
+    else:
+        from pgdn.core.result import DictResult
+        return DictResult.from_error(f"Unknown run type: {run_type}")
+
+
 def main():
     """Main CLI entry point."""
     args = parse_arguments()
@@ -29,6 +119,49 @@ def main():
         print("❌ Error: --target is required unless using --list-protocols")
         sys.exit(1)
     
+    # Require --run parameter
+    if not args.run:
+        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan")
+        sys.exit(1)
+    
+    # Validate compliance scan parameters
+    if args.run == 'compliance':
+        if not args.protocol:
+            print("❌ Error: --protocol is required when using --run compliance")
+            sys.exit(1)
+        
+        # Validate protocol exists and protocols directory exists
+        from pgdn.protocol_loader import ProtocolLoader
+        from pathlib import Path
+        
+        # Check if protocols directory exists
+        protocols_dir = Path(__file__).parent / "pgdn" / "protocols"
+        if not protocols_dir.exists():
+            print("❌ Error: Protocols directory not found. Compliance scanning requires protocol configurations.")
+            print(f"Expected directory: {protocols_dir}")
+            print("Please ensure the protocols/ directory exists with protocol YAML files.")
+            sys.exit(1)
+        
+        loader = ProtocolLoader()
+        available = loader.list_available_protocols()
+        
+        if not available:
+            print("❌ Error: No protocol configurations found in protocols/ directory.")
+            print("Compliance scanning requires at least one protocol configuration file.")
+            sys.exit(1)
+        
+        if not loader.validate_protocol(args.protocol):
+            print(f"❌ Error: Protocol '{args.protocol}' not found.")
+            print(f"Available protocols: {', '.join(available)}")
+            sys.exit(1)
+    
+    # Validate node_scan parameters
+    if args.run == 'node_scan':
+        if not args.protocol:
+            print("❌ Error: --protocol is required when using --run node_scan")
+            print("Available protocols: sui, arweave, filecoin (built-in) or custom protocols from pgdn/protocols/ directory")
+            sys.exit(1)
+    
     try:
         # Load configuration
         config = None
@@ -38,14 +171,24 @@ def main():
         # Create scanner
         scanner = Scanner(config)
         
-        # Perform scan
-        result = scanner.scan(
+        # Determine scan parameters based on --run, --type, and --level
+        scan_level = 1  # Default level
+        if args.run == 'compliance' or args.run == 'node_scan':
+            if args.level:
+                scan_level = args.level
+            elif args.type:
+                scan_level = 1 if args.type == 'basic' else 2
+            else:
+                scan_level = args.scan_level
+        
+        # Perform scan based on --run parameter
+        result = perform_scan(
+            scanner=scanner,
             target=args.target,
             hostname=args.hostname,
-            scan_level=args.scan_level,
+            run_type=args.run,
             protocol=args.protocol,
-            enabled_scanners=args.scanners,
-            enabled_external_tools=args.external_tools,
+            scan_level=scan_level,
             debug=args.debug
         )
         
@@ -115,18 +258,25 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic scans (default output: Result structure)
-  pgdn --target example.com
-  pgdn --target example.com --protocol sui
-  pgdn --target example.com --scan-level 3
+  # Individual scanner runs
+  pgdn --target example.com --run web
+  pgdn --target example.com --run whatweb
+  pgdn --target example.com --run geo
+  pgdn --target example.com --run ssl_test
   
-  # Scanner selection
-  pgdn --target example.com --scanners generic web
-  pgdn --target example.com --external-tools nmap
+  # Protocol compliance scans with levels
+  pgdn --target example.com --run compliance --protocol sui --level 1
+  pgdn --target example.com --run compliance --protocol sui --level 3
+  pgdn --target example.com --run compliance --protocol filecoin --level 2
+  
+  # Node scanning with protocol-specific probes
+  pgdn --target example.com --run node_scan --protocol sui
+  pgdn --target example.com --run node_scan --protocol arweave --level 2
+  pgdn --target example.com --run node_scan --protocol filecoin --level 2
   
   # Output formats
-  pgdn --target example.com --json     # Pure JSON
-  pgdn --target example.com --human    # Human-readable
+  pgdn --target example.com --run web --json     # Pure JSON
+  pgdn --target example.com --run web --human    # Human-readable
         """
     )
     
@@ -147,31 +297,35 @@ Examples:
     )
     
     parser.add_argument(
-        '--scan-level',
-        type=int,
-        choices=[1, 2, 3],
-        default=1,
-        help='Scan level: 1 (basic), 2 (standard), 3 (comprehensive)'
+        '--run',
+        choices=['web', 'whatweb', 'geo', 'ssl_test', 'compliance', 'node_scan'],
+        help='Run specific scanner type'
     )
     
     parser.add_argument(
         '--protocol',
-        choices=['filecoin', 'sui', 'ethereum', 'web'],
-        help='Run protocol-specific scanner'
+        help='Protocol to scan (used with --run compliance and --run node_scan). Available protocols loaded from protocols/ directory or built-in (sui, arweave, filecoin)'
     )
     
     parser.add_argument(
-        '--scanners',
-        nargs='*',
-        choices=['generic', 'web', 'vulnerability', 'geo', 'sui', 'filecoin', 'ethereum'],
-        help='Specific scanner modules to run'
+        '--type',
+        choices=['basic', 'full'],
+        help='Scan type for protocol scans (basic=level 1, full=level 3) - legacy option'
     )
     
     parser.add_argument(
-        '--external-tools',
-        nargs='*',
-        choices=['nmap', 'whatweb', 'ssl_test', 'docker_exposure'],
-        help='Specific external tools to run'
+        '--level',
+        type=int,
+        choices=[1, 2],
+        help='Scan level for advanced protocol scanners: 1 (basic), 2 (standard). Used with compliance and node_scan.'
+    )
+    
+    parser.add_argument(
+        '--scan-level',
+        type=int,
+        choices=[1, 2],
+        default=1,
+        help='Legacy parameter. Use --level instead.'
     )
     
     parser.add_argument(
@@ -284,42 +438,52 @@ def print_human_readable(result: DictResult):
 def list_protocol_scanners():
     """List available protocol scanners and their supported levels."""
     try:
-        from pgdn.scanners.protocols.sui_scanner import EnhancedSuiScanner
-        from pgdn.scanners.protocols.filecoin_scanner import FilecoinScanner
-        from pgdn.scanners.protocols.arweave_scanner import EnhancedArweaveScanner
-        from pgdn.scanners.protocols.webserver_scanner import WebServerScanner
-        # from pgdn.scanners.protocols.ethereum_scanner import EthereumScanner
+        from pgdn.protocol_loader import ProtocolLoader
         
-        print("📋 Available Protocol Scanners:")
+        print("📋 Available Scanner Types:")
         print("=" * 50)
         
-        scanners = [
-            (EnhancedSuiScanner, "Sui blockchain nodes"),
-            (FilecoinScanner, "Filecoin network nodes"),
-            (EnhancedArweaveScanner, "Arweave network nodes"),
-            (WebServerScanner, "Web servers and HTTP services"),
-            # (EthereumScanner, "Ethereum blockchain nodes")
-        ]
+        print("\n🔧 INDIVIDUAL SCANNERS:")
+        print("   • web        - Web service detection")
+        print("   • whatweb    - Web technology fingerprinting")
+        print("   • geo        - Geographic location detection")
+        print("   • ssl_test   - SSL/TLS certificate analysis")
+        print("   • node_scan  - Multi-protocol DePIN node scanning")
         
-        for scanner_class, description in scanners:
-            scanner = scanner_class()
-            protocol_name = scanner.protocol_name
-            supported_levels = scanner.get_supported_levels()
-            level_descriptions = scanner.describe_levels()
-            
-            print(f"\n🔧 {protocol_name.upper()}")
-            print(f"   Description: {description}")
-            print(f"   Supported Levels: {supported_levels}")
-            
-            for level in supported_levels:
-                desc = level_descriptions.get(level, "No description available")
-                print(f"   • Level {level}: {desc}")
-                
-        print("\n📝 Usage:")
-        print("   pgdn --target <ip> --protocol sui --scan-level 2")
-        print("   pgdn --target <ip> --protocol filecoin --scan-level 3")
-        print("   pgdn --target <ip> --protocol web --scan-level 2")
-        print("   pgdn --target <ip> --protocol ethereum --scan-level 1")
+        print("\n🔧 PROTOCOL COMPLIANCE SCANNERS:")
+        loader = ProtocolLoader()
+        protocols = loader.list_available_protocols()
+        
+        if protocols:
+            for protocol in protocols:
+                info = loader.get_protocol_info(protocol)
+                if info:
+                    print(f"   • {protocol:<12} - {info['name']} ({info['network_type']})")
+                    print(f"     {'':15} Ports: {info['default_ports']}")
+                    print(f"     {'':15} Probes: {info['probes_count']}, Signatures: {info['signatures_count']}")
+        else:
+            print("   No protocol configurations found in protocols/ directory")
+        
+        print("\n📝 USAGE EXAMPLES:")
+        print("   # Individual scanners")
+        print("   pgdn --target example.com --run web")
+        print("   pgdn --target example.com --run whatweb")
+        print("   pgdn --target example.com --run geo")
+        print("   pgdn --target example.com --run ssl_test")
+        print("   pgdn --target example.com --run node_scan --protocol sui")
+        
+        print("\n   # Protocol compliance scans")
+        if protocols:
+            for protocol in protocols[:2]:  # Show first 2 as examples
+                print(f"   pgdn --target example.com --run compliance --protocol {protocol} --level 1")
+                print(f"   pgdn --target example.com --run compliance --protocol {protocol} --level 3")
+        
+        print("\n📊 SCAN LEVELS (for compliance and node_scan):")
+        print("   • --level 1  - Basic detection")
+        print("   • --level 2  - Standard analysis") 
+        print("   \n   Legacy options:")
+        print("   • --type basic  - Equivalent to --level 1")
+        print("   • --type full   - Equivalent to --level 2")
         
     except Exception as e:
         print(f"❌ Error listing protocol scanners: {e}")

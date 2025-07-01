@@ -6,6 +6,7 @@ This replaces the old scanner.py with a modular, configurable approach.
 from typing import Dict, Any, List, Optional, Tuple
 import logging
 import time
+import socket
 from .base_scanner import ScannerRegistry
 from .routing import get_scanners_for_level
 from ..tools.nmap import nmap_scan
@@ -37,15 +38,16 @@ class ScanOrchestrator:
         self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
     
-    def scan(self, target: str, hostname: Optional[str] = None, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, hostname: Optional[str] = None, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, resolved_ip: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive scan using multiple scanner types.
         
         Args:
-            target: Target IP address or hostname
+            target: Target hostname or IP address (usually FQDN)
             hostname: Optional hostname for target IP (for hostname-based scans)
             ports: List of ports to scan
             scan_level: Scan level (1-3, default: 1)
             protocol: Optional protocol name for routing
+            resolved_ip: Resolved IP address for IP-based operations
             **kwargs: Additional scan parameters
             
         Returns:
@@ -56,9 +58,14 @@ class ScanOrchestrator:
         
         self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level}, protocol: {protocol})")
         
-        # Get the list of scanners to run based on level and protocol
-        scanners_to_run = get_scanners_for_level(scan_level, protocol)
-        self.logger.info(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
+        # Use enabled_scanners if explicitly set, otherwise use routing for compliance scans
+        if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
+            scanners_to_run = self.enabled_scanners
+            self.logger.info(f"Running specific scanners: {scanners_to_run}")
+        else:
+            # Fallback to routing for compliance scans
+            scanners_to_run = get_scanners_for_level(scan_level, protocol)
+            self.logger.info(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
 
         results = {
             "target": target,
@@ -71,18 +78,15 @@ class ScanOrchestrator:
             "external_tools": {}
         }
         
-        # Separate internal scanners from external tools
-        internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
-        external_tools = [s for s in scanners_to_run if s not in internal_scanners]
-        
-        # Filter out protocol-specific scanners when no protocol is specified
-        if not protocol:
-            original_scanners = internal_scanners.copy()
-            internal_scanners = self._filter_infrastructure_scanners(internal_scanners)
-            if len(internal_scanners) != len(original_scanners):
-                filtered_out = [s for s in original_scanners if s not in internal_scanners]
-                self.logger.info(f"Filtered out protocol-specific scanners (no protocol specified): {filtered_out}")
-                self.logger.info(f"Running infrastructure scanners only: {internal_scanners}")
+        # When running individual scanners, use only the specified scanners/tools
+        if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
+            # For individual scans, run only what was specified
+            internal_scanners = [s for s in self.enabled_scanners if s in self.scanner_registry.get_registered_scanners()]
+            external_tools = []  # External tools handled separately via enabled_external_tools
+        else:
+            # For compliance scans, run only the protocol scanner from scanners_to_run
+            internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
+            external_tools = []  # No external tools for compliance scans
 
         # Run internal scanners with timing
         if internal_scanners:
@@ -111,8 +115,11 @@ class ScanOrchestrator:
                             import asyncio
                             scan_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, scan_level=scan_level, ports=ports, **kwargs))
                         else:
-                            # Regular scanner
-                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **kwargs)
+                            # Regular scanner - include protocol in kwargs if provided
+                            scanner_kwargs = kwargs.copy()
+                            if protocol:
+                                scanner_kwargs['protocol'] = protocol
+                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **scanner_kwargs)
                             
                         scanner_end = int(time.time())
                         self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")
@@ -140,11 +147,20 @@ class ScanOrchestrator:
             scanners_stage_end = int(time.time())
         
         # Run external tools with timing
-        if self.use_external_tools and external_tools:
+        external_tools_to_run = []
+        if self.use_external_tools:
+            if hasattr(self, '_enabled_external_tools_set') and self._enabled_external_tools_set:
+                # For individual external tool runs
+                external_tools_to_run = self.enabled_external_tools
+            elif external_tools:
+                # For compliance scans
+                external_tools_to_run = external_tools
+        
+        if external_tools_to_run:
             external_tools_stage_start = int(time.time())
-            self.logger.info(f"Starting external tools stage with {len(external_tools)} tools")
+            self.logger.info(f"Starting external tools stage with {len(external_tools_to_run)} tools")
             
-            results["external_tools"] = self._run_external_tools(target, hostname, results, external_tools)
+            results["external_tools"] = self._run_external_tools(target, hostname, results, external_tools_to_run, resolved_ip)
             
             external_tools_stage_end = int(time.time())
         
@@ -199,14 +215,15 @@ class ScanOrchestrator:
         self.logger.debug(f"Filtered infrastructure scanners: {infrastructure_scanners}")
         return infrastructure_scanners
     
-    def _run_external_tools(self, target: str, hostname: Optional[str], scan_results: Dict[str, Any], enabled_tools: List[str]) -> Dict[str, Any]:
+    def _run_external_tools(self, target: str, hostname: Optional[str], scan_results: Dict[str, Any], enabled_tools: List[str], resolved_ip: Optional[str] = None) -> Dict[str, Any]:
         """Run external scanning tools based on the routing function's output.
         
         Args:
-            target: Target to scan
+            target: Target hostname (FQDN)
             hostname: Optional hostname for target IP (for hostname-based scans)
             scan_results: Results from modular scanners
             enabled_tools: List of external tools to run for this scan
+            resolved_ip: Resolved IP address for IP-based operations
             
         Returns:
             External tool results
@@ -218,7 +235,9 @@ class ScanOrchestrator:
             nmap_start = int(time.time())
             try:
                 self.logger.info(f"Running nmap scan")
-                nmap_results = nmap_scan(target)
+                # Use resolved IP for nmap since it works with IP addresses
+                nmap_target = resolved_ip if resolved_ip else target
+                nmap_results = nmap_scan(nmap_target)
                 nmap_end = int(time.time())
                 self.logger.info(f"Completed nmap scan in {nmap_end - nmap_start} seconds")
                 
@@ -245,16 +264,17 @@ class ScanOrchestrator:
             whatweb_start = int(time.time())
             self.logger.info(f"Running whatweb scan")
             web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
-            
             whatweb_results = {}
             for port, scheme in web_ports:
                 try:
-                    self.logger.debug(f"Running WhatWeb scan for {scheme}://{target}:{port}")
-                    result = whatweb_scan(target, port=port, scheme=scheme)
+                    # Use hostname if target is IP and hostname provided, otherwise use target (FQDN)
+                    scan_target = hostname if (hostname and self._is_ip_address(target)) else target
+                    self.logger.debug(f"Running WhatWeb scan for {scheme}://{scan_target}:{port}")
+                    result = whatweb_scan(scan_target, port=port, scheme=scheme)
                     if result and (not isinstance(result, dict) or not result.get("error")):
-                        whatweb_results[f"{scheme}://{target}:{port}"] = result
+                        whatweb_results[f"{scheme}://{scan_target}:{port}"] = result
                 except Exception as e:
-                    self.logger.debug(f"WhatWeb scan failed for {target}:{port}: {e}")
+                    self.logger.debug(f"WhatWeb scan failed for {scan_target}:{port}: {e}")
             
             whatweb_end = int(time.time())
             self.logger.info(f"Completed whatweb scan in {whatweb_end - whatweb_start} seconds")
@@ -384,6 +404,21 @@ class ScanOrchestrator:
         
         return list(set(open_ports))  # Remove duplicates
     
+    def _is_ip_address(self, target: str) -> bool:
+        """Check if target is an IP address.
+        
+        Args:
+            target: Target string to check
+            
+        Returns:
+            True if target is an IP address, False otherwise
+        """
+        try:
+            socket.inet_aton(target)
+            return True
+        except socket.error:
+            return False
+    
     def _extract_web_ports(self, scan_results: Dict[str, Any], nmap_results: Optional[Dict[str, Any]] = None) -> List[Tuple[int, str]]:
         """Extract web ports and schemes from scan results.
         
@@ -413,6 +448,11 @@ class ScanOrchestrator:
                 web_ports.append((port, "https"))
             elif port in [80, 8080] and not any(p[0] == port for p in web_ports):
                 web_ports.append((port, "http"))
+        
+        # Final fallback: if no web ports found, try default web ports
+        if not web_ports:
+            self.logger.debug("No web ports detected, trying default ports 80 and 443")
+            web_ports = [(80, "http"), (443, "https")]
         
         return web_ports
     
@@ -550,9 +590,11 @@ class ScanOrchestrator:
         }
         data.append({"type": "web", "payload": web_payload})
         
-        # Analysis data (vulnerabilities)
+        # Analysis data (vulnerabilities and compliance)
+        compliance_results = scan_results.get("compliance", {})
         analysis_payload = {
-            "vulns": self._format_vulnerabilities(vuln_results)
+            "vulns": self._format_vulnerabilities(vuln_results),
+            "compliance": compliance_results if compliance_results else {}
         }
         data.append({"type": "analysis", "payload": analysis_payload})
         
@@ -578,6 +620,11 @@ class ScanOrchestrator:
                 protocol_data = scan_results[protocol_scanner]
                 if protocol_data and self._has_meaningful_results(protocol_data):
                     protocol_results[protocol_scanner] = protocol_data
+        
+        # Add node scanner results to protocol section
+        node_results = scan_results.get("node", {})
+        if node_results and self._has_meaningful_results(node_results):
+            protocol_results["node"] = node_results
         
         if protocol_results:
             data.append({"type": "protocol", "payload": protocol_results})
