@@ -6,6 +6,54 @@ import sys
 
 logger = logging.getLogger("nmap_scan")
 
+def _select_sudo_command(ip, ports, timeout):
+    """Select the appropriate sudo command using guard clauses."""
+    sudo_cmd = [
+        "sudo", "nmap", 
+        "-T5",
+        "-p", ports, 
+        "-sS",
+        "--min-rate", "1000",
+        "--max-retries", "1",
+        "-oX", "-", 
+        ip
+    ]
+    connect_cmd = [
+        "nmap", 
+        "-T4",  # T5 can be too aggressive for connect scans
+        "-p", ports, 
+        "-sT",  # Connect scan (no sudo needed)
+        "--min-rate", "500",
+        "--max-retries", "1",
+        "-oX", "-", 
+        ip
+    ]
+    
+    # Try sudo first, but handle permission errors gracefully
+    try:
+        logger.info(f"Trying sudo nmap for faster SYN scan...")
+        result = subprocess.run(
+            sudo_cmd, 
+            capture_output=True, 
+            timeout=timeout,
+            text=True,
+            input='\n'  # Send empty input to avoid hanging on password prompt
+        )
+        
+        if result.returncode == 0:
+            logger.info("Using sudo SYN scan")
+            return sudo_cmd
+            
+        logger.info("Sudo failed (no permissions), using connect scan")
+        return connect_cmd
+        
+    except subprocess.TimeoutExpired:
+        logger.info("Sudo timed out (password prompt?), using connect scan")
+        return connect_cmd
+    except Exception as e:
+        logger.info(f"Sudo not available ({e}), using connect scan")
+        return connect_cmd
+
 def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True):
     """
     Run nmap scan and return dict results, with logging.
@@ -20,66 +68,9 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
     
     # Check if we have sudo privileges
     has_sudo = os.geteuid() == 0
-    
-    # Build command - optimize for speed
-    if fast_mode:
-        if has_sudo:
-            cmd = [
-                "nmap", 
-                "-T5",  # Insane timing (fastest)
-                "-p", ports, 
-                "-sS",  # SYN scan (requires sudo, faster)
-                "--min-rate", "1000",
-                "--max-retries", "1",
-                "-oX", "-", 
-                ip
-            ]
-        else:
-            # Try with sudo first, fallback to connect scan
-            sudo_cmd = [
-                "sudo", "nmap", 
-                "-T5",
-                "-p", ports, 
-                "-sS",
-                "--min-rate", "1000",
-                "--max-retries", "1",
-                "-oX", "-", 
-                ip
-            ]
-            connect_cmd = [
-                "nmap", 
-                "-T4",  # T5 can be too aggressive for connect scans
-                "-p", ports, 
-                "-sT",  # Connect scan (no sudo needed)
-                "--min-rate", "500",
-                "--max-retries", "1",
-                "-oX", "-", 
-                ip
-            ]
-            
-            # Try sudo first, but handle permission errors gracefully
-            try:
-                logger.info(f"Trying sudo nmap for faster SYN scan...")
-                result = subprocess.run(
-                    sudo_cmd, 
-                    capture_output=True, 
-                    timeout=timeout,
-                    text=True,
-                    input='\n'  # Send empty input to avoid hanging on password prompt
-                )
-                if result.returncode == 0:
-                    cmd = sudo_cmd
-                    logger.info("✅ Using sudo SYN scan")
-                else:
-                    logger.info("⚠️  Sudo failed (no permissions), using connect scan")
-                    cmd = connect_cmd
-            except subprocess.TimeoutExpired:
-                logger.info("⚠️  Sudo timed out (password prompt?), using connect scan")
-                cmd = connect_cmd
-            except Exception as e:
-                logger.info(f"⚠️  Sudo not available ({e}), using connect scan")
-                cmd = connect_cmd
-    else:
+
+    # Build command - optimize for speed using guard clauses
+    if not fast_mode:
         cmd = [
             "nmap", 
             "-T4", 
@@ -89,7 +80,20 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
             "-oX", "-", 
             ip
         ]
-    
+    elif has_sudo:
+        cmd = [
+            "nmap", 
+            "-T5",  # Insane timing (fastest)
+            "-p", ports, 
+            "-sS",  # SYN scan (requires sudo, faster)
+            "--min-rate", "1000",
+            "--max-retries", "1",
+            "-oX", "-", 
+            ip
+        ]
+    else:
+        cmd = _select_sudo_command(ip, ports, timeout)
+
     try:
         logger.info(f"Running nmap: {' '.join(cmd)} (timeout={timeout}s)")
         result = subprocess.run(
