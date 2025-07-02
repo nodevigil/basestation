@@ -1,0 +1,36 @@
+name: "Arweave Network"
+network_type: "storage"
+default_ports: [22, 80, 443, 1984, 1985]
+
+probes:
+  - name: ARWEAVE_INFO
+    payload: "GET /info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [1984]
+    requires_ssl: false
+  
+  - name: ARWEAVE_PEERS
+    payload: "GET /peers HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [1984]
+    requires_ssl: false
+  
+  - name: ARWEAVE_METRICS
+    payload: "GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [1985]
+    requires_ssl: false
+  
+  - name: ARWEAVE_BLOCK_HEIGHT
+    payload: "GET /height HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [1984]
+    requires_ssl: false
+
+signatures:
+  - label: "Arweave Node"
+    regex: '"release":\s*(?P<ver>\d+)'
+    version_group: ver
+  
+  - label: "Arweave Network"
+    regex: '"network":\s*"(?P<network>[^"]+)"'
+    version_group: network
+  
+  - label: "Arweave Storage"
+    regex: 'arweave.*storage|data_root'

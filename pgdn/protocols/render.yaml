@@ -1,0 +1,27 @@
+name: "Render Network"
+network_type: "compute"
+default_ports: [22, 80, 443, 8000, 8080, 9999]
+
+probes:
+  - name: RENDER_STATUS
+    payload: "GET /status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [8000, 8080]
+    requires_ssl: false
+  
+  - name: RENDER_METRICS
+    payload: "GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [9999]
+    requires_ssl: false
+  
+  - name: RENDER_NODE_INFO
+    payload: "GET /node/info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [8000]
+    requires_ssl: false
+
+signatures:
+  - label: "Render Node"
+    regex: 'render.*version["\s]*[:=]["\s]*(?P<ver>[^\s"]+)'
+    version_group: ver
+  
+  - label: "Render GPU"
+    regex: 'gpu.*render|render.*compute'

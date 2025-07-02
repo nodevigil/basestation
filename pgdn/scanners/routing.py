@@ -1,17 +1,17 @@
 from typing import List, Optional
 
 
-def get_scanners_for_level(level: int, protocol: Optional[str] = None) -> List[str]:
+def get_scanners_for_protocol_compliance(level: int, protocol: str) -> List[str]:
     """
-    Determines which scanners to run based on the scan level and optional protocol name.
-    This function implements the logic described in the scanner routing specification.
+    Determines which scanners to run for protocol compliance scans.
+    This is only used for --run compliance scans, not individual scanner runs.
 
     Args:
-        level: Scan level (1-3) determining which scanners to include
-        protocol: Optional protocol name (e.g., 'sui', 'filecoin') for protocol-specific scanners
+        level: Scan level (1-3) for the advanced protocol scanner
+        protocol: Protocol name (e.g., 'sui', 'filecoin') for protocol-specific scanners
 
     Returns:
-        List of scanner module names to run
+        List containing only the protocol scanner
 
     Raises:
         ValueError: If level is not 1, 2, or 3
@@ -19,53 +19,49 @@ def get_scanners_for_level(level: int, protocol: Optional[str] = None) -> List[s
     if level not in [1, 2, 3]:
         raise ValueError(f"Invalid scan level: {level}. Must be 1, 2, or 3.")
 
-    # Map scanners to actual available implementations
-    # Level 1: Legal, passive, and safe scanners  
-    level_1 = ["generic", "web", "ssl_test", "whatweb", "geo"]
-    # Level 2: Published, atomic, protocol-aware scanners
-    level_2_add = ["nmap", "vulnerability"]
-    # Level 3: Aggressive, exploratory scanners
-    level_3_add = ["dirbuster", "docker_exposure", "dnsdumpster"]
+    # For compliance scans, only run the advanced protocol scanner with the specified level
+    protocol_lower = protocol.lower().strip()
+    if protocol_lower:
+        return [protocol_lower]
+    
+    return []
 
-    scanners = []
-    if level >= 1:
-        scanners.extend(level_1)
-    if level >= 2:
-        scanners.extend(level_2_add)
-    if level >= 3:
-        scanners.extend(level_3_add)
 
-    # Add protocol-specific scanner if specified
-    # Protocol scanners handle their own level logic internally
+def get_scanners_for_level(level: int, protocol: Optional[str] = None) -> List[str]:
+    """
+    Legacy function for backward compatibility.
+    Now primarily used for protocol compliance scans.
+    
+    Args:
+        level: Scan level (1-3)
+        protocol: Optional protocol name for compliance scans
+
+    Returns:
+        List of scanner module names to run
+    """
     if protocol:
-        protocol_lower = protocol.lower().strip()
-        if protocol_lower:
-            # Add the protocol scanner which will handle level validation internally
-            scanners.append(protocol_lower)
-
-    # Return a list with unique scanner names while preserving order
-    return list(dict.fromkeys(scanners))
+        # For compliance scans, use the new function
+        return get_scanners_for_protocol_compliance(level, protocol)
+    else:
+        # For individual scans, this shouldn't be called anymore
+        # But keeping minimal logic for backward compatibility
+        return ["web"]
 
 
 def get_supported_protocols() -> List[str]:
     """
-    Get list of supported protocol scanners.
+    Get list of supported protocol scanners from YAML configurations.
     
     Returns:
         List of supported protocol names
     """
-    return [
-        'sui',
-        'filecoin',
-        'arweave',
-        'web'
-        # 'ethereum',  # Newly added
-        # Future protocols can be added here
-        # 'bitcoin', 
-        # 'solana',
-        # 'polygon',
-        # 'avalanche'
-    ]
+    try:
+        from ..protocol_loader import ProtocolLoader
+        loader = ProtocolLoader()
+        return loader.list_available_protocols()
+    except Exception:
+        # Fallback to basic list if protocol loader fails
+        return ['sui', 'filecoin', 'arweave', 'web']
 
 
 def is_protocol_scanner(scanner_name: str) -> bool:

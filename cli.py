@@ -271,8 +271,8 @@ Examples:
   
   # Node scanning with protocol-specific probes
   pgdn --target example.com --run node_scan --protocol sui
-  pgdn --target example.com --run node_scan --protocol arweave --level 2
-  pgdn --target example.com --run node_scan --protocol filecoin --level 2
+  pgdn --target example.com --run node_scan --protocol arweave
+  pgdn --target example.com --run node_scan --protocol filecoin
   
   # Output formats
   pgdn --target example.com --run web --json     # Pure JSON

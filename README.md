@@ -6,6 +6,7 @@ PGDN (Programmatic Global DePIN Network) is a specialized security scanning plat
 
 - **Progressive Scan Levels**: 3-tier scanning system (basic, standard, comprehensive)
 - **Protocol-Specific Scanning**: Modular protocol scanners for Sui, Filecoin, and extensible architecture for new protocols
+- **Compliance Scanning**: Fast security compliance assessment focusing on dangerous ports and exposed services
 - **Single-Target Focus**: Streamlined scanning of individual infrastructure nodes
 - **Infrastructure Analysis**: Comprehensive port scanning, web service analysis, SSL/TLS testing
 - **Vulnerability Assessment**: CVE correlation and security vulnerability detection
@@ -40,31 +41,103 @@ python setup.py develop   # Development mode installation
 ### Basic Usage
 
 ```bash
-# Basic infrastructure scan
-pgdn --target example.com
+# Individual scanner runs
+pgdn --target example.com --run web          # Web service detection
+pgdn --target example.com --run whatweb      # Web technology fingerprinting  
+pgdn --target example.com --run geo          # Geographic location detection
+pgdn --target example.com --run ssl_test     # SSL/TLS certificate analysis
 
-# With protocol-specific scanning
-pgdn --target example.com --protocol sui --scan-level 2
+# Compliance scanning (requires protocol)
+pgdn --target example.com --run compliance --protocol sui --level 1     # Basic compliance
+pgdn --target example.com --run compliance --protocol filecoin --level 3 # Comprehensive compliance
 
 # List available protocol scanners and their levels
 pgdn --list-protocols
 
-# Different scan levels
-pgdn --target example.com --scan-level 1    # Basic (legal, passive)
-pgdn --target example.com --scan-level 2    # Standard with GeoIP
-pgdn --target example.com --scan-level 3    # Comprehensive analysis
-
-# Protocol-specific scanning with different levels
-pgdn --target sui-node.com --protocol sui --scan-level 1   # Basic health check
-pgdn --target sui-node.com --protocol sui --scan-level 2   # Metrics + validator analysis
-pgdn --target sui-node.com --protocol sui --scan-level 3   # Aggressive probing
-
-# Specific scan types for testing/debugging
-pgdn --target example.com --type nmap       # Port scan only
-pgdn --target example.com --type web        # Web analysis only
-pgdn --target example.com --type ssl        # SSL/TLS testing only
-pgdn --target example.com --type whatweb    # Web tech fingerprinting
+# Output formats
+pgdn --target example.com --run web --json      # Pure JSON output
+pgdn --target example.com --run compliance --protocol sui --human  # Human-readable
 ```
+
+## 📜 Basic Scanning
+
+PGDN provides a set of basic scanners for common infrastructure analysis tasks. These scanners can be run individually or in combination to gather comprehensive information about a target node.
+
+web scanner: Detects web services and technologies running on the target.
+whatweb scanner: Fingerprints web technologies and frameworks.
+geo scanner: Performs GeoIP lookups to determine geographic location and ASN of the target.
+ssl_test scanner: Analyzes SSL/TLS certificates for security compliance and vulnerabilities.
+
+## Node Scanning
+Node scanner performs basic node health checks and connectivity tests on known ports for a specific protocol.
+
+## 🔍 Compliance Scanning
+
+PGDN includes a specialized compliance scanner that focuses on detecting dangerous ports and exposed services that should not be accessible on validator nodes. This scanner helps assess the security posture of DePIN infrastructure by identifying common misconfigurations and security risks.
+
+### What Compliance Scanning Checks
+
+The compliance scanner performs a two-stage process:
+
+1. **Fast Port Scan**: Rapid parallel scanning of known dangerous ports
+2. **Service Detection**: Detailed nmap analysis of open ports for service identification, specific protocol checks, and security assessment
+
+### Dangerous Services Detected
+
+The scanner checks for **98 dangerous ports** including:
+
+- **Database Services** (MySQL, PostgreSQL, Redis, MongoDB) - Should be internal only
+- **Container APIs** (Docker, Kubernetes) - Often expose management interfaces
+- **Admin Interfaces** (Web admin panels, monitoring dashboards)
+- **File Sharing** (FTP, SMB, NFS) - Rarely needed on validators
+- **Remote Access** (Telnet, VNC, RDP) - High security risk
+- **Development Services** (Debug ports, dev servers) - Should not be in production
+- **Message Queues** (RabbitMQ, Kafka) - Should be internal
+- **Deprecated Protocols** (Finger, RPCbind) - Known vulnerabilities
+
+### Compliance Scan Usage
+
+```bash
+# Basic compliance scan
+pgdn --target validator-node.com --run compliance --protocol sui --level 1
+
+# Comprehensive compliance scan with detailed analysis
+pgdn --target validator-node.com --run compliance --protocol filecoin --level 3
+
+# Human-readable compliance report
+pgdn --target validator-node.com --run compliance --protocol sui --human
+
+# JSON output for automation
+pgdn --target validator-node.com --run compliance --protocol sui --json
+```
+
+### Compliance Results
+
+The scanner returns a compliance score (0-100) and detailed findings:
+
+```json
+{
+  "compliance_status": "FAIL",
+  "compliance_score": 70.0,
+  "dangerous_ports_found": 2,
+  "findings": [
+    {
+      "port": 3306,
+      "service": "mysql",
+      "risk_level": "CRITICAL",
+      "security_concern": "Database exposed to internet",
+      "recommendation": "Close port 3306 or restrict access"
+    }
+  ],
+  "scan_time_seconds": 12.3
+}
+```
+
+### Requirements for Compliance Scanning
+
+- **Protocol Required**: Compliance scanning requires a valid protocol (sui, filecoin, etc.)
+- **Protocols Directory**: The `pgdn/protocols/` directory must exist with YAML protocol configurations
+- **Protocol Files**: At least one `.yaml` protocol configuration file must be present in `pgdn/protocols/`
 
 ### Library Usage
 
@@ -164,19 +237,24 @@ PGDN provides a template-based system for easily adding support for new DePIN pr
    }
    ```
 
-4. **Update CLI choices**:
-   ```python
-   # In cli.py
-   parser.add_argument(
-       '--protocol',
-       choices=['filecoin', 'sui', 'arweave'],  # Add your protocol
-       help='Run protocol-specific scanner'
-   )
+4. **Add protocol YAML configuration**:
+   ```bash
+   # Create pgdn/protocols/arweave.yaml with your protocol configuration
+   name: "Arweave Network"
+   network_type: "blockchain"  
+   default_ports: [1984]
+   probes:
+     - name: ARWEAVE_INFO
+       payload: "GET /info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+       ports: [1984]
+   signatures:
+     - label: "Arweave Node"
+       regex: '"network":\s*"arweave"'
    ```
 
 5. **Test your scanner**:
    ```bash
-   pgdn --target arweave-node.com --protocol arweave
+   pgdn --target arweave-node.com --run compliance --protocol arweave --level 1
    ```
 
 ### Template Features
@@ -262,14 +340,15 @@ Protocol scanners now support multiple scan levels with different intensities:
 ### Listing Available Protocol Scanners
 
 ```bash
-# List all available protocol scanners and their supported levels
+# List all available scanners and protocols
 pgdn --list-protocols
 ```
 
 This will show you:
-- Available protocol scanners
+- Available individual scanners (web, whatweb, geo, ssl_test)
+- Available protocol scanners for compliance mode
 - Supported scan levels for each protocol
-- Description of what each level does
+- Usage examples and scan level descriptions
 
 ### Scanning Flow
 

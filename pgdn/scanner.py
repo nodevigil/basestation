@@ -63,13 +63,14 @@ class Scanner:
             DictResult: Success with structured scan data or error message
         """
         try:
-            # Resolve hostname to IP if needed
+            # Keep original target for hostname-based scans, resolve for IP-based operations
+            original_target = target
             try:
                 # Check if target is already an IP address
                 socket.inet_aton(target)
                 resolved_ip = target  # Already an IP address
             except socket.error:
-                # Not an IP address, resolve hostname
+                # Not an IP address, resolve hostname for IP-based operations
                 resolved_ip = socket.gethostbyname(target)
             except socket.gaierror as e:
                 timestamp = datetime.now().isoformat()
@@ -101,11 +102,13 @@ class Scanner:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
             # Perform the scan - orchestrator now returns structured format directly
+            # Pass original_target (FQDN) for hostname-based scans, resolved_ip for display
             scan_results = self.orchestrator.scan(
-                target=resolved_ip,
+                target=original_target,  # Keep FQDN for hostname-based tools like whatweb
                 hostname=hostname,
                 scan_level=scan_level,
                 protocol=protocol,
+                resolved_ip=resolved_ip,  # Pass resolved IP for tools that need it
                 scan_timestamp=datetime.now().isoformat()
             )
 
@@ -176,6 +179,7 @@ class Scanner:
         """
         if enabled_scanners is not None:
             self.orchestrator.enabled_scanners = enabled_scanners
+            self.orchestrator._enabled_scanners_set = True
         
         if enabled_external_tools is not None:
             if not enabled_external_tools:  # Empty list means disable
@@ -184,3 +188,4 @@ class Scanner:
             else:
                 self.orchestrator.use_external_tools = True
                 self.orchestrator.enabled_external_tools = enabled_external_tools
+            self.orchestrator._enabled_external_tools_set = True

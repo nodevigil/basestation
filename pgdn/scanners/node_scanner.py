@@ -58,6 +58,7 @@ class NodeScanner(BaseScanner):
         return [1, 2]
     
     def scan(self, target: str, **kwargs) -> Dict[str, Any]:
+        logger.info(f"Starting node scan for {target}")
         """
         Perform node scan on target.
         
@@ -147,70 +148,11 @@ class NodeScanner(BaseScanner):
         return configs
     
     def _get_builtin_configs(self) -> Dict[str, Dict[str, Any]]:
-        """Built-in protocol configurations for common DePIN protocols."""
-        return {
-            "sui": {
-                "name": "Sui Network",
-                "network_type": "blockchain",
-                "default_ports": [9000, 8080, 443, 80, 9184],
-                "probes": [
-                    {
-                        "name": "SUI_RPC_STATUS",
-                        "payload": "POST /rpc/v1 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 58\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"sui_getChainId\",\"id\":1}",
-                        "ports": [9000, 8080, 443, 80],
-                        "requires_ssl": False
-                    }
-                ],
-                "signatures": [
-                    {
-                        "label": "Sui RPC",
-                        "regex": r"sui.*rpc|chainId.*0x[a-f0-9]+",
-                        "version_group": None
-                    }
-                ]
-            },
-            "filecoin": {
-                "name": "Filecoin Network", 
-                "network_type": "storage",
-                "default_ports": [1234, 5678, 8080, 443, 80],
-                "probes": [
-                    {
-                        "name": "FILECOIN_API_VERSION",
-                        "payload": "POST /rpc/v0 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 47\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"Filecoin.Version\",\"id\":1}",
-                        "ports": [1234, 5678, 8080, 443, 80],
-                        "requires_ssl": False
-                    }
-                ],
-                "signatures": [
-                    {
-                        "label": "Filecoin Node",
-                        "regex": r"filecoin|lotus|Version.*[0-9]+\.[0-9]+",
-                        "version_group": None
-                    }
-                ]
-            },
-            "arweave": {
-                "name": "Arweave Network",
-                "network_type": "storage", 
-                "default_ports": [1984, 443, 80],
-                "probes": [
-                    {
-                        "name": "ARWEAVE_INFO",
-                        "payload": "GET /info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-                        "ports": [1984, 443, 80],
-                        "requires_ssl": False
-                    }
-                ],
-                "signatures": [
-                    {
-                        "label": "Arweave Node",
-                        "regex": r"arweave|network.*arweave|release.*[0-9]+",
-                        "version_group": None
-                    }
-                ]
-            }
-        }
-    
+        """Built-in configurations - returns empty dict, configs should be in files."""
+        print("Warning: No protocols directory found. Please create 'protocols/' directory with protocol config files.", file=sys.stderr)
+        print("Example: protocols/sui.yaml, protocols/arweave.yaml, etc.", file=sys.stderr)
+        return {}
+
     def _compile_all_signatures(self):
         """Pre-compile regex patterns for all protocols."""
         for protocol_name, config in self.protocol_configs.items():

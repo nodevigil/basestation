@@ -1,0 +1,31 @@
+name: "Sui Network"
+network_type: "blockchain"
+default_ports: [22, 80, 443, 9000, 9184, 9100]
+
+probes:
+  - name: SUI_METRICS
+    payload: "GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [9184]
+    requires_ssl: false
+  
+  - name: SUI_RPC_VERSION
+    payload: "POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 72\r\nConnection: close\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"sui_getRpcApiVersion\",\"params\":[],\"id\":1}"
+    ports: [9000]
+    requires_ssl: false
+  
+  - name: SUI_HEALTH_CHECK
+    payload: "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [9000]
+    requires_ssl: false
+
+signatures:
+  - label: "Sui Node"
+    regex: 'sui_node_build_info.*version="(?P<ver>[^"]+)"'
+    version_group: ver
+  
+  - label: "Sui RPC"
+    regex: '"result":\s*"(?P<ver>[\d.]+)".*sui_getRpcApiVersion'
+    version_group: ver
+  
+  - label: "Sui Validator"
+    regex: 'sui_validator_.*|sui_consensus_'

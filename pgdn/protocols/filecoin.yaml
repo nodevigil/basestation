@@ -1,0 +1,31 @@
+name: "Filecoin Network"
+network_type: "storage"
+default_ports: [22, 80, 443, 1234, 2345, 3456]
+
+probes:
+  - name: LOTUS_VERSION
+    payload: "POST /rpc/v0 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 84\r\nConnection: close\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"Filecoin.Version\",\"params\":[],\"id\":1}"
+    ports: [1234]
+    requires_ssl: false
+  
+  - name: LOTUS_NODE_STATUS
+    payload: "POST /rpc/v0 HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 90\r\nConnection: close\r\n\r\n{\"jsonrpc\":\"2.0\",\"method\":\"Filecoin.NodeStatus\",\"params\":[true],\"id\":1}"
+    ports: [1234]
+    requires_ssl: false
+  
+  - name: FILECOIN_METRICS
+    payload: "GET /debug/metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [3456]
+    requires_ssl: false
+
+signatures:
+  - label: "Lotus Node"
+    regex: '"Version":\s*"(?P<ver>[^"]+)"'
+    version_group: ver
+  
+  - label: "Filecoin Storage"
+    regex: 'lotus_info.*version="(?P<ver>[^"]+)"'
+    version_group: ver
+  
+  - label: "Filecoin Miner"
+    regex: 'storage_provider|lotus_miner'

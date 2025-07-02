@@ -1,0 +1,88 @@
+# DePIN Scanner - Default Probe Configurations
+# Ordered probes for service detection and banner grabbing
+
+- name: HTTP_GET_ROOT
+  payload: "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: any
+  requires_ssl: false
+
+- name: HTTPS_GET_ROOT
+  payload: "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [443, 8443, 9443]
+  requires_ssl: true
+
+- name: HTTP_GET_METRICS
+  payload: "GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [9184, 8080, 3000, 9090, 9100, 8090]
+  requires_ssl: false
+
+- name: HTTP_GET_STATUS
+  payload: "GET /status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [8080, 3000, 9090, 8090]
+  requires_ssl: false
+
+- name: HTTP_GET_VERSION
+  payload: "GET /version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [8080, 3000, 9090, 8090]
+  requires_ssl: false
+
+- name: JSONRPC_clientVersion
+  payload: |
+    POST / HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    Content-Length: 83\r
+    Connection: close\r
+    \r
+    {"jsonrpc":"2.0","method":"clientVersion","params":[],"id":1}
+  ports: [8545, 8546, 9933, 1234, 8080]
+  requires_ssl: false
+
+- name: JSONRPC_web3_clientVersion
+  payload: |
+    POST / HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    Content-Length: 89\r
+    Connection: close\r
+    \r
+    {"jsonrpc":"2.0","method":"web3_clientVersion","params":[],"id":1}
+  ports: [8545, 8546]
+  requires_ssl: false
+
+- name: SUI_RPC_getVersion
+  payload: |
+    POST / HTTP/1.1\r
+    Host: localhost\r
+    Content-Type: application/json\r
+    Content-Length: 72\r
+    Connection: close\r
+    \r
+    {"jsonrpc":"2.0","method":"sui_getRpcApiVersion","params":[],"id":1}
+  ports: [9000, 8080, 1234]
+  requires_ssl: false
+
+- name: DOCKER_API_VERSION
+  payload: "GET /version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [2375, 2376]
+  requires_ssl: false
+
+- name: DOCKER_API_INFO
+  payload: "GET /info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [2375, 2376]
+  requires_ssl: false
+
+- name: GRAFANA_API_HEALTH
+  payload: "GET /api/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [3000]
+  requires_ssl: false
+
+- name: PROMETHEUS_CONFIG
+  payload: "GET /api/v1/status/config HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+  ports: [9090]
+  requires_ssl: false
+
+- name: TCP_BANNER_GRAB
+  payload: ""
+  ports: any
+  requires_ssl: false

@@ -1,0 +1,31 @@
+name: "Helium Network"
+network_type: "iot"
+default_ports: [22, 80, 443, 8080, 44158]
+
+probes:
+  - name: HELIUM_STATUS
+    payload: "GET /v1/status HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [8080]
+    requires_ssl: false
+  
+  - name: HELIUM_HEALTH
+    payload: "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [8080]
+    requires_ssl: false
+  
+  - name: HELIUM_HEIGHT
+    payload: "GET /v1/blocks/height HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [8080]
+    requires_ssl: false
+
+signatures:
+  - label: "Helium Hotspot"
+    regex: '"version":\s*"(?P<ver>[^"]+)"'
+    version_group: ver
+  
+  - label: "Helium Gateway"
+    regex: 'helium.*gateway.*version["\s]*[:=]["\s]*(?P<ver>[^\s"]+)'
+    version_group: ver
+  
+  - label: "Helium Validator"
+    regex: 'helium.*validator|consensus_group'

@@ -45,6 +45,8 @@ def _select_sudo_command(ip, ports, timeout):
             return sudo_cmd
             
         logger.info("Sudo failed (no permissions), using connect scan")
+
+        print(12312312, connect_cmd)
         return connect_cmd
         
     except subprocess.TimeoutExpired:
@@ -195,59 +197,59 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
             "ip": ip
         }
 
-def bulk_scan(ip_list, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True):
-    """Scan multiple IPs efficiently"""
-    results = []
-    for ip in ip_list:
-        logger.info(f"Scanning {ip}...")
-        result = nmap_scan(ip, ports=ports, timeout=timeout, fast_mode=fast_mode)
-        results.append(result)
-    return results
+# def bulk_scan(ip_list, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True):
+#     """Scan multiple IPs efficiently"""
+#     results = []
+#     for ip in ip_list:
+#         logger.info(f"Scanning {ip}...")
+#         result = nmap_scan(ip, ports=ports, timeout=timeout, fast_mode=fast_mode)
+#         results.append(result)
+#     return results
 
-def analyze_scan_results(scan_data):
-    """Analyze scan results for security issues"""
-    if "error" in scan_data:
-        return {"analysis": "scan_failed", "issues": []}
+# def analyze_scan_results(scan_data):
+#     """Analyze scan results for security issues"""
+#     if "error" in scan_data:
+#         return {"analysis": "scan_failed", "issues": []}
     
-    issues = []
-    open_ports = [p for p in scan_data["ports"] if p["state"] == "open"]
+#     issues = []
+#     open_ports = [p for p in scan_data["ports"] if p["state"] == "open"]
     
-    # Check for concerning open ports
-    concerning_ports = {
-        2375: "Unencrypted Docker API (should use 2376 with TLS)",
-        3306: "MySQL database exposed",
-        5432: "PostgreSQL database exposed", 
-        6379: "Redis exposed",
-        27017: "MongoDB exposed",
-        9000: "Various services (could be MinIO, SonarQube, etc.)"
-    }
+#     # Check for concerning open ports
+#     concerning_ports = {
+#         2375: "Unencrypted Docker API (should use 2376 with TLS)",
+#         3306: "MySQL database exposed",
+#         5432: "PostgreSQL database exposed", 
+#         6379: "Redis exposed",
+#         27017: "MongoDB exposed",
+#         9000: "Various services (could be MinIO, SonarQube, etc.)"
+#     }
     
-    for port_info in open_ports:
-        port_num = port_info["port"]
-        if port_num in concerning_ports:
-            issues.append({
-                "type": "exposed_service",
-                "port": port_num,
-                "description": concerning_ports[port_num],
-                "severity": "high" if port_num in [2375, 3306, 5432, 6379, 27017] else "medium"
-            })
+#     for port_info in open_ports:
+#         port_num = port_info["port"]
+#         if port_num in concerning_ports:
+#             issues.append({
+#                 "type": "exposed_service",
+#                 "port": port_num,
+#                 "description": concerning_ports[port_num],
+#                 "severity": "high" if port_num in [2375, 3306, 5432, 6379, 27017] else "medium"
+#             })
     
-    # Check for unusual port combinations (possible honeypot or misconfiguration)
-    if len(open_ports) > 6:
-        issues.append({
-            "type": "many_open_ports",
-            "count": len(open_ports),
-            "description": f"Many ports open ({len(open_ports)}) - possible misconfiguration",
-            "severity": "medium"
-        })
+#     # Check for unusual port combinations (possible honeypot or misconfiguration)
+#     if len(open_ports) > 6:
+#         issues.append({
+#             "type": "many_open_ports",
+#             "count": len(open_ports),
+#             "description": f"Many ports open ({len(open_ports)}) - possible misconfiguration",
+#             "severity": "medium"
+#         })
     
-    return {
-        "analysis": "completed",
-        "open_ports": len(open_ports),
-        "total_scanned": len(scan_data["ports"]),
-        "issues": issues,
-        "host_state": scan_data["host_state"]
-    }
+#     return {
+#         "analysis": "completed",
+#         "open_ports": len(open_ports),
+#         "total_scanned": len(scan_data["ports"]),
+#         "issues": issues,
+#         "host_state": scan_data["host_state"]
+#     }
 
 if __name__ == "__main__":
     import logging
@@ -272,13 +274,15 @@ if __name__ == "__main__":
     logger.info(f"Scanning {ip} (fast_mode={fast_mode})")
     result = nmap_scan(ip, ports=ports, timeout=timeout, fast_mode=fast_mode)
     
+    print(json.dumps(result, indent=2))
+
     # Analyze results
-    analysis = analyze_scan_results(result)
+    # analysis = analyze_scan_results(result)
     
-    # Output results
-    output = {
-        "scan_results": result,
-        "security_analysis": analysis
-    }
+    # # Output results
+    # output = {
+    #     "scan_results": result,
+    #     "security_analysis": analysis
+    # }
     
-    print(json.dumps(output, indent=2))
+    # print(json.dumps(output, indent=2))

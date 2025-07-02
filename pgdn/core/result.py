@@ -112,6 +112,11 @@ class Result(BaseModel, Generic[T]):
                 data_dict = self.data.dict()
             elif hasattr(self.data, '__dict__'):
                 data_dict = self.data.__dict__
+            
+            # If data is already structured with "data" and "meta" keys, use it directly
+            if isinstance(data_dict, dict) and "data" in data_dict and "meta" in data_dict:
+                return data_dict
+            
             result = {"data": data_dict}
         
         if self.meta:
