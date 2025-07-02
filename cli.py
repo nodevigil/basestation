@@ -264,15 +264,16 @@ Examples:
   pgdn --target example.com --run geo
   pgdn --target example.com --run ssl_test
   
+  # Node scanning with protocol-specific probes
+  pgdn --target example.com --run node_scan --protocol sui
+  pgdn --target example.com --run node_scan --protocol arweave
+  pgdn --target example.com --run node_scan --protocol filecoin
+
   # Protocol compliance scans with levels
   pgdn --target example.com --run compliance --protocol sui --level 1
   pgdn --target example.com --run compliance --protocol sui --level 3
   pgdn --target example.com --run compliance --protocol filecoin --level 2
   
-  # Node scanning with protocol-specific probes
-  pgdn --target example.com --run node_scan --protocol sui
-  pgdn --target example.com --run node_scan --protocol arweave
-  pgdn --target example.com --run node_scan --protocol filecoin
   
   # Output formats
   pgdn --target example.com --run web --json     # Pure JSON

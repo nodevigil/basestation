@@ -13,6 +13,7 @@ PGDN (Programmatic Global DePIN Network) is a specialized security scanning plat
 - **GeoIP Intelligence**: Geographic and ASN context for threat analysis
 - **External Tool Integration**: Native integration with nmap, whatweb, ssl testing tools
 - **Template-Based Extension**: Easy addition of new protocol scanners using provided templates
+- **Simplified Library API**: Clean, single `Scanner` class for all scanning operations
 - **Library + CLI**: Use as a Python library or standalone CLI tool
 
 ## 📦 Installation
@@ -141,12 +142,15 @@ The scanner returns a compliance score (0-100) and detailed findings:
 
 ### Library Usage
 
+The PGDN library provides a clean, simplified API for programmatic scanning operations. The main entry point is the `Scanner` class which handles all scanning complexity internally.
+
+#### Basic Usage
+
 ```python
 from pgdn import Scanner, Config
 
-# Initialize scanner
-config = Config.from_file('config.json')
-scanner = Scanner(config)
+# Initialize scanner with default configuration
+scanner = Scanner()
 
 # Basic target scanning
 result = scanner.scan(
@@ -161,12 +165,160 @@ result = scanner.scan(
     protocol='sui'
 )
 
-# Custom scanner configuration with config options
+# Check if scan was successful
+if result.success:
+    print(f"Scan completed in {result.data['meta']['scan_duration']} seconds")
+    print(f"Found {len(result.data['data'])} results")
+else:
+    print(f"Scan failed: {result.error}")
+```
+
+#### Advanced Configuration
+
+```python
+from pgdn import Scanner, Config
+
+# Load custom configuration
 config = Config.from_file('config.json')
-config.scanning.orchestrator.enabled_scanners = ['web', 'vulnerability']
-config.scanning.orchestrator.enabled_external_tools = ['nmap', 'ssl_test']
 scanner = Scanner(config)
-result = scanner.scan(target='192.168.1.100', scan_level=2)
+
+# Override scanner configuration at runtime
+result = scanner.scan(
+    target='192.168.1.100',
+    scan_level=2,
+    enabled_scanners=['web', 'geo'],  # Only run specific scanners
+    enabled_external_tools=['whatweb'],  # Only use specific external tools
+    debug=True
+)
+```
+
+#### Individual Scanner Types
+
+```python
+from pgdn import Scanner
+
+scanner = Scanner()
+
+# Web service detection only
+result = scanner.scan(
+    target='example.com',
+    enabled_scanners=['web'],
+    enabled_external_tools=[]
+)
+
+# Web technology fingerprinting only
+result = scanner.scan(
+    target='example.com',
+    enabled_scanners=[],
+    enabled_external_tools=['whatweb']
+)
+
+# Geographic location detection only
+result = scanner.scan(
+    target='example.com',
+    enabled_scanners=['geo'],
+    enabled_external_tools=[]
+)
+
+# SSL/TLS certificate analysis only
+result = scanner.scan(
+    target='example.com',
+    enabled_scanners=[],
+    enabled_external_tools=['ssl_test']
+)
+```
+
+#### Compliance Scanning
+
+```python
+from pgdn import Scanner
+
+scanner = Scanner()
+
+# Basic compliance scan
+result = scanner.scan(
+    target='validator-node.com',
+    enabled_scanners=['compliance'],
+    protocol='sui',
+    scan_level=1
+)
+
+# Comprehensive compliance scan
+result = scanner.scan(
+    target='validator-node.com',
+    enabled_scanners=['compliance'],
+    protocol='filecoin',
+    scan_level=3
+)
+```
+
+#### Node Scanning
+
+```python
+from pgdn import Scanner
+
+scanner = Scanner()
+
+# Protocol-specific node health checks
+result = scanner.scan(
+    target='sui-node.com',
+    enabled_scanners=['node'],
+    protocol='sui',
+    scan_level=2
+)
+```
+
+#### Result Structure
+
+All scan results return a `DictResult` object with the following structure:
+
+```python
+# Successful scan
+{
+    "success": True,
+    "data": {
+        "data": [...],  # Scan results array
+        "meta": {
+            "operation": "target_scan",
+            "scan_level": 2,
+            "scan_duration": 12.5,
+            "scanners_used": ["web", "geo"],
+            "tools_used": ["whatweb"],
+            "target": "example.com",
+            "protocol": "sui",
+            "timestamp": "2024-01-15T10:30:00",
+            "error": None
+        }
+    }
+}
+
+# Failed scan
+{
+    "success": False,
+    "error": "DNS resolution failed: example.com"
+}
+```
+
+#### Error Handling
+
+```python
+from pgdn import Scanner
+
+scanner = Scanner()
+
+try:
+    result = scanner.scan(target='invalid-hostname.xyz')
+    
+    if result.success:
+        # Process successful results
+        process_scan_results(result.data)
+    else:
+        # Handle scan errors
+        print(f"Scan failed: {result.error}")
+        
+except Exception as e:
+    # Handle unexpected errors
+    print(f"Unexpected error: {e}")
 ```
 
 ## 🔧 Configuration
@@ -303,18 +455,17 @@ All protocol scanners must:
 
 ### Core Components
 
-- **`lib/scanner.py`**: Main scanning orchestration for single targets
-- **`lib/pipeline.py`**: High-level pipeline management
-- **`lib/scanners/`**: Modular scanner implementations
-  - `scan_orchestrator.py`: Infrastructure scanning coordination
+- **`pgdn/scanner.py`**: Main `Scanner` class - single entry point for all scanning operations
+- **`pgdn/scanners/scan_orchestrator.py`**: Internal scanning coordination (used by Scanner class)
+- **`pgdn/scanners/`**: Modular scanner implementations
   - `base_scanner.py`: Scanner registry and interface
   - `protocol_template.py`: Template for new protocol scanners
-  - `protocols/`: Protocol-specific scanners with level support
+  - `protocol_scanners/`: Protocol-specific scanners with level support
     - `sui_scanner.py`: Sui blockchain protocol scanner (levels 1-3)
     - `filecoin_scanner.py`: Filecoin network protocol scanner (levels 1-3)
     - `base_protocol_scanner.py`: Base class for protocol scanners
-- **`lib/tools/`**: External tool integrations (nmap, whatweb, ssl)
-- **`cli.py`**: Command-line interface and library wrapper
+- **`pgdn/tools/`**: External tool integrations (nmap, whatweb, ssl)
+- **`cli.py`**: Command-line interface using the Scanner class
 
 ### Protocol Scanner Levels
 
@@ -379,7 +530,8 @@ python examples/library_usage.py
 
 Explore the `examples/` directory for:
 
-- **Basic scanning examples** (`examples/library_usage.py`)
+- **Basic scanning examples** (`examples/pgdn_library_example.py`)
+- **Advanced library usage** (`examples/library_usage.py`)
 - **CLI automation scripts** (`examples/cli/`)
 - **Library usage patterns** (`examples/library/`)
 - **Protocol scanner examples**
