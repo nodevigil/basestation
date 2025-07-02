@@ -110,18 +110,64 @@ class Scanner:
             if enabled_scanners is not None or enabled_external_tools is not None:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
-            # Only pass scan_level for compliance scans, otherwise set to None
-            scan_level_to_use = scan_level if run == "compliance" else None
+
+            # For compliance, use user-provided scan_level; for all others, default to 1
+            if run == "compliance":
+                scan_level_to_use = scan_level
+            else:
+                scan_level_to_use = 1
+
             scan_results = self.orchestrator.scan(
-                target=original_target,  # Keep FQDN for hostname-based tools like whatweb
+                target=original_target,
                 hostname=hostname,
                 scan_level=scan_level_to_use,
                 protocol=protocol,
-                resolved_ip=resolved_ip,  # Pass resolved IP for tools that need it
+                resolved_ip=resolved_ip,
                 scan_timestamp=datetime.now().isoformat()
             )
 
-            # Return the orchestrator's structured results directly
+            # Remove 'infra' section and include ONLY the relevant scan type or tool result
+            if isinstance(scan_results, dict) and "data" in scan_results:
+                scan_type = None
+                if run == "web":
+                    scan_type = "web"
+                elif run == "geo":
+                    scan_type = "location"
+                elif run == "compliance":
+                    scan_type = "analysis"
+                elif run == "whatweb":
+                    scan_type = "web"
+                elif run == "ssl_test":
+                    scan_type = "web"
+                elif run == "node_scan":
+                    scan_type = "node"
+
+                data_entries = scan_results["data"]
+                filtered = []
+                
+                for entry in data_entries:
+                    # Skip infra entries
+                    if entry.get("type") == "infra":
+                        continue
+                    
+                    # If entry type matches scan_type
+                    if entry.get("type") == scan_type:
+                        # For tool-specific runs, extract only that tool's data
+                        if run in ["whatweb", "ssl_test"] and run in entry.get("payload", {}):
+                            filtered.append({
+                                "type": entry["type"],
+                                "payload": {run: entry["payload"][run]}
+                            })
+                        else:
+                            # For general scans, include the whole entry
+                            filtered.append(entry)
+
+                # If only one entry and nothing filtered, keep it regardless of type
+                if not filtered and len(data_entries) == 1:
+                    scan_results["data"] = data_entries
+                else:
+                    scan_results["data"] = filtered
+
             return DictResult.success(scan_results)
             
         except Exception as e:

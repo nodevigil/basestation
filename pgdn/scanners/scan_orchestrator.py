@@ -589,8 +589,10 @@ class ScanOrchestrator:
         }
         data.append({"type": "infra", "payload": infra_payload})
         
-        # Web data (whatweb, ssl testing)
+        # Web data (web scanner results, whatweb, ssl testing)
+        web_scanner_results = scan_results.get("web", {})
         web_payload = {
+            "web_scan": web_scanner_results,
             "whatweb": external_tools.get("whatweb", {}),
             "ssl_test": external_tools.get("ssl_test", {})
         }

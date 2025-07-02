@@ -32,77 +32,15 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
     Returns:
         Result object
     """
-    if run_type == 'web':
-        # Run web scanner only - no external tools
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=['web'],
-            enabled_external_tools=[],
-            debug=debug
-        )
-    
-    elif run_type == 'whatweb':
-        # Run whatweb external tool only - no scanners
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=[],
-            enabled_external_tools=['whatweb'],
-            debug=debug
-        )
-    
-    elif run_type == 'geo':
-        # Run geo scanner only - no external tools
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=['geo'],
-            enabled_external_tools=[],
-            debug=debug
-        )
-    
-    elif run_type == 'ssl_test':
-        # Run SSL test external tool only - no scanners
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=[],
-            enabled_external_tools=['ssl_test'],
-            debug=debug
-        )
-    
-    elif run_type == 'compliance':
-        # Run compliance scanner with protocol validation
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=['compliance'],
-            enabled_external_tools=[],
-            scan_level=scan_level,
-            protocol=protocol,
-            debug=debug
-        )
-    
-    elif run_type == 'node_scan':
-        # Run node scanner with protocol validation
-        if not protocol:
-            from pgdn.core.result import DictResult
-            return DictResult.from_error("Protocol is required for node_scan. Use --protocol to specify the DePIN protocol (sui, arweave, filecoin, etc.)")
-        
-        return scanner.scan(
-            target=target,
-            hostname=hostname,
-            enabled_scanners=['node'],
-            enabled_external_tools=[],
-            scan_level=scan_level,
-            protocol=protocol,
-            debug=debug
-        )
-    
-    else:
-        from pgdn.core.result import DictResult
-        return DictResult.from_error(f"Unknown run type: {run_type}")
+    # Use the new 'run' parameter instead of legacy enabled_scanners/enabled_external_tools
+    return scanner.scan(
+        target=target,
+        hostname=hostname,
+        run=run_type,
+        scan_level=scan_level,
+        protocol=protocol,
+        debug=debug
+    )
 
 
 def main():
