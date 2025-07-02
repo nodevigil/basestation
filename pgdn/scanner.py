@@ -50,19 +50,22 @@ class Scanner:
              debug: bool = False) -> DictResult:
         """
         Scan a target.
-        
+
         Args:
             target: IP address or hostname to scan
             hostname: Optional hostname for target IP (for hostname-based scans)
-            scan_level: Scan intensity level (1-3)
+            scan_level: Only used for compliance scans (intensity level 1-3). Ignored for other scan types.
             protocol: Optional protocol-specific scanner (sui, filecoin)
             run: Type of scan to run (web, whatweb, geo, ssl_test, compliance, node_scan)
             enabled_scanners: Override which scanners to run (legacy, use 'run' instead)
             enabled_external_tools: Override which external tools to run (legacy, use 'run' instead)
             debug: Enable debug logging
-            
+
         Returns:
             DictResult: Success with structured scan data or error message
+
+        Note:
+            - scan_level is only meaningful for compliance scans. For all other scan types, it is ignored.
         """
         try:
             # Keep original target for hostname-based scans, resolve for IP-based operations
@@ -83,7 +86,7 @@ class Scanner:
                     "meta": {
                         "operation": "target_scan",
                         "stage": "scan",
-                        "scan_level": scan_level,
+                        "scan_level": scan_level if run == "compliance" else None,
                         "scan_duration": None,
                         "scanners_used": [],
                         "tools_used": [],
@@ -107,12 +110,12 @@ class Scanner:
             if enabled_scanners is not None or enabled_external_tools is not None:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
-            # Perform the scan - orchestrator now returns structured format directly
-            # Pass original_target (FQDN) for hostname-based scans, resolved_ip for display
+            # Only pass scan_level for compliance scans, otherwise set to None
+            scan_level_to_use = scan_level if run == "compliance" else None
             scan_results = self.orchestrator.scan(
                 target=original_target,  # Keep FQDN for hostname-based tools like whatweb
                 hostname=hostname,
-                scan_level=scan_level,
+                scan_level=scan_level_to_use,
                 protocol=protocol,
                 resolved_ip=resolved_ip,  # Pass resolved IP for tools that need it
                 scan_timestamp=datetime.now().isoformat()
@@ -130,7 +133,7 @@ class Scanner:
                 "meta": {
                     "operation": "target_scan",
                     "stage": "scan",
-                    "scan_level": scan_level,
+                    "scan_level": scan_level if run == "compliance" else None,
                     "scan_duration": None,
                     "scanners_used": [],
                     "tools_used": [],
