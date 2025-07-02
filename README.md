@@ -182,16 +182,16 @@ else:
 
 #### CLI to Library Mapping
 
-The library usage directly mirrors the CLI structure:
+The library usage directly mirrors the CLI structure with a simplified `run` parameter:
 
 | CLI Command | Library Equivalent |
 |-------------|-------------------|
-| `pgdn --target example.com --run web` | `scanner.scan(target='example.com', enabled_scanners=['web'])` |
-| `pgdn --target example.com --run whatweb` | `scanner.scan(target='example.com', enabled_external_tools=['whatweb'])` |
-| `pgdn --target example.com --run geo` | `scanner.scan(target='example.com', enabled_scanners=['geo'])` |
-| `pgdn --target example.com --run ssl_test` | `scanner.scan(target='example.com', enabled_external_tools=['ssl_test'])` |
-| `pgdn --target example.com --run compliance --protocol sui --level 1` | `scanner.scan(target='example.com', enabled_scanners=['compliance'], protocol='sui', scan_level=1)` |
-| `pgdn --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', enabled_scanners=['node'], protocol='sui')` |
+| `pgdn --target example.com --run web` | `scanner.scan(target='example.com', run='web')` |
+| `pgdn --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
+| `pgdn --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
+| `pgdn --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
+| `pgdn --target example.com --run compliance --protocol sui --level 1` | `scanner.scan(target='example.com', run='compliance', protocol='sui', scan_level=1)` |
+| `pgdn --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
 
 #### Advanced Configuration
 
@@ -202,12 +202,19 @@ from pgdn import Scanner, Config
 config = Config.from_file('config.json')
 scanner = Scanner(config)
 
-# Override scanner configuration at runtime
+# Use the simplified run parameter
+result = scanner.scan(
+    target='192.168.1.100',
+    run='web',
+    debug=True
+)
+
+# For custom scanner combinations, use legacy parameters
 result = scanner.scan(
     target='192.168.1.100',
     scan_level=2,
-    enabled_scanners=['web', 'geo'],  # Only run specific scanners
-    enabled_external_tools=['whatweb'],  # Only use specific external tools
+    enabled_scanners=['web', 'geo'],  # Custom scanner combination
+    enabled_external_tools=['whatweb'],  # Custom external tools
     debug=True
 )
 ```
@@ -224,29 +231,25 @@ scanner = Scanner()
 # Web service detection only
 result = scanner.scan(
     target='example.com',
-    enabled_scanners=['web'],
-    enabled_external_tools=[]
+    run='web'
 )
 
 # Web technology fingerprinting only
 result = scanner.scan(
     target='example.com',
-    enabled_scanners=[],
-    enabled_external_tools=['whatweb']
+    run='whatweb'
 )
 
 # Geographic location detection only
 result = scanner.scan(
     target='example.com',
-    enabled_scanners=['geo'],
-    enabled_external_tools=[]
+    run='geo'
 )
 
 # SSL/TLS certificate analysis only
 result = scanner.scan(
     target='example.com',
-    enabled_scanners=[],
-    enabled_external_tools=['ssl_test']
+    run='ssl_test'
 )
 ```
 
@@ -262,7 +265,7 @@ scanner = Scanner()
 # Basic compliance scan
 result = scanner.scan(
     target='validator-node.com',
-    enabled_scanners=['compliance'],
+    run='compliance',
     protocol='sui',
     scan_level=1
 )
@@ -270,7 +273,7 @@ result = scanner.scan(
 # Comprehensive compliance scan
 result = scanner.scan(
     target='validator-node.com',
-    enabled_scanners=['compliance'],
+    run='compliance',
     protocol='filecoin',
     scan_level=3
 )
@@ -288,7 +291,7 @@ scanner = Scanner()
 # Protocol-specific node health checks
 result = scanner.scan(
     target='sui-node.com',
-    enabled_scanners=['node'],
+    run='node_scan',
     protocol='sui',
     scan_level=2
 )

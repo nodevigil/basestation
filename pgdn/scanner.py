@@ -44,6 +44,7 @@ class Scanner:
              hostname: Optional[str] = None,
              scan_level: int = 1,
              protocol: Optional[str] = None,
+             run: Optional[str] = None,
              enabled_scanners: Optional[List[str]] = None,
              enabled_external_tools: Optional[List[str]] = None,
              debug: bool = False) -> DictResult:
@@ -55,8 +56,9 @@ class Scanner:
             hostname: Optional hostname for target IP (for hostname-based scans)
             scan_level: Scan intensity level (1-3)
             protocol: Optional protocol-specific scanner (sui, filecoin)
-            enabled_scanners: Override which scanners to run
-            enabled_external_tools: Override which external tools to run
+            run: Type of scan to run (web, whatweb, geo, ssl_test, compliance, node_scan)
+            enabled_scanners: Override which scanners to run (legacy, use 'run' instead)
+            enabled_external_tools: Override which external tools to run (legacy, use 'run' instead)
             debug: Enable debug logging
             
         Returns:
@@ -96,6 +98,10 @@ class Scanner:
                     }
                 }
                 return DictResult.success(error_result)
+
+            # Map 'run' parameter to scanners and tools
+            if run:
+                enabled_scanners, enabled_external_tools = self._map_run_to_scanners(run)
 
             # Override scanner/tool configuration if specified
             if enabled_scanners is not None or enabled_external_tools is not None:
@@ -189,3 +195,28 @@ class Scanner:
                 self.orchestrator.use_external_tools = True
                 self.orchestrator.enabled_external_tools = enabled_external_tools
             self.orchestrator._enabled_external_tools_set = True
+
+    def _map_run_to_scanners(self, run: str) -> tuple[List[str], List[str]]:
+        """
+        Map 'run' parameter to enabled_scanners and enabled_external_tools.
+        
+        Args:
+            run: Type of scan to run
+            
+        Returns:
+            Tuple of (enabled_scanners, enabled_external_tools)
+        """
+        if run == 'web':
+            return ['web'], []
+        elif run == 'whatweb':
+            return [], ['whatweb']
+        elif run == 'geo':
+            return ['geo'], []
+        elif run == 'ssl_test':
+            return [], ['ssl_test']
+        elif run == 'compliance':
+            return ['compliance'], []
+        elif run == 'node_scan':
+            return ['node'], []
+        else:
+            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan")
