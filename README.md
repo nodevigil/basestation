@@ -166,7 +166,7 @@ result = scanner.scan(
 )
 
 # Check if scan was successful
-if result.success:
+if result.is_success():
     print(f"Scan completed in {result.data['meta']['scan_duration']} seconds")
     print(f"Found {len(result.data['data'])} results")
 else:
@@ -270,12 +270,11 @@ result = scanner.scan(
 
 #### Result Structure
 
-All scan results return a `DictResult` object with the following structure:
+All scan results return a `DictResult` object (which is a `Result[Dict[str, Any]]`) with the following structure:
 
 ```python
 # Successful scan
 {
-    "success": True,
     "data": {
         "data": [...],  # Scan results array
         "meta": {
@@ -289,13 +288,18 @@ All scan results return a `DictResult` object with the following structure:
             "timestamp": "2024-01-15T10:30:00",
             "error": None
         }
-    }
+    },
+    "error": None,
+    "meta": None,
+    "result_type": "SUCCESS"
 }
 
 # Failed scan
 {
-    "success": False,
-    "error": "DNS resolution failed: example.com"
+    "data": None,
+    "error": "DNS resolution failed: example.com",
+    "meta": None,
+    "result_type": "ERROR"
 }
 ```
 
@@ -309,7 +313,7 @@ scanner = Scanner()
 try:
     result = scanner.scan(target='invalid-hostname.xyz')
     
-    if result.success:
+    if result.is_success():
         # Process successful results
         process_scan_results(result.data)
     else:
@@ -319,6 +323,26 @@ try:
 except Exception as e:
     # Handle unexpected errors
     print(f"Unexpected error: {e}")
+```
+
+#### Result Methods
+
+The `Result` class provides several useful methods:
+
+```python
+# Check result status
+result.is_success()    # True if successful
+result.is_error()      # True if error
+result.is_warning()    # True if warning
+result.has_issues()    # True if error or warning
+
+# Get data safely
+data = result.unwrap()           # Raises ValueError if error
+data = result.unwrap_or(default) # Returns default if error
+
+# Convert to different formats
+result_dict = result.to_dict()   # Convert to dictionary
+result_json = result.to_json()   # Convert to JSON string
 ```
 
 ## 🔧 Configuration
