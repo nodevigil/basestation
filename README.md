@@ -167,8 +167,12 @@ result = scanner.scan(
 
 # Check if scan was successful
 if result.is_success():
-    print(f"Scan completed in {result.data['meta']['scan_duration']} seconds")
-    print(f"Found {len(result.data['data'])} results")
+    # Check for errors in the meta field
+    if result.data['meta'].get('error'):
+        print(f"Scan failed: {result.data['meta']['error']}")
+    else:
+        print(f"Scan completed in {result.data['meta']['scan_duration']} seconds")
+        print(f"Found {len(result.data['data'])} results")
 else:
     print(f"Scan failed: {result.error}")
 ```
@@ -272,6 +276,8 @@ result = scanner.scan(
 
 All scan results return a `DictResult` object (which is a `Result[Dict[str, Any]]`) with the following structure:
 
+**Note**: The scanner always returns `success=True` but may contain errors in the `meta.error` field. Always check `result.data['meta'].get('error')` for actual scan errors.
+
 ```python
 # Successful scan
 {
@@ -294,12 +300,27 @@ All scan results return a `DictResult` object (which is a `Result[Dict[str, Any]
     "result_type": "SUCCESS"
 }
 
-# Failed scan
+# Failed scan (error in meta field)
 {
-    "data": None,
-    "error": "DNS resolution failed: example.com",
+    "data": {
+        "data": [],
+        "meta": {
+            "operation": "target_scan",
+            "stage": "scan",
+            "scan_level": 1,
+            "scan_duration": None,
+            "scanners_used": [],
+            "tools_used": [],
+            "total_scan_duration": 0,
+            "target": "invalid-hostname.xyz",
+            "protocol": None,
+            "timestamp": "2024-01-15T10:30:00",
+            "error": "DNS resolution failed: invalid-hostname.xyz"
+        }
+    },
+    "error": None,
     "meta": None,
-    "result_type": "ERROR"
+    "result_type": "SUCCESS"
 }
 ```
 
@@ -314,8 +335,12 @@ try:
     result = scanner.scan(target='invalid-hostname.xyz')
     
     if result.is_success():
-        # Process successful results
-        process_scan_results(result.data)
+        # Check for errors in the meta field
+        if result.data['meta'].get('error'):
+            print(f"Scan failed: {result.data['meta']['error']}")
+        else:
+            # Process successful results
+            process_scan_results(result.data)
     else:
         # Handle scan errors
         print(f"Scan failed: {result.error}")
@@ -331,14 +356,18 @@ The `Result` class provides several useful methods:
 
 ```python
 # Check result status
-result.is_success()    # True if successful
-result.is_error()      # True if error
-result.is_warning()    # True if warning
-result.has_issues()    # True if error or warning
+result.is_success()    # Always True for scanner results
+result.is_error()      # Always False for scanner results
+result.is_warning()    # Always False for scanner results
+result.has_issues()    # Always False for scanner results
+
+# Check for actual scan errors
+if result.data['meta'].get('error'):
+    print(f"Scan failed: {result.data['meta']['error']}")
 
 # Get data safely
-data = result.unwrap()           # Raises ValueError if error
-data = result.unwrap_or(default) # Returns default if error
+data = result.data              # Access scan data directly
+meta = result.data['meta']      # Access metadata
 
 # Convert to different formats
 result_dict = result.to_dict()   # Convert to dictionary
