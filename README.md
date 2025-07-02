@@ -52,6 +52,9 @@ pgdn --target example.com --run ssl_test     # SSL/TLS certificate analysis
 pgdn --target example.com --run compliance --protocol sui --level 1     # Basic compliance
 pgdn --target example.com --run compliance --protocol filecoin --level 3 # Comprehensive compliance
 
+# Node scanning (requires protocol)
+pgdn --target example.com --run node_scan --protocol sui --level 2      # Protocol-specific node health
+
 # List available protocol scanners and their levels
 pgdn --list-protocols
 
@@ -177,6 +180,19 @@ else:
     print(f"Scan failed: {result.error}")
 ```
 
+#### CLI to Library Mapping
+
+The library usage directly mirrors the CLI structure:
+
+| CLI Command | Library Equivalent |
+|-------------|-------------------|
+| `pgdn --target example.com --run web` | `scanner.scan(target='example.com', enabled_scanners=['web'])` |
+| `pgdn --target example.com --run whatweb` | `scanner.scan(target='example.com', enabled_external_tools=['whatweb'])` |
+| `pgdn --target example.com --run geo` | `scanner.scan(target='example.com', enabled_scanners=['geo'])` |
+| `pgdn --target example.com --run ssl_test` | `scanner.scan(target='example.com', enabled_external_tools=['ssl_test'])` |
+| `pgdn --target example.com --run compliance --protocol sui --level 1` | `scanner.scan(target='example.com', enabled_scanners=['compliance'], protocol='sui', scan_level=1)` |
+| `pgdn --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', enabled_scanners=['node'], protocol='sui')` |
+
 #### Advanced Configuration
 
 ```python
@@ -197,6 +213,8 @@ result = scanner.scan(
 ```
 
 #### Individual Scanner Types
+
+The library follows the same pattern as the CLI with individual scanner types:
 
 ```python
 from pgdn import Scanner
@@ -234,6 +252,8 @@ result = scanner.scan(
 
 #### Compliance Scanning
 
+Compliance scanning requires a protocol and follows the CLI pattern:
+
 ```python
 from pgdn import Scanner
 
@@ -257,6 +277,8 @@ result = scanner.scan(
 ```
 
 #### Node Scanning
+
+Node scanning requires a protocol and follows the CLI pattern:
 
 ```python
 from pgdn import Scanner
