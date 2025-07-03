@@ -255,14 +255,14 @@ Examples:
     parser.add_argument(
         '--level',
         type=int,
-        choices=[1, 2],
-        help='Scan level for advanced protocol scanners: 1 (basic), 2 (standard). Used with compliance and node_scan.'
+        choices=[1, 2, 3],
+        help='Scan level for advanced protocol scanners: 1 (basic), 2 (standard), 3 (comprehensive). Used with compliance and node_scan.'
     )
     
     parser.add_argument(
         '--scan-level',
         type=int,
-        choices=[1, 2],
+        choices=[1, 2, 3],
         default=1,
         help='Legacy parameter. Use --level instead.'
     )

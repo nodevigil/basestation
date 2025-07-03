@@ -98,14 +98,13 @@ class ScanOrchestrator:
                 try:
                     scanner = self.scanner_registry.get_scanner(scanner_type)
                     if scanner:
-                        # Check if protocol scanner supports the requested level
-                        if hasattr(scanner, 'can_handle_level') and not scanner.can_handle_level(scan_level):
-                            supported_levels = scanner.get_supported_levels() if hasattr(scanner, 'get_supported_levels') else [1]
-                            self.logger.warning(
-                                f"Scanner {scanner_type} does not support level {scan_level}. "
-                                f"Supported levels: {supported_levels}. Skipping scanner."
-                            )
-                            continue
+                        # For protocol scanners, let them handle their own level validation and fallback
+                        # Only skip if scanner explicitly cannot handle any level (shouldn't happen)
+                        if hasattr(scanner, 'can_handle_level') and hasattr(scanner, 'get_supported_levels'):
+                            supported_levels = scanner.get_supported_levels()
+                            if not supported_levels:
+                                self.logger.warning(f"Scanner {scanner_type} has no supported levels. Skipping scanner.")
+                                continue
                             
                         scanner_start = int(time.time())
                         self.logger.info(f"Running {scanner_type} scanner at level {scan_level}")
@@ -600,6 +599,36 @@ class ScanOrchestrator:
         
         # Analysis data (vulnerabilities and compliance)
         compliance_results = scan_results.get("compliance", {})
+        
+        # Extract compliance data from protocol scanners for compliance scans
+        if not compliance_results:
+            for protocol_scanner in ['sui', 'filecoin', 'arweave', 'ethereum', 'bitcoin', 'solana', 'polygon', 'avalanche', 'cosmos', 'polkadot', 'cardano', 'algorand', 'near', 'chainlink', 'litecoin', 'dogecoin', 'monero', 'zcash']:
+                if protocol_scanner in scan_results:
+                    protocol_data = scan_results[protocol_scanner]
+                    if protocol_data and 'results' in protocol_data:
+                        # Extract compliance flags from protocol scan results
+                        compliance_flags = []
+                        vulnerabilities = []
+                        
+                        for result in protocol_data['results']:
+                            if isinstance(result, dict):
+                                if 'compliance_flags' in result:
+                                    compliance_flags.extend(result['compliance_flags'])
+                                if 'known_vulnerabilities' in result:
+                                    vulnerabilities.extend(result['known_vulnerabilities'])
+                        
+                        if compliance_flags or vulnerabilities:
+                            compliance_results = {
+                                'protocol': protocol_scanner,
+                                'compliance_flags': list(set(compliance_flags)),
+                                'vulnerabilities': vulnerabilities,
+                                'total_nodes_scanned': len(protocol_data['results']),
+                                'healthy_nodes': sum(1 for r in protocol_data['results'] if isinstance(r, dict) and r.get('healthy', False)),
+                                'scan_timestamp': protocol_data.get('timestamp'),
+                                'summary': protocol_data.get('summary', {})
+                            }
+                        break
+        
         analysis_payload = {
             "vulns": self._format_vulnerabilities(vuln_results),
             "compliance": compliance_results if compliance_results else {}
