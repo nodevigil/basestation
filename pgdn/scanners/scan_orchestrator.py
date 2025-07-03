@@ -630,9 +630,10 @@ class ScanOrchestrator:
                         break
         
         analysis_payload = {
-            "vulns": self._format_vulnerabilities(vuln_results),
-            "compliance": compliance_results if compliance_results else {}
+            "vulns": self._format_vulnerabilities(vuln_results)
         }
+        if compliance_results:
+            analysis_payload["compliance"] = compliance_results
         data.append({"type": "analysis", "payload": analysis_payload})
         
         # Location data (GeoIP)
