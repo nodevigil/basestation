@@ -119,7 +119,7 @@ class ScannerRegistry:
             
         try:
             from .node_scanner import NodeScanner
-            self._scanners['node'] = NodeScanner
+            self._scanners['node_scan'] = NodeScanner
             self.logger.debug("Registered built-in NodeScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register NodeScanner: {e}")

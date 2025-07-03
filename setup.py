@@ -18,6 +18,10 @@ setup(
     author_email="",
     url="",
     packages=find_packages(),
+    package_data={
+        'pgdn': ['protocols/*.yaml', 'protocols/*.yml'],
+    },
+    include_package_data=True,
     py_modules=['cli', 'pgdn_entry'],
     install_requires=read_requirements(),
     entry_points={

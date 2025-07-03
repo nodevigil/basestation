@@ -3,5 +3,7 @@ include requirements.txt
 include CLAUDE.md
 recursive-include pgdn *.py
 recursive-include pgdn *.json
+recursive-include pgdn *.yaml
+recursive-include pgdn *.yml
 global-exclude __pycache__
 global-exclude *.py[co]

@@ -659,3 +659,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **PGDN Scanner** - Comprehensive security assessment for decentralized infrastructure networks.
+
+## Notes ##
+
+compliance_scanner is a specialized scanner that focuses on detecting dangerous ports and exposed services that should not be accessible on validator nodes. It performs a two-stage process: a fast port scan followed by detailed service detection using nmap. Run this with  `--run compliance --protocol sui --level 1` for basic compliance checks or `--level 2` for comprehensive analysis.
+
+Level 3 compliance scanning requires a valid protocol and performs an in-depth analysis of the target node's security posture, including service enumeration, vulnerability correlation, and configuration validation.
+
+node_scan is a protocol-specific scanner that performs basic node health checks and connectivity tests on known ports for a specific protocol. It is designed to assess the operational status of DePIN nodes and can be run with `--run node_scan --protocol sui --level 2`.   

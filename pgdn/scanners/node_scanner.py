@@ -51,7 +51,7 @@ class NodeScanner(BaseScanner):
     @property
     def scanner_type(self) -> str:
         """Return the type of scanner."""
-        return "node"
+        return "node_scan"
     
     def get_supported_levels(self) -> List[int]:
         """Return list of supported scan levels."""
@@ -79,14 +79,14 @@ class NodeScanner(BaseScanner):
             return {
                 "error": "Protocol is required for node scanning",
                 "target": target,
-                "scanner_type": "node"
+                "scanner_type": "node_scan"
             }
         
         if protocol not in self.protocol_configs:
             return {
                 "error": f"Unknown protocol: {protocol}. Available: {list(self.protocol_configs.keys())}",
                 "target": target,
-                "scanner_type": "node"
+                "scanner_type": "node_scan"
             }
         
         ports = kwargs.get('ports') or self.get_protocol_ports(protocol)
@@ -110,7 +110,7 @@ class NodeScanner(BaseScanner):
             return {
                 "target": target,
                 "protocol": protocol,
-                "scanner_type": "node",
+                "scanner_type": "node_scan",
                 "scan_level": scan_level,
                 "results": results,
                 "total_probes": len(results),
@@ -125,7 +125,7 @@ class NodeScanner(BaseScanner):
                 "error": f"Scan failed: {str(e)}",
                 "target": target,
                 "protocol": protocol,
-                "scanner_type": "node"
+                "scanner_type": "node_scan"
             }
     
     def _load_protocol_configs(self) -> Dict[str, Dict[str, Any]]:
@@ -149,6 +149,7 @@ class NodeScanner(BaseScanner):
     
     def _get_builtin_configs(self) -> Dict[str, Dict[str, Any]]:
         """Built-in configurations - returns empty dict, configs should be in files."""
+        import sys
         print("Warning: No protocols directory found. Please create 'protocols/' directory with protocol config files.", file=sys.stderr)
         print("Example: protocols/sui.yaml, protocols/arweave.yaml, etc.", file=sys.stderr)
         return {}

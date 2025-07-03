@@ -568,7 +568,7 @@ class ScanOrchestrator:
             open_ports = generic_results.get("open_ports", [])
         else:
             # Fall back to node scanner results if available
-            node_results = scan_results.get("node", {})
+            node_results = scan_results.get("node_scan", {})
             open_ports = node_results.get("open_ports", [])
         
         network_payload = {
@@ -660,9 +660,9 @@ class ScanOrchestrator:
                     protocol_results[protocol_scanner] = protocol_data
         
         # Add node scanner results to protocol section
-        node_results = scan_results.get("node", {})
+        node_results = scan_results.get("node_scan", {})
         if node_results and self._has_meaningful_results(node_results):
-            protocol_results["node"] = node_results
+            protocol_results["node_scan"] = node_results
         
         if protocol_results:
             data.append({"type": "protocol", "payload": protocol_results})

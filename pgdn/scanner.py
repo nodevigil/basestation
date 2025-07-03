@@ -141,7 +141,7 @@ class Scanner:
                 elif run == "ssl_test":
                     scan_type = "web"
                 elif run == "node_scan":
-                    scan_type = "node"
+                    scan_type = "node_scan"
 
                 data_entries = scan_results["data"]
                 filtered = []
@@ -149,6 +149,16 @@ class Scanner:
                 for entry in data_entries:
                     # Skip infra entries
                     if entry.get("type") == "infra":
+                        continue
+                    
+                    # Special handling for node_scan - extract node data from protocol entries
+                    if run == "node_scan" and entry.get("type") == "protocol":
+                        payload = entry.get("payload", {})
+                        if "node_scan" in payload:
+                            filtered.append({
+                                "type": "node_scan",
+                                "payload": payload["node_scan"]
+                            })
                         continue
                     
                     # If entry type matches scan_type
@@ -269,6 +279,6 @@ class Scanner:
             # Let the orchestrator use routing logic with protocol
             return [], []
         elif run == 'node_scan':
-            return ['node'], []
+            return ['node_scan'], []
         else:
             raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan")
