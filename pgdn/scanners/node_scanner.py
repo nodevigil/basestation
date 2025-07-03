@@ -37,7 +37,9 @@ class NodeScanner(BaseScanner):
         # Extract protocols directory from config or use default
         protocols_dir = self.config.get('protocols_dir')
         if protocols_dir is None:
-            protocols_dir = os.getenv('DEPIN_PROTOCOLS_DIR', 'pgdn/protocols')
+            # Default to protocols directory relative to this package
+            package_dir = Path(__file__).parent.parent  # Go up from scanners/ to pgdn/
+            protocols_dir = os.getenv('DEPIN_PROTOCOLS_DIR', str(package_dir / 'protocols'))
         
         self.protocols_dir = Path(protocols_dir)
         self.protocol_configs = self._load_protocol_configs()
