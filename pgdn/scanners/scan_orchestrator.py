@@ -56,22 +56,25 @@ class ScanOrchestrator:
         # Track overall scan timing
         scan_start_time = int(time.time())
         
-        self.logger.info(f"Starting comprehensive scan of {target} (level {scan_level}, protocol: {protocol})")
+        self.logger.info(f"Starting comprehensive scan of {target} (protocol: {protocol})")
         
-        # Use enabled_scanners if explicitly set, otherwise use routing for compliance scans
+        # Use enabled_scanners if explicitly set, otherwise determine based on protocol
         if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
             scanners_to_run = self.enabled_scanners
             self.logger.info(f"Running specific scanners: {scanners_to_run}")
         else:
-            # Fallback to routing for compliance scans
-            scanners_to_run = get_scanners_for_level(scan_level, protocol)
-            self.logger.info(f"Scanners to run for level {scan_level} ({protocol}): {scanners_to_run}")
+            # For protocol_scan, use the protocol-specific scanner
+            if protocol:
+                scanners_to_run = [protocol]
+            else:
+                scanners_to_run = self.enabled_scanners
+            self.logger.info(f"Scanners to run for protocol {protocol}: {scanners_to_run}")
 
         results = {
             "target": target,
             "resolved_ip": resolved_ip,
             "hostname": hostname,
-            "scan_level": scan_level,
+            "scan_level": None,
             "protocol": protocol,
             "scan_timestamp": kwargs.get('scan_timestamp'),
             "scan_start_time": scan_start_time,
@@ -79,15 +82,15 @@ class ScanOrchestrator:
             "external_tools": {}
         }
         
-        # When running individual scanners, use only the specified scanners/tools
+        # Determine which scanners and tools to run
         if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
             # For individual scans, run only what was specified
             internal_scanners = [s for s in self.enabled_scanners if s in self.scanner_registry.get_registered_scanners()]
             external_tools = []  # External tools handled separately via enabled_external_tools
         else:
-            # For compliance scans, run only the protocol scanner from scanners_to_run
+            # For protocol scans, run the protocol-specific scanner
             internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
-            external_tools = []  # No external tools for compliance scans
+            external_tools = []  # No external tools for protocol scans
 
         # Run internal scanners with timing
         if internal_scanners:
@@ -98,28 +101,20 @@ class ScanOrchestrator:
                 try:
                     scanner = self.scanner_registry.get_scanner(scanner_type)
                     if scanner:
-                        # For protocol scanners, let them handle their own level validation and fallback
-                        # Only skip if scanner explicitly cannot handle any level (shouldn't happen)
-                        if hasattr(scanner, 'can_handle_level') and hasattr(scanner, 'get_supported_levels'):
-                            supported_levels = scanner.get_supported_levels()
-                            if not supported_levels:
-                                self.logger.warning(f"Scanner {scanner_type} has no supported levels. Skipping scanner.")
-                                continue
-                            
                         scanner_start = int(time.time())
-                        self.logger.info(f"Running {scanner_type} scanner at level {scan_level}")
+                        self.logger.info(f"Running {scanner_type} scanner")
                         
                         # Check if this is an async protocol scanner
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
                             import asyncio
-                            scan_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, scan_level=scan_level, ports=ports, **kwargs))
+                            scan_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs))
                         else:
                             # Regular scanner - include protocol in kwargs if provided
                             scanner_kwargs = kwargs.copy()
                             if protocol:
                                 scanner_kwargs['protocol'] = protocol
-                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, scan_level=scan_level, **scanner_kwargs)
+                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, **scanner_kwargs)
                             
                         scanner_end = int(time.time())
                         self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")

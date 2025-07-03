@@ -86,7 +86,7 @@ class Scanner:
                     "meta": {
                         "operation": "target_scan",
                         "stage": "scan",
-                        "scan_level": scan_level if run == "compliance" else None,
+                        "scan_level": None,
                         "scan_duration": None,
                         "scanners_used": [],
                         "tools_used": [],
@@ -112,16 +112,9 @@ class Scanner:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
 
-            # For compliance, use user-provided scan_level; for all others, default to 1
-            if run == "compliance":
-                scan_level_to_use = scan_level
-            else:
-                scan_level_to_use = 1
-
             scan_results = self.orchestrator.scan(
                 target=original_target,
                 hostname=hostname,
-                scan_level=scan_level_to_use,
                 protocol=protocol,
                 resolved_ip=resolved_ip,
                 scan_timestamp=datetime.now().isoformat()
@@ -142,6 +135,8 @@ class Scanner:
                     scan_type = "web"
                 elif run == "node_scan":
                     scan_type = "node_scan"
+                elif run == "protocol_scan":
+                    scan_type = "protocol"
 
                 data_entries = scan_results["data"]
                 filtered = []
@@ -158,6 +153,16 @@ class Scanner:
                             filtered.append({
                                 "type": "node_scan",
                                 "payload": payload["node_scan"]
+                            })
+                        continue
+                    
+                    # Special handling for protocol_scan - filter to specific protocol
+                    if run == "protocol_scan" and entry.get("type") == "protocol":
+                        payload = entry.get("payload", {})
+                        if protocol and protocol in payload:
+                            filtered.append({
+                                "type": "protocol",
+                                "payload": {protocol: payload[protocol]}
                             })
                         continue
                     
@@ -275,10 +280,11 @@ class Scanner:
         elif run == 'ssl_test':
             return [], ['ssl_test']
         elif run == 'compliance':
-            # For compliance scans, don't specify scanners here
-            # Let the orchestrator use routing logic with protocol
-            return [], []
+            return ['compliance'], []
         elif run == 'node_scan':
             return ['node_scan'], []
+        elif run == 'protocol_scan':
+            # Protocol scan will use protocol-specific scanners based on the protocol parameter
+            return [], []
         else:
-            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan")
+            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan, protocol_scan")

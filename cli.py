@@ -16,7 +16,7 @@ from pgdn.core.result import Result, DictResult
 
 
 def perform_scan(scanner, target: str, hostname: str, run_type: str, 
-                protocol: str, scan_level: int, debug: bool) -> Result:
+                protocol: str, debug: bool) -> Result:
     """
     Perform scan based on run type.
     
@@ -25,8 +25,7 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         target: Target IP or hostname
         hostname: Optional hostname
         run_type: Type of scan to run
-        protocol: Protocol for compliance scans
-        scan_level: Scan level
+        protocol: Protocol for compliance/node_scan/protocol_scan
         debug: Debug mode
         
     Returns:
@@ -37,7 +36,6 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         target=target,
         hostname=hostname,
         run=run_type,
-        scan_level=scan_level,
         protocol=protocol,
         debug=debug
     )
@@ -59,45 +57,19 @@ def main():
     
     # Require --run parameter
     if not args.run:
-        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan")
+        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan, protocol_scan")
         sys.exit(1)
     
-    # Validate compliance scan parameters
-    if args.run == 'compliance':
+    # Validate protocol-requiring scans
+    if args.run in ['compliance', 'node_scan', 'protocol_scan']:
         if not args.protocol:
-            print("❌ Error: --protocol is required when using --run compliance")
-            sys.exit(1)
-        
-        # Validate protocol exists and protocols directory exists
-        from pgdn.protocol_loader import ProtocolLoader
-        from pathlib import Path
-        
-        # Check if protocols directory exists
-        protocols_dir = Path(__file__).parent / "pgdn" / "protocols"
-        if not protocols_dir.exists():
-            print("❌ Error: Protocols directory not found. Compliance scanning requires protocol configurations.")
-            print(f"Expected directory: {protocols_dir}")
-            print("Please ensure the protocols/ directory exists with protocol YAML files.")
-            sys.exit(1)
-        
-        loader = ProtocolLoader()
-        available = loader.list_available_protocols()
-        
-        if not available:
-            print("❌ Error: No protocol configurations found in protocols/ directory.")
-            print("Compliance scanning requires at least one protocol configuration file.")
-            sys.exit(1)
-        
-        if not loader.validate_protocol(args.protocol):
-            print(f"❌ Error: Protocol '{args.protocol}' not found.")
-            print(f"Available protocols: {', '.join(available)}")
-            sys.exit(1)
-    
-    # Validate node_scan parameters
-    if args.run == 'node_scan':
-        if not args.protocol:
-            print("❌ Error: --protocol is required when using --run node_scan")
-            print("Available protocols: sui, arweave, filecoin (built-in) or custom protocols from pgdn/protocols/ directory")
+            print(f"❌ Error: --protocol is required when using --run {args.run}")
+            if args.run == 'compliance':
+                print("Available protocols: sui, arweave, filecoin, etc.")
+            elif args.run == 'node_scan':
+                print("Available protocols: sui, arweave, filecoin (built-in) or custom protocols from pgdn/protocols/ directory")
+            elif args.run == 'protocol_scan':
+                print("Available protocols: sui, arweave, filecoin (advanced protocol scanners)")
             sys.exit(1)
     
     try:
@@ -109,16 +81,6 @@ def main():
         # Create scanner
         scanner = Scanner(config)
         
-        # Determine scan parameters based on --run, --type, and --level
-        scan_level = 1  # Default level
-        if args.run == 'compliance' or args.run == 'node_scan':
-            if args.level:
-                scan_level = args.level
-            elif args.type:
-                scan_level = 1 if args.type == 'basic' else 2
-            else:
-                scan_level = args.scan_level
-        
         # Perform scan based on --run parameter
         result = perform_scan(
             scanner=scanner,
@@ -126,7 +88,6 @@ def main():
             hostname=args.hostname,
             run_type=args.run,
             protocol=args.protocol,
-            scan_level=scan_level,
             debug=args.debug
         )
         
@@ -207,10 +168,13 @@ Examples:
   pgdn --target example.com --run node_scan --protocol arweave
   pgdn --target example.com --run node_scan --protocol filecoin
 
-  # Protocol compliance scans with levels
-  pgdn --target example.com --run compliance --protocol sui --level 1
-  pgdn --target example.com --run compliance --protocol sui --level 3
-  pgdn --target example.com --run compliance --protocol filecoin --level 2
+  # Advanced protocol-specific scanning
+  pgdn --target example.com --run protocol_scan --protocol sui
+  pgdn --target example.com --run protocol_scan --protocol filecoin
+
+  # Compliance scanning
+  pgdn --target example.com --run compliance --protocol sui
+  pgdn --target example.com --run compliance --protocol filecoin
   
   
   # Output formats
@@ -237,35 +201,15 @@ Examples:
     
     parser.add_argument(
         '--run',
-        choices=['web', 'whatweb', 'geo', 'ssl_test', 'compliance', 'node_scan'],
+        choices=['web', 'whatweb', 'geo', 'ssl_test', 'compliance', 'node_scan', 'protocol_scan'],
         help='Run specific scanner type'
     )
     
     parser.add_argument(
         '--protocol',
-        help='Protocol to scan (used with --run compliance and --run node_scan). Available protocols loaded from protocols/ directory or built-in (sui, arweave, filecoin)'
+        help='Protocol to scan (required for compliance, node_scan, and protocol_scan). Available protocols loaded from protocols/ directory or built-in (sui, arweave, filecoin)'
     )
     
-    parser.add_argument(
-        '--type',
-        choices=['basic', 'full'],
-        help='Scan type for protocol scans (basic=level 1, full=level 3) - legacy option'
-    )
-    
-    parser.add_argument(
-        '--level',
-        type=int,
-        choices=[1, 2, 3],
-        help='Scan level for advanced protocol scanners: 1 (basic), 2 (standard), 3 (comprehensive). Used with compliance and node_scan.'
-    )
-    
-    parser.add_argument(
-        '--scan-level',
-        type=int,
-        choices=[1, 2, 3],
-        default=1,
-        help='Legacy parameter. Use --level instead.'
-    )
     
     parser.add_argument(
         '--config',
