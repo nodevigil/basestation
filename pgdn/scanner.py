@@ -107,8 +107,8 @@ class Scanner:
                 enabled_scanners, enabled_external_tools = self._map_run_to_scanners(run)
 
             # Override scanner/tool configuration if specified
-            # For compliance scans, don't override - let orchestrator use routing logic
-            if run != "compliance" and (enabled_scanners is not None or enabled_external_tools is not None):
+            # For compliance and protocol_scan, don't override - let orchestrator use routing logic
+            if run not in ["compliance", "protocol_scan"] and (enabled_scanners is not None or enabled_external_tools is not None):
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
 

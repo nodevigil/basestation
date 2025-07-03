@@ -8,7 +8,6 @@ import logging
 import time
 import socket
 from .base_scanner import ScannerRegistry
-from .routing import get_scanners_for_level
 from ..tools.nmap import nmap_scan
 from ..tools.whatweb import whatweb_scan
 from ..tools.ssltester import ssl_test
@@ -672,7 +671,7 @@ class ScanOrchestrator:
         meta = {
             "operation": "target_scan",
             "stage": "scan",
-            "scan_level": scan_level,
+            "scan_level": None,
             "scan_duration": None,
             "scanners_used": list(scan_results.keys()),
             "tools_used": list(external_tools.keys()),

@@ -218,12 +218,12 @@ class EnhancedSuiScanner(ProtocolScanner):
         self.known_vulnerabilities = self._load_sui_vulnerability_db()
         self.security_baselines = self._load_sui_security_baselines()
 
-    async def scan_protocol(self, target: str, scan_level: int, **kwargs) -> Dict[str, Any]:
+    async def scan_protocol(self, target: str, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Sui protocol-specific scan.
         
         Args:
             target: Target IP address or hostname to scan
-            scan_level: Scan intensity level (1-3)
+            scan_level: Scan intensity level (1-3, default: 1)
             **kwargs: Additional scan parameters
             
         Returns:

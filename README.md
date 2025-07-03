@@ -4,7 +4,7 @@ PGDN (Programmatic Global DePIN Network) is a specialized security scanning plat
 
 ## 🚀 Features
 
-- **Progressive Scan Levels**: 3-tier scanning system (basic, standard, comprehensive)
+- **Simplified Scanning**: Clean CLI interface with distinct scan types
 - **Protocol-Specific Scanning**: Modular protocol scanners for Sui, Filecoin, and extensible architecture for new protocols
 - **Compliance Scanning**: Fast security compliance assessment focusing on dangerous ports and exposed services
 - **Single-Target Focus**: Streamlined scanning of individual infrastructure nodes
@@ -48,14 +48,20 @@ pgdn --target example.com --run whatweb      # Web technology fingerprinting
 pgdn --target example.com --run geo          # Geographic location detection
 pgdn --target example.com --run ssl_test     # SSL/TLS certificate analysis
 
+# Node scanning with protocol-specific probes (requires protocol)
+pgdn --target example.com --run node_scan --protocol sui
+pgdn --target example.com --run node_scan --protocol arweave
+pgdn --target example.com --run node_scan --protocol filecoin
+
+# Advanced protocol-specific scanning (requires protocol)
+pgdn --target example.com --run protocol_scan --protocol sui
+pgdn --target example.com --run protocol_scan --protocol filecoin
+
 # Compliance scanning (requires protocol)
-pgdn --target example.com --run compliance --protocol sui --level 1     # Basic compliance
-pgdn --target example.com --run compliance --protocol filecoin --level 3 # Comprehensive compliance
+pgdn --target example.com --run compliance --protocol sui
+pgdn --target example.com --run compliance --protocol filecoin
 
-# Node scanning (requires protocol)
-pgdn --target example.com --run node_scan --protocol sui --level 2      # Protocol-specific node health
-
-# List available protocol scanners and their levels
+# List available protocol scanners
 pgdn --list-protocols
 
 # Output formats
@@ -72,8 +78,25 @@ whatweb scanner: Fingerprints web technologies and frameworks.
 geo scanner: Performs GeoIP lookups to determine geographic location and ASN of the target.
 ssl_test scanner: Analyzes SSL/TLS certificates for security compliance and vulnerabilities.
 
-## Node Scanning
-Node scanner performs basic node health checks and connectivity tests on known ports for a specific protocol.
+## 📡 Node Scanning
+
+Node scanner performs protocol-specific probes and connectivity tests using YAML protocol configurations. It uses generic probes for multi-protocol scanning with protocol-specific payloads and signature detection.
+
+```bash
+# Protocol-specific node scanning
+pgdn --target validator-node.com --run node_scan --protocol sui
+pgdn --target validator-node.com --run node_scan --protocol filecoin
+```
+
+## 🔧 Protocol Scanning
+
+Advanced protocol scanners provide deep analysis using specialized scanners for each protocol. These scanners offer comprehensive protocol-specific features and health checks.
+
+```bash
+# Advanced protocol-specific scanning
+pgdn --target validator-node.com --run protocol_scan --protocol sui
+pgdn --target validator-node.com --run protocol_scan --protocol filecoin
+```
 
 ## 🔍 Compliance Scanning
 
@@ -102,11 +125,11 @@ The scanner checks for **98 dangerous ports** including:
 ### Compliance Scan Usage
 
 ```bash
-# Basic compliance scan
-pgdn --target validator-node.com --run compliance --protocol sui --level 1
+# Compliance scanning
+pgdn --target validator-node.com --run compliance --protocol sui
 
-# Comprehensive compliance scan with detailed analysis
-pgdn --target validator-node.com --run compliance --protocol filecoin --level 3
+# Different protocols
+pgdn --target validator-node.com --run compliance --protocol filecoin
 
 # Human-readable compliance report
 pgdn --target validator-node.com --run compliance --protocol sui --human
@@ -155,16 +178,30 @@ from pgdn import Scanner, Config
 # Initialize scanner with default configuration
 scanner = Scanner()
 
-# Basic target scanning
+# Basic web scanning
 result = scanner.scan(
     target='192.168.1.100',
-    scan_level=2
+    run='web'
 )
 
-# Protocol-specific scanning
+# Protocol-specific node scanning
 result = scanner.scan(
     target='192.168.1.100',
-    scan_level=2,
+    run='node_scan',
+    protocol='sui'
+)
+
+# Advanced protocol scanning
+result = scanner.scan(
+    target='192.168.1.100',
+    run='protocol_scan',
+    protocol='sui'
+)
+
+# Compliance scanning
+result = scanner.scan(
+    target='192.168.1.100',
+    run='compliance',
     protocol='sui'
 )
 
@@ -190,8 +227,9 @@ The library usage directly mirrors the CLI structure with a simplified `run` par
 | `pgdn --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
 | `pgdn --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
 | `pgdn --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
-| `pgdn --target example.com --run compliance --protocol sui --level 1` | `scanner.scan(target='example.com', run='compliance', protocol='sui', scan_level=1)` |
 | `pgdn --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
+| `pgdn --target example.com --run protocol_scan --protocol sui` | `scanner.scan(target='example.com', run='protocol_scan', protocol='sui')` |
+| `pgdn --target example.com --run compliance --protocol sui` | `scanner.scan(target='example.com', run='compliance', protocol='sui')` |
 
 #### Advanced Configuration
 
