@@ -12,6 +12,13 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
+# Optional import for requests (needed for WAF detection)
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 
 class WebScanner(BaseScanner):
     """Web scanner for HTTP/HTTPS specific testing."""
@@ -142,7 +149,8 @@ class WebScanner(BaseScanner):
                     "content_length": len(response.content),
                     "redirects": len(response.history),
                     "final_url": str(response.url),
-                    "server": response.headers.get('server')
+                    "server": response.headers.get('server'),
+                    "waf": self._detect_waf(url)
                 }
                 
         except Exception as e:
@@ -179,6 +187,11 @@ class WebScanner(BaseScanner):
                 # Add enhanced detection
                 result["technologies"] = self._detect_technologies(response)
                 result["security_headers"] = self._check_security_headers(response.headers)
+                
+                # Add WAF detection
+                waf_info = self._detect_waf(url)
+                if waf_info:
+                    result["waf"] = waf_info
                 
                 return result
                 
@@ -339,3 +352,97 @@ class WebScanner(BaseScanner):
             self.logger.debug(f"Debug endpoint check failed for {base_url}: {e}")
         
         return debug_endpoints
+
+    def _detect_waf(self, url: str) -> Optional[Dict[str, Any]]:
+        """Detect Web Application Firewall.
+        
+        Args:
+            url: Base URL to test for WAF
+            
+        Returns:
+            WAF detection results or None if no WAF detected
+        """
+        if not HAS_REQUESTS:
+            self.logger.debug("requests library not available for WAF detection")
+            return None
+        
+        try:
+            # Test with suspicious payload to trigger WAF
+            test_payloads = [
+                "?id=1' OR '1'='1",
+                "?test=<script>alert('xss')</script>",
+                "?cmd=cat /etc/passwd",
+                "?file=../../../../etc/passwd"
+            ]
+            
+            waf_indicators = {
+                "cloudflare": ["cloudflare", "cf-ray", "cf-cache", "cloudflare-nginx"],
+                "akamai": ["akamai", "x-akamai", "akamai-ghost"],
+                "aws": ["x-amzn", "cloudfront", "x-amz"],
+                "sucuri": ["x-sucuri", "sucuri"],
+                "incapsula": ["incap_ses", "incapsula", "x-iinfo"],
+                "barracuda": ["barracuda", "barra"],
+                "f5": ["f5", "bigip", "x-waf-event"],
+                "imperva": ["imperva", "x-iinfo"],
+                "mod_security": ["mod_security", "modsecurity"],
+                "wordfence": ["wordfence", "x-wordfence"],
+                "comodo": ["comodo", "x-protected-by"]
+            }
+            
+            for payload in test_payloads:
+                try:
+                    test_url = url.rstrip('/') + payload
+                    response = requests.get(
+                        test_url, 
+                        timeout=self.timeout,
+                        verify=False,
+                        allow_redirects=False,
+                        headers={'User-Agent': self.user_agent}
+                    )
+                    
+                    response_text = response.text.lower()
+                    response_headers = {k.lower(): v.lower() for k, v in response.headers.items()}
+                    
+                    # Check for WAF signatures in headers and content
+                    for waf_name, indicators in waf_indicators.items():
+                        for indicator in indicators:
+                            if (indicator in response_text or 
+                                any(indicator in h for h in response_headers.keys()) or
+                                any(indicator in v for v in response_headers.values())):
+                                return {
+                                    "detected": True, 
+                                    "type": waf_name, 
+                                    "method": "signature",
+                                    "indicator": indicator,
+                                    "payload": payload
+                                }
+                    
+                    # Generic WAF detection based on response behavior
+                    if response.status_code in [403, 406, 429, 418]:
+                        # Check for common WAF block messages
+                        block_indicators = [
+                            "blocked", "denied", "forbidden", "not allowed",
+                            "security", "firewall", "protection", "suspicious",
+                            "malicious", "attack", "threat"
+                        ]
+                        
+                        for block_word in block_indicators:
+                            if block_word in response_text:
+                                return {
+                                    "detected": True, 
+                                    "type": "unknown", 
+                                    "method": "behavior",
+                                    "status_code": response.status_code,
+                                    "payload": payload,
+                                    "block_indicator": block_word
+                                }
+                    
+                except requests.exceptions.RequestException:
+                    # Connection errors might indicate WAF blocking
+                    continue
+            
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"WAF detection failed for {url}: {e}")
+            return None

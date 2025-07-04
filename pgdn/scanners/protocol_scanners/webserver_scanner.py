@@ -126,6 +126,14 @@ class WebServerScanner(ProtocolScanner):
                 if tech_info:
                     results['technologies'].extend(tech_info)
         
+        # Add WAF detection at level 1
+        if results.get('web_server_detected'):
+            waf_info = self._detect_waf(target)
+            results['waf'] = waf_info  # Include even if None/null
+        
+        # Remove duplicate technologies
+        results['technologies'] = list(set(results['technologies']))
+        
         return results
 
     async def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
@@ -137,8 +145,7 @@ class WebServerScanner(ProtocolScanner):
         if results.get('web_server_detected'):
             # WAF detection
             waf_info = self._detect_waf(target)
-            if waf_info:
-                results['waf'] = waf_info
+            results['waf'] = waf_info  # Include even if None/null
             
             # Security headers analysis
             security_headers = self._analyze_security_headers(results.get('http_headers', {}))
@@ -148,6 +155,9 @@ class WebServerScanner(ProtocolScanner):
             extended_tech = self._fingerprint_extended_technologies(target)
             if extended_tech:
                 results['technologies'].extend(extended_tech)
+            
+            # Remove duplicate technologies
+            results['technologies'] = list(set(results['technologies']))
         
         return results
 
