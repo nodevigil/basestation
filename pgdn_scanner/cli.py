@@ -10,9 +10,9 @@ import json
 import traceback
 from typing import Dict, Any
 
-from pgdn.scanner import Scanner
-from pgdn.core.config import Config
-from pgdn.core.result import Result, DictResult
+from .scanner import Scanner
+from .core.config import Config
+from .core.result import Result, DictResult
 
 
 def perform_scan(scanner, target: str, hostname: str, run_type: str, 
@@ -110,12 +110,17 @@ def main():
                     return obj.value
                 raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
             
+            # Use pretty printing only when --pretty flag is specified
+            json_kwargs = {'default': datetime_serializer}
+            if args.pretty:
+                json_kwargs['indent'] = 2
+            
             if result.is_success() and isinstance(result.data, dict):
                 # Output the scanner's structured data directly (already has "data" and "meta" at root)
-                print(json.dumps(result.data, indent=2, default=datetime_serializer))
+                print(json.dumps(result.data, **json_kwargs))
             else:
                 # Fallback to the Result structure for errors/warnings
-                print(result.to_json(indent=2))
+                print(result.to_json(**json_kwargs))
         elif args.human:
             print_human_readable(result)
         else:
@@ -128,11 +133,17 @@ def main():
     except KeyboardInterrupt:
         error_result = DictResult.from_error("Operation cancelled by user")
         if args.json:
-            print(error_result.to_json())
+            json_kwargs = {}
+            if args.pretty:
+                json_kwargs['indent'] = 2
+            print(error_result.to_json(**json_kwargs))
         elif args.human:
             print(f"\n⚠️  {error_result.error}")
         else:
-            print(error_result.to_json())
+            json_kwargs = {}
+            if args.pretty:
+                json_kwargs['indent'] = 2
+            print(error_result.to_json(**json_kwargs))
         sys.exit(1)
         
     except Exception as e:
@@ -142,11 +153,17 @@ def main():
         
         error_result = DictResult.from_error(f"Unexpected error: {str(e)}")
         if args.json:
-            print(error_result.to_json())
+            json_kwargs = {}
+            if args.pretty:
+                json_kwargs['indent'] = 2
+            print(error_result.to_json(**json_kwargs))
         elif args.human:
             print(f"❌ {error_result.error}")
         else:
-            print(error_result.to_json())
+            json_kwargs = {}
+            if args.pretty:
+                json_kwargs['indent'] = 2
+            print(error_result.to_json(**json_kwargs))
         sys.exit(1)
 
 
@@ -158,28 +175,29 @@ def parse_arguments():
         epilog="""
 Examples:
   # Individual scanner runs
-  pgdn --target example.com --run web
-  pgdn --target example.com --run whatweb
-  pgdn --target example.com --run geo
-  pgdn --target example.com --run ssl_test
+  pgdn-scanner --target example.com --run web
+  pgdn-scanner --target example.com --run whatweb
+  pgdn-scanner --target example.com --run geo
+  pgdn-scanner --target example.com --run ssl_test
   
   # Node scanning with protocol-specific probes
-  pgdn --target example.com --run node_scan --protocol sui
-  pgdn --target example.com --run node_scan --protocol arweave
-  pgdn --target example.com --run node_scan --protocol filecoin
+  pgdn-scanner --target example.com --run node_scan --protocol sui
+  pgdn-scanner --target example.com --run node_scan --protocol arweave
+  pgdn-scanner --target example.com --run node_scan --protocol filecoin
 
   # Advanced protocol-specific scanning
-  pgdn --target example.com --run protocol_scan --protocol sui
-  pgdn --target example.com --run protocol_scan --protocol filecoin
+  pgdn-scanner --target example.com --run protocol_scan --protocol sui
+  pgdn-scanner --target example.com --run protocol_scan --protocol filecoin
 
   # Compliance scanning
-  pgdn --target example.com --run compliance --protocol sui
-  pgdn --target example.com --run compliance --protocol filecoin
+  pgdn-scanner --target example.com --run compliance --protocol sui
+  pgdn-scanner --target example.com --run compliance --protocol filecoin
   
   
   # Output formats
-  pgdn --target example.com --run web --json     # Pure JSON
-  pgdn --target example.com --run web --human    # Human-readable
+  pgdn-scanner --target example.com --run web --json        # Compact JSON output
+  pgdn-scanner --target example.com --run web --json --pretty  # Pretty-printed JSON
+  pgdn-scanner --target example.com --run web --human       # Human-readable
         """
     )
     
@@ -219,7 +237,13 @@ Examples:
     parser.add_argument(
         '--json',
         action='store_true',
-        help='Return results in pure JSON format'
+        help='Return results in JSON format (compact by default)'
+    )
+    
+    parser.add_argument(
+        '--pretty',
+        action='store_true',
+        help='Pretty-print JSON output (requires --json)'
     )
     
     parser.add_argument(
@@ -321,7 +345,7 @@ def print_human_readable(result: DictResult):
 def list_protocol_scanners():
     """List available protocol scanners and their supported levels."""
     try:
-        from pgdn.protocol_loader import ProtocolLoader
+        from .protocol_loader import ProtocolLoader
         
         print("📋 Available Scanner Types:")
         print("=" * 50)
@@ -349,17 +373,17 @@ def list_protocol_scanners():
         
         print("\n📝 USAGE EXAMPLES:")
         print("   # Individual scanners")
-        print("   pgdn --target example.com --run web")
-        print("   pgdn --target example.com --run whatweb")
-        print("   pgdn --target example.com --run geo")
-        print("   pgdn --target example.com --run ssl_test")
-        print("   pgdn --target example.com --run node_scan --protocol sui")
+        print("   pgdn-scanner --target example.com --run web")
+        print("   pgdn-scanner --target example.com --run whatweb")
+        print("   pgdn-scanner --target example.com --run geo")
+        print("   pgdn-scanner --target example.com --run ssl_test")
+        print("   pgdn-scanner --target example.com --run node_scan --protocol sui")
         
         print("\n   # Protocol compliance scans")
         if protocols:
             for protocol in protocols[:2]:  # Show first 2 as examples
-                print(f"   pgdn --target example.com --run compliance --protocol {protocol} --level 1")
-                print(f"   pgdn --target example.com --run compliance --protocol {protocol} --level 3")
+                print(f"   pgdn-scanner --target example.com --run compliance --protocol {protocol} --level 1")
+                print(f"   pgdn-scanner --target example.com --run compliance --protocol {protocol} --level 3")
         
         print("\n📊 SCAN LEVELS (for compliance and node_scan):")
         print("   • --level 1  - Basic detection")

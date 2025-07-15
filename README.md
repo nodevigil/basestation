@@ -18,6 +18,11 @@ PGDN (Programmatic Global DePIN Network) is a specialized security scanning plat
 
 ## 📦 Installation
 
+### From PyPI
+```bash
+pip install pgdn-scanner
+```
+
 ### From Source
 ```bash
 git clone https://github.com/pgdn-network/pgdn-scanner
@@ -43,30 +48,30 @@ python setup.py develop   # Development mode installation
 
 ```bash
 # Individual scanner runs
-pgdn --target example.com --run web          # Web service detection
-pgdn --target example.com --run whatweb      # Web technology fingerprinting  
-pgdn --target example.com --run geo          # Geographic location detection
-pgdn --target example.com --run ssl_test     # SSL/TLS certificate analysis
+pgdn-scanner --target example.com --run web          # Web service detection
+pgdn-scanner --target example.com --run whatweb      # Web technology fingerprinting  
+pgdn-scanner --target example.com --run geo          # Geographic location detection
+pgdn-scanner --target example.com --run ssl_test     # SSL/TLS certificate analysis
 
 # Node scanning with protocol-specific probes (requires protocol)
-pgdn --target example.com --run node_scan --protocol sui
-pgdn --target example.com --run node_scan --protocol arweave
-pgdn --target example.com --run node_scan --protocol filecoin
+pgdn-scanner --target example.com --run node_scan --protocol sui
+pgdn-scanner --target example.com --run node_scan --protocol arweave
+pgdn-scanner --target example.com --run node_scan --protocol filecoin
 
 # Advanced protocol-specific scanning (requires protocol)
-pgdn --target example.com --run protocol_scan --protocol sui
-pgdn --target example.com --run protocol_scan --protocol filecoin
+pgdn-scanner --target example.com --run protocol_scan --protocol sui
+pgdn-scanner --target example.com --run protocol_scan --protocol filecoin
 
 # Compliance scanning (requires protocol)
-pgdn --target example.com --run compliance --protocol sui
-pgdn --target example.com --run compliance --protocol filecoin
+pgdn-scanner --target example.com --run compliance --protocol sui
+pgdn-scanner --target example.com --run compliance --protocol filecoin
 
 # List available protocol scanners
-pgdn --list-protocols
+pgdn-scanner --list-protocols
 
 # Output formats
-pgdn --target example.com --run web --json      # Pure JSON output
-pgdn --target example.com --run compliance --protocol sui --human  # Human-readable
+pgdn-scanner --target example.com --run web --json      # Pure JSON output
+pgdn-scanner --target example.com --run compliance --protocol sui --human  # Human-readable
 ```
 
 ## 📜 Basic Scanning
@@ -84,8 +89,8 @@ Node scanner performs protocol-specific probes and connectivity tests using YAML
 
 ```bash
 # Protocol-specific node scanning
-pgdn --target validator-node.com --run node_scan --protocol sui
-pgdn --target validator-node.com --run node_scan --protocol filecoin
+pgdn-scanner --target validator-node.com --run node_scan --protocol sui
+pgdn-scanner --target validator-node.com --run node_scan --protocol filecoin
 ```
 
 ## 🔧 Protocol Scanning
@@ -94,8 +99,8 @@ Advanced protocol scanners provide deep analysis using specialized scanners for 
 
 ```bash
 # Advanced protocol-specific scanning
-pgdn --target validator-node.com --run protocol_scan --protocol sui
-pgdn --target validator-node.com --run protocol_scan --protocol filecoin
+pgdn-scanner --target validator-node.com --run protocol_scan --protocol sui
+pgdn-scanner --target validator-node.com --run protocol_scan --protocol filecoin
 ```
 
 ## 🔍 Compliance Scanning
@@ -126,16 +131,16 @@ The scanner checks for **98 dangerous ports** including:
 
 ```bash
 # Compliance scanning
-pgdn --target validator-node.com --run compliance --protocol sui
+pgdn-scanner --target validator-node.com --run compliance --protocol sui
 
 # Different protocols
-pgdn --target validator-node.com --run compliance --protocol filecoin
+pgdn-scanner --target validator-node.com --run compliance --protocol filecoin
 
 # Human-readable compliance report
-pgdn --target validator-node.com --run compliance --protocol sui --human
+pgdn-scanner --target validator-node.com --run compliance --protocol sui --human
 
 # JSON output for automation
-pgdn --target validator-node.com --run compliance --protocol sui --json
+pgdn-scanner --target validator-node.com --run compliance --protocol sui --json
 ```
 
 ### Compliance Results
@@ -170,10 +175,12 @@ The scanner returns a compliance score (0-100) and detailed findings:
 
 The PGDN library provides a clean, simplified API for programmatic scanning operations. The main entry point is the `Scanner` class which handles all scanning complexity internally.
 
+**Note:** The package is installed as `pgdn-scanner`, but you import it as `pgdn_scanner`:
+
 #### Basic Usage
 
 ```python
-from pgdn import Scanner, Config
+from pgdn_scanner import Scanner, Config  # Import as 'pgdn_scanner'
 
 # Initialize scanner with default configuration
 scanner = Scanner()
@@ -223,18 +230,18 @@ The library usage directly mirrors the CLI structure with a simplified `run` par
 
 | CLI Command | Library Equivalent |
 |-------------|-------------------|
-| `pgdn --target example.com --run web` | `scanner.scan(target='example.com', run='web')` |
-| `pgdn --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
-| `pgdn --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
-| `pgdn --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
-| `pgdn --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
-| `pgdn --target example.com --run protocol_scan --protocol sui` | `scanner.scan(target='example.com', run='protocol_scan', protocol='sui')` |
-| `pgdn --target example.com --run compliance --protocol sui` | `scanner.scan(target='example.com', run='compliance', protocol='sui')` |
+| `pgdn-scanner --target example.com --run web` | `scanner.scan(target='example.com', run='web')` |
+| `pgdn-scanner --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
+| `pgdn-scanner --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
+| `pgdn-scanner --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
+| `pgdn-scanner --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
+| `pgdn-scanner --target example.com --run protocol_scan --protocol sui` | `scanner.scan(target='example.com', run='protocol_scan', protocol='sui')` |
+| `pgdn-scanner --target example.com --run compliance --protocol sui` | `scanner.scan(target='example.com', run='compliance', protocol='sui')` |
 
 #### Advanced Configuration
 
 ```python
-from pgdn import Scanner, Config
+from pgdn_scanner import Scanner, Config
 
 # Load custom configuration
 config = Config.from_file('config.json')
@@ -262,7 +269,7 @@ result = scanner.scan(
 The library follows the same pattern as the CLI with individual scanner types:
 
 ```python
-from pgdn import Scanner
+from pgdn_scanner import Scanner
 
 scanner = Scanner()
 
@@ -296,7 +303,7 @@ result = scanner.scan(
 Compliance scanning requires a protocol and follows the CLI pattern:
 
 ```python
-from pgdn import Scanner
+from pgdn_scanner import Scanner
 
 scanner = Scanner()
 
@@ -322,7 +329,7 @@ result = scanner.scan(
 Node scanning requires a protocol and follows the CLI pattern:
 
 ```python
-from pgdn import Scanner
+from pgdn_scanner import Scanner
 
 scanner = Scanner()
 
@@ -390,7 +397,7 @@ All scan results return a `DictResult` object (which is a `Result[Dict[str, Any]
 #### Error Handling
 
 ```python
-from pgdn import Scanner
+from pgdn_scanner import Scanner
 
 scanner = Scanner()
 
@@ -522,7 +529,7 @@ PGDN provides a template-based system for easily adding support for new DePIN pr
 
 5. **Test your scanner**:
    ```bash
-   pgdn --target arweave-node.com --run compliance --protocol arweave --level 1
+   pgdn-scanner --target arweave-node.com --run compliance --protocol arweave --level 1
    ```
 
 ### Template Features
@@ -608,7 +615,7 @@ Protocol scanners now support multiple scan levels with different intensities:
 
 ```bash
 # List all available scanners and protocols
-pgdn --list-protocols
+pgdn-scanner --list-protocols
 ```
 
 This will show you:

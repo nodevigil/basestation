@@ -184,8 +184,8 @@ class EnhancedArweaveScanner(ProtocolScanner):
         # Extract ports from kwargs or use defaults
         ports = kwargs.get('ports', self.default_ports)
         
-        self.logger.info(f"🔍 Starting Arweave protocol scan on {target}" + (f" (hostname: {hostname})" if hostname else ""))
-        self.logger.info(f"📊 Scan configuration: level={scan_level}, ports={ports}, timeout={self.timeout}s")
+        self.logger.info(f"Starting Arweave protocol scan on {target}" + (f" (hostname: {hostname})" if hostname else ""))
+        self.logger.info(f"Scan configuration: level={scan_level}, ports={ports}, timeout={self.timeout}s")
         
         # Convert scan_level to ScanLevel enum
         scan_level_enum = ScanLevel.LITE
@@ -194,14 +194,14 @@ class EnhancedArweaveScanner(ProtocolScanner):
         elif scan_level == 3:
             scan_level_enum = ScanLevel.FEROCIOUS
             
-        self.logger.debug(f"🎯 Scan level mapped to: {scan_level_enum.name}")
+        self.logger.debug(f"Scan level mapped to: {scan_level_enum.name}")
         
         # Temporarily update scan level
         original_scan_level = self.scan_level
         self.scan_level = scan_level_enum
         
         try:
-            self.logger.info(f"🚀 Executing Arweave enhanced scan")
+            self.logger.info(f"Executing Arweave enhanced scan")
             # Perform the scan using the existing scan method
             results = await self.scan(target, hostname, ports)
             
@@ -211,11 +211,11 @@ class EnhancedArweaveScanner(ProtocolScanner):
             success_rate = successful_scans / len(ports) if ports else 0
             
             if successful_scans > 0:
-                self.logger.info(f"✅ Found {successful_scans} Arweave node(s) on {target}")
-                self.logger.debug(f"💚 Healthy nodes: {healthy_nodes}/{successful_scans}")
-                self.logger.debug(f"📈 Success rate: {success_rate:.1%}")
+                self.logger.info(f"Found {successful_scans} Arweave node(s) on {target}")
+                self.logger.debug(f"Healthy nodes: {healthy_nodes}/{successful_scans}")
+                self.logger.debug(f"Success rate: {success_rate:.1%}")
             else:
-                self.logger.warning(f"❌ No Arweave nodes detected on {target}")
+                self.logger.warning(f"No Arweave nodes detected on {target}")
             
             # Convert results to dictionary format expected by the framework
             return {
@@ -241,8 +241,8 @@ class EnhancedArweaveScanner(ProtocolScanner):
         if ports is None:
             ports = self.default_ports
             
-        self.logger.debug(f"🔍 Starting Arweave port scan on {ip}" + (f" via hostname {hostname}" if hostname else ""))
-        self.logger.debug(f"📊 Scan level: {self.scan_level.name}, ports: {ports}")
+        self.logger.debug(f"Starting Arweave port scan on {ip}" + (f" via hostname {hostname}" if hostname else ""))
+        self.logger.debug(f"Scan level: {self.scan_level.name}, ports: {ports}")
         
         # Add overall timeout to prevent hanging (5 minutes max)
         try:
@@ -256,28 +256,28 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         # Rate limiting
         if self.rate_limit_delay > 0:
-            self.logger.debug(f"⏱️  Rate limiting: waiting {self.rate_limit_delay}s")
+            self.logger.debug(f"Rate limiting: waiting {self.rate_limit_delay}s")
             await asyncio.sleep(self.rate_limit_delay)
         
         scan_start = time.time()
         results = []
         
-        self.logger.debug(f"🚀 Beginning port scanning on {len(ports)} Arweave ports")
+        self.logger.debug(f"Beginning port scanning on {len(ports)} Arweave ports")
         for i, port in enumerate(ports, 1):
-            self.logger.debug(f"📡 Scanning port {port} ({i}/{len(ports)})")
+            self.logger.debug(f"Scanning port {port} ({i}/{len(ports)})")
             result = await self._scan_port(ip, port, hostname)
             if result:
-                self.logger.debug(f"✅ Port {port}: Arweave node detected (healthy: {result.healthy})")
+                self.logger.debug(f"Port {port}: Arweave node detected (healthy: {result.healthy})")
                 results.append(result)
             else:
-                self.logger.debug(f"❌ Port {port}: No Arweave node detected")
+                self.logger.debug(f"Port {port}: No Arweave node detected")
         
         if results:
-            self.logger.debug(f"📈 Updating Arweave network baseline with {len(results)} results")
+            self.logger.debug(f"Updating Arweave network baseline with {len(results)} results")
             # Update network baseline for comparative analysis
             self._update_network_baseline(results)
         else:
-            self.logger.debug(f"⚠️  No baseline update - no results found")
+            self.logger.debug(f"No baseline update - no results found")
         
         # Calculate scan metadata
         scan_duration = (time.time() - scan_start) * 1000
@@ -292,7 +292,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         host_for_url = hostname if hostname else ip
         base_url = f"http://{host_for_url}:{port}"
         
-        self.logger.debug(f"🔍 Analyzing Arweave port {port} on {ip}" + (f" via hostname {hostname}" if hostname else ""))
+        self.logger.debug(f"Analyzing Arweave port {port} on {ip}" + (f" via hostname {hostname}" if hostname else ""))
         self.logger.debug(f"🌐 Base URL: {base_url}")
         
         # Initialize result with comprehensive structure

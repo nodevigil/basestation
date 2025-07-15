@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pgdn"
-version = "1.0.1"
+name = "pgdn-scanner"
+version = "1.1.0"
 description = "PGDN - DePIN Infrastructure Scanner Library"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -27,11 +27,13 @@ dependencies = [
     "requests>=2.31.0",
     "httpx>=0.25.0",
     "typing-extensions>=4.0.0",
-    "pytest>=7.0.0"
+    "pytest>=7.0.0",
+    "pyyaml>=6.0.0",
+    "pydantic>=2.0.0"
 ]
 
 [project.scripts]
-pgdn = "pgdn_entry:main"
+pgdn-scanner = "pgdn_entry:main"
 
 [project.urls]
 Homepage = "https://github.com/pgdn-network/pgdn-scanner"

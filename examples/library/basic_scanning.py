@@ -5,7 +5,7 @@ Basic PGDN Scanning Example
 This example demonstrates simple target scanning using the PGDN library.
 """
 
-from pgdn import initialize_application, Scanner, load_targets_from_file
+from pgdn_scanner import initialize_application, Scanner, load_targets_from_file
 
 def main():
     # Initialize PGDN with default configuration

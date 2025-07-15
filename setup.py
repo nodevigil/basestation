@@ -10,8 +10,8 @@ def read_requirements():
         return [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
 setup(
-    name="pgdn",
-    version="1.0.1",
+    name="pgdn-scanner",
+    version="1.1.0",
     description="PGDN - DePIN Infrastructure Scanner Library",
     long_description="A clean library for DePIN infrastructure scanning with support for custom scanners like Sui and Filecoin.",
     author="DePIN Team",
@@ -19,14 +19,14 @@ setup(
     url="",
     packages=find_packages(),
     package_data={
-        'pgdn': ['protocols/*.yaml', 'protocols/*.yml'],
+        'pgdn_scanner': ['protocols/*.yaml', 'protocols/*.yml'],
     },
     include_package_data=True,
-    py_modules=['cli', 'pgdn_entry'],
+    py_modules=['pgdn_entry'],
     install_requires=read_requirements(),
     entry_points={
         'console_scripts': [
-            'pgdn=pgdn_entry:main',
+            'pgdn-scanner=pgdn_entry:main',
         ],
     },
     classifiers=[
