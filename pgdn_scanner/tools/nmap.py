@@ -274,7 +274,7 @@ if __name__ == "__main__":
     logger.info(f"Scanning {ip} (fast_mode={fast_mode})")
     result = nmap_scan(ip, ports=ports, timeout=timeout, fast_mode=fast_mode)
     
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result))
 
     # Analyze results
     # analysis = analyze_scan_results(result)

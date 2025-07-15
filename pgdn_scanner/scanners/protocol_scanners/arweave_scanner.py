@@ -1277,7 +1277,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
     def export_results(self, results: List[ArweaveScanResult], format: str = 'json') -> str:
         """Export comprehensive scan results in various formats"""
         if format == 'json':
-            return json.dumps([asdict(r) for r in results], indent=2, default=str)
+            return json.dumps([asdict(r) for r in results], default=str)
         
         elif format == 'trust_scoring':
             # Export format optimized for trust scoring engines
@@ -1288,7 +1288,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     'timestamp': result.timestamp.isoformat(),
                     'trust_inputs': self.get_trust_scoring_data(result)
                 })
-            return json.dumps(trust_data, indent=2, default=str)
+            return json.dumps(trust_data, default=str)
         
         elif format == 'compliance_report':
             # Generate compliance-focused report
@@ -1317,7 +1317,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             compliance_summary['compliance_violations'] = all_flags
             compliance_summary['security_findings'] = all_misconfigs
             
-            return json.dumps(compliance_summary, indent=2, default=str)
+            return json.dumps(compliance_summary, default=str)
         
         elif format == 'csv':
             # CSV export for spreadsheet analysis

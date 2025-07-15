@@ -134,7 +134,7 @@ class Result(BaseModel, Generic[T]):
     
     def __str__(self) -> str:
         """String representation of the Result."""
-        return self.to_json(indent=2)
+        return self.to_json()
     
     def __repr__(self) -> str:
         """Detailed representation of the Result."""

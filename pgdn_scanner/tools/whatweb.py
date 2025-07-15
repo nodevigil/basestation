@@ -50,4 +50,4 @@ if __name__ == "__main__":
     
     print(f"Running WhatWeb scan on {ip}:{port}...")
     result = whatweb_scan(ip, port)
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result))

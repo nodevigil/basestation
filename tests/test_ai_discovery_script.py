@@ -39,7 +39,7 @@ def quick_ai_test(hostname, test_data=None):
         test_data = create_sample_scan_data(hostname)
     
     print(f"\n🤖 Testing AI detection for: {hostname}")
-    print(f"📊 Test data: {json.dumps(test_data, indent=2)}")
+    print(f"📊 Test data: {json.dumps(test_data)}")
     print("-" * 60)
     
     # Run AI analysis

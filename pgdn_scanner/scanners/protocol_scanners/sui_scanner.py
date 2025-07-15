@@ -1585,7 +1585,7 @@ class EnhancedSuiScanner(ProtocolScanner):
     def export_results(self, results: List[SuiScanResult], format: str = 'json') -> str:
         """Export comprehensive Sui scan results"""
         if format == 'json':
-            return json.dumps([asdict(r) for r in results], indent=2, default=str)
+            return json.dumps([asdict(r) for r in results], default=str)
         
         elif format == 'trust_scoring':
             trust_data = []
@@ -1596,7 +1596,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     'protocol': 'sui',
                     'trust_inputs': self.get_trust_scoring_data(result)
                 })
-            return json.dumps(trust_data, indent=2, default=str)
+            return json.dumps(trust_data, default=str)
         
         elif format == 'validator_report':
             # Sui-specific validator analysis report
@@ -1630,7 +1630,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             
             validator_summary['validator_issues'] = all_validator_issues
             
-            return json.dumps(validator_summary, indent=2, default=str)
+            return json.dumps(validator_summary, default=str)
         
         elif format == 'csv':
             csv_lines = []
