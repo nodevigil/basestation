@@ -16,7 +16,7 @@ from .core.result import Result, DictResult
 
 
 def perform_scan(scanner, target: str, hostname: str, run_type: str, 
-                protocol: str, debug: bool) -> Result:
+                protocol: str, port: str, skip_nmap: bool, debug: bool) -> Result:
     """
     Perform scan based on run type.
     
@@ -26,19 +26,28 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         hostname: Optional hostname
         run_type: Type of scan to run
         protocol: Protocol for compliance/node_scan/protocol_scan
+        port: Port(s) for port_scan
+        skip_nmap: Skip nmap for port_scan
         debug: Debug mode
         
     Returns:
         Result object
     """
     # Use the new 'run' parameter instead of legacy enabled_scanners/enabled_external_tools
-    return scanner.scan(
-        target=target,
-        hostname=hostname,
-        run=run_type,
-        protocol=protocol,
-        debug=debug
-    )
+    scan_kwargs = {
+        'target': target,
+        'hostname': hostname,
+        'run': run_type,
+        'protocol': protocol,
+        'debug': debug
+    }
+    
+    # Add port-specific parameters for port_scan
+    if run_type == 'port_scan':
+        scan_kwargs['port'] = port
+        scan_kwargs['skip_nmap'] = skip_nmap
+    
+    return scanner.scan(**scan_kwargs)
 
 
 def main():
@@ -57,7 +66,7 @@ def main():
     
     # Require --run parameter
     if not args.run:
-        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan, protocol_scan")
+        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan")
         sys.exit(1)
     
     # Validate protocol-requiring scans
@@ -70,6 +79,13 @@ def main():
                 print("Available protocols: sui, arweave, filecoin (built-in) or custom protocols from pgdn/protocols/ directory")
             elif args.run == 'protocol_scan':
                 print("Available protocols: sui, arweave, filecoin (advanced protocol scanners)")
+            sys.exit(1)
+    
+    # Validate port-requiring scans
+    if args.run == 'port_scan':
+        if not args.port:
+            print("❌ Error: --port is required when using --run port_scan")
+            print("Example: --port 22,80,443 or --port 22")
             sys.exit(1)
     
     try:
@@ -88,6 +104,8 @@ def main():
             hostname=args.hostname,
             run_type=args.run,
             protocol=args.protocol,
+            port=args.port,
+            skip_nmap=getattr(args, 'skip_nmap', False),
             debug=args.debug
         )
         
@@ -180,6 +198,10 @@ Examples:
   pgdn-scanner --target example.com --run geo
   pgdn-scanner --target example.com --run ssl_test
   
+  # Port scanning
+  pgdn-scanner --target example.com --run port_scan --port 22,80,443
+  pgdn-scanner --target example.com --run port_scan --port 22 --skip-nmap
+  
   # Node scanning with protocol-specific probes
   pgdn-scanner --target example.com --run node_scan --protocol sui
   pgdn-scanner --target example.com --run node_scan --protocol arweave
@@ -219,7 +241,7 @@ Examples:
     
     parser.add_argument(
         '--run',
-        choices=['web', 'whatweb', 'geo', 'ssl_test', 'compliance', 'node_scan', 'protocol_scan'],
+        choices=['web', 'whatweb', 'geo', 'ssl_test', 'port_scan', 'compliance', 'node_scan', 'protocol_scan'],
         help='Run specific scanner type'
     )
     
@@ -228,6 +250,17 @@ Examples:
         help='Protocol to scan (required for compliance, node_scan, and protocol_scan). Available protocols loaded from protocols/ directory or built-in (sui, arweave, filecoin)'
     )
     
+    parser.add_argument(
+        '--port', '--ports',
+        dest='port',
+        help='Port(s) to scan (required for port_scan). Use comma-separated values for multiple ports, e.g., --port 22,80,443'
+    )
+    
+    parser.add_argument(
+        '--skip-nmap',
+        action='store_true',
+        help='Skip nmap scanning for faster port scan results'
+    )
     
     parser.add_argument(
         '--config',
@@ -355,6 +388,7 @@ def list_protocol_scanners():
         print("   • whatweb    - Web technology fingerprinting")
         print("   • geo        - Geographic location detection")
         print("   • ssl_test   - SSL/TLS certificate analysis")
+        print("   • port_scan  - Respectful port scanning with service detection")
         print("   • node_scan  - Multi-protocol DePIN node scanning")
         
         print("\n🔧 PROTOCOL COMPLIANCE SCANNERS:")
@@ -377,6 +411,7 @@ def list_protocol_scanners():
         print("   pgdn-scanner --target example.com --run whatweb")
         print("   pgdn-scanner --target example.com --run geo")
         print("   pgdn-scanner --target example.com --run ssl_test")
+        print("   pgdn-scanner --target example.com --run port_scan --port 22,80,443")
         print("   pgdn-scanner --target example.com --run node_scan --protocol sui")
         
         print("\n   # Protocol compliance scans")

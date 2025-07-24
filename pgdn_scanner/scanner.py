@@ -47,7 +47,8 @@ class Scanner:
              run: Optional[str] = None,
              enabled_scanners: Optional[List[str]] = None,
              enabled_external_tools: Optional[List[str]] = None,
-             debug: bool = False) -> DictResult:
+             debug: bool = False,
+             **kwargs) -> DictResult:
         """
         Scan a target.
 
@@ -112,12 +113,25 @@ class Scanner:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
 
+            # Convert port string to ports list for port_scan
+            orchestrator_kwargs = kwargs.copy()
+            if run == 'port_scan' and 'port' in kwargs:
+                port_str = kwargs['port']
+                try:
+                    ports_list = [int(p.strip()) for p in port_str.split(',') if p.strip()]
+                    orchestrator_kwargs['ports'] = ports_list
+                    orchestrator_kwargs.pop('port', None)  # Remove the string version
+                except ValueError as e:
+                    return DictResult.from_error(f"Invalid port format: {e}")
+            
             scan_results = self.orchestrator.scan(
                 target=original_target,
                 hostname=hostname,
                 protocol=protocol,
                 resolved_ip=resolved_ip,
-                scan_timestamp=datetime.now().isoformat()
+                scan_timestamp=datetime.now().isoformat(),
+                scan_level=scan_level,
+                **orchestrator_kwargs
             )
 
             # Remove 'infra' section and include ONLY the relevant scan type or tool result
@@ -133,6 +147,8 @@ class Scanner:
                     scan_type = "web"
                 elif run == "ssl_test":
                     scan_type = "web"
+                elif run == "port_scan":
+                    scan_type = "port_scan"
                 elif run == "node_scan":
                     scan_type = "node_scan"
                 elif run == "protocol_scan":
@@ -283,8 +299,10 @@ class Scanner:
             return ['compliance'], []
         elif run == 'node_scan':
             return ['node_scan'], []
+        elif run == 'port_scan':
+            return ['port_scan'], []
         elif run == 'protocol_scan':
             # Protocol scan will use protocol-specific scanners based on the protocol parameter
             return [], []
         else:
-            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, compliance, node_scan, protocol_scan")
+            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan")

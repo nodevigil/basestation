@@ -123,6 +123,13 @@ class ScannerRegistry:
             self.logger.debug("Registered built-in NodeScanner")
         except ImportError as e:
             self.logger.warning(f"Failed to register NodeScanner: {e}")
+            
+        try:
+            from .port_scanner import PortScanner
+            self._scanners['port_scan'] = PortScanner
+            self.logger.debug("Registered built-in PortScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register PortScanner: {e}")
     
     def _register_external_scanners(self):
         """Register external/protocol-specific scanners."""

@@ -52,6 +52,7 @@ pgdn-scanner --target example.com --run web          # Web service detection
 pgdn-scanner --target example.com --run whatweb      # Web technology fingerprinting  
 pgdn-scanner --target example.com --run geo          # Geographic location detection
 pgdn-scanner --target example.com --run ssl_test     # SSL/TLS certificate analysis
+pgdn-scanner --target example.com --run port_scan --port 22,80,443  # Port scanning with service detection
 
 # Node scanning with protocol-specific probes (requires protocol)
 pgdn-scanner --target example.com --run node_scan --protocol sui
@@ -82,6 +83,85 @@ web scanner: Detects web services and technologies running on the target.
 whatweb scanner: Fingerprints web technologies and frameworks.
 geo scanner: Performs GeoIP lookups to determine geographic location and ASN of the target.
 ssl_test scanner: Analyzes SSL/TLS certificates for security compliance and vulnerabilities.
+port_scan scanner: Respectful port scanning with service detection, banner grabbing, and SSL/TLS analysis.
+
+## 🔌 Port Scanning
+
+PGDN includes a respectful port scanner that provides comprehensive service detection and analysis without being aggressive or intrusive. The port scanner is designed for defensive security assessment and infrastructure monitoring.
+
+### Port Scanner Features
+
+- **Respectful Scanning**: Non-aggressive scanning approach suitable for production environments
+- **Service Detection**: Automatic identification of services running on open ports
+- **Banner Grabbing**: Capture service banners for version identification
+- **SSL/TLS Analysis**: Certificate and configuration analysis for SSL-enabled services
+- **HTTP Analysis**: Basic HTTP method testing and endpoint enumeration
+- **Protocol-Specific Probing**: Docker, Prometheus, and database service detection
+- **Confidence Scoring**: Accuracy assessment of scan results (0-100 score)
+- **Multi-port Support**: Scan up to 5 ports simultaneously
+- **nmap Integration**: Optional nmap service detection (can be skipped for faster scans)
+
+### Port Scanner Usage
+
+```bash
+# Basic port scanning
+pgdn-scanner --target example.com --run port_scan --port 22,80,443
+
+# Single port scan
+pgdn-scanner --target example.com --run port_scan --port 22
+
+# Skip nmap for faster results
+pgdn-scanner --target example.com --run port_scan --port 80 --skip-nmap
+
+# JSON output with pretty formatting
+pgdn-scanner --target example.com --run port_scan --port 22,80,443 --json --pretty
+
+# Human-readable output
+pgdn-scanner --target example.com --run port_scan --port 80 --human
+```
+
+### Port Scanner Output
+
+The port scanner provides detailed information about each scanned port:
+
+```json
+{
+  "target": "example.com",
+  "scanner_type": "port_scan",
+  "scan_summary": {
+    "total_ports": 3,
+    "open_ports": 2,
+    "closed_ports": 1,
+    "average_confidence": 85.5
+  },
+  "detailed_results": [
+    {
+      "target": "example.com",
+      "port": 80,
+      "is_open": true,
+      "service": "nginx",
+      "version": "1.18.0",
+      "confidence_score": 95.0,
+      "banner": "HTTP/1.1 200 OK\nServer: nginx/1.18.0",
+      "ssl_info": null,
+      "http_info": {
+        "methods": {
+          "GET": {
+            "status_code": 200,
+            "title": "Welcome to nginx!"
+          }
+        }
+      }
+    }
+  ]
+}
+```
+
+### Requirements
+
+- **Ports Required**: Port scanning requires at least one port specified via `--port`
+- **Port Limit**: Maximum of 5 ports per scan for respectful scanning
+- **nmap Optional**: nmap integration is optional and can be skipped with `--skip-nmap`
 
 ## 📡 Node Scanning
 
@@ -234,6 +314,7 @@ The library usage directly mirrors the CLI structure with a simplified `run` par
 | `pgdn-scanner --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
 | `pgdn-scanner --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
 | `pgdn-scanner --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
+| `pgdn-scanner --target example.com --run port_scan --port 22,80,443` | `scanner.scan(target='example.com', run='port_scan', port='22,80,443')` |
 | `pgdn-scanner --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
 | `pgdn-scanner --target example.com --run protocol_scan --protocol sui` | `scanner.scan(target='example.com', run='protocol_scan', protocol='sui')` |
 | `pgdn-scanner --target example.com --run compliance --protocol sui` | `scanner.scan(target='example.com', run='compliance', protocol='sui')` |
@@ -296,6 +377,70 @@ result = scanner.scan(
     target='example.com',
     run='ssl_test'
 )
+
+# Port scanning with service detection
+result = scanner.scan(
+    target='example.com',
+    run='port_scan',
+    port='22,80,443'  # Comma-separated port list
+)
+
+# Port scanning with options
+result = scanner.scan(
+    target='example.com',
+    run='port_scan',
+    port='80',
+    skip_nmap=True  # Skip nmap for faster results
+)
+```
+
+#### Port Scanning
+
+Port scanning requires a port parameter and follows the CLI pattern:
+
+```python
+from pgdn_scanner import Scanner
+
+scanner = Scanner()
+
+# Basic port scanning
+result = scanner.scan(
+    target='example.com',
+    run='port_scan',
+    port='22,80,443'
+)
+
+# Single port scan
+result = scanner.scan(
+    target='example.com',
+    run='port_scan',
+    port='80'
+)
+
+# Port scan with skip nmap option
+result = scanner.scan(
+    target='example.com',
+    run='port_scan',
+    port='22,80,443',
+    skip_nmap=True
+)
+
+# Check port scan results
+if result.is_success():
+    scan_data = result.data
+    if scan_data['meta'].get('error'):
+        print(f"Scan failed: {scan_data['meta']['error']}")
+    else:
+        # Access port scan specific data
+        scan_summary = scan_data.get('scan_summary', {})
+        print(f"Scanned {scan_summary.get('total_ports', 0)} ports")
+        print(f"Found {scan_summary.get('open_ports', 0)} open ports")
+        
+        # Process individual port results
+        for port_result in scan_data.get('detailed_results', []):
+            if port_result.get('is_open'):
+                print(f"Port {port_result['port']}: {port_result.get('service', 'unknown')} "
+                      f"(confidence: {port_result.get('confidence_score', 0):.1f}%)")
 ```
 
 #### Compliance Scanning
