@@ -149,7 +149,7 @@ class ScannerRegistry:
             try:
                 scanner_class = self._load_scanner_class(module_path)
                 self._scanners[scanner_name] = scanner_class
-                self.logger.info(f"✅ Registered external scanner: {scanner_name} ({module_path})")
+                self.logger.info(f"Registered external scanner: {scanner_name} ({module_path})")
             except Exception as e:
                 self.logger.warning(f"Failed to register external scanner {scanner_name}: {e}")
     

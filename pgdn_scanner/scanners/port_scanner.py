@@ -699,15 +699,38 @@ class PortScanner(BaseScanner):
         return max(0.0, min(100.0, confidence))
 
     def _generate_scan_report(self, target: str, results: List[PortScanResult], skip_nmap: bool) -> Dict[str, Any]:
-        """Generate comprehensive scan report"""
+        """Generate comprehensive scan report in orchestrator-compatible format"""
+        # Extract open ports for orchestrator compatibility
+        open_ports = [r.port for r in results if r.is_open]
+        
+        # Extract banners for orchestrator compatibility
+        banners = {}
+        for r in results:
+            if r.is_open and r.banner:
+                banners[r.port] = r.banner
+        
+        # Extract TLS info for orchestrator compatibility
+        tls = {}
+        for r in results:
+            if r.is_open and r.ssl_info and not r.ssl_info.get('error'):
+                tls[r.port] = r.ssl_info
+        
+        # Build orchestrator-compatible report
         report = {
             'target': target,
             'scanner_type': self.scanner_type,
             'timestamp': datetime.now().isoformat(),
+            
+            # Orchestrator-expected format
+            'open_ports': open_ports,
+            'banners': banners,
+            'tls': tls,
+            
+            # Keep detailed results for comprehensive data
             'scan_summary': {
                 'timestamp': datetime.now().isoformat(),
                 'total_ports': len(results),
-                'open_ports': sum(1 for r in results if r.is_open),
+                'open_ports': len(open_ports),
                 'closed_ports': sum(1 for r in results if not r.is_open),
                 'average_confidence': sum(r.confidence_score for r in results) / len(results) if results else 0
             },

@@ -561,16 +561,33 @@ class ScanOrchestrator:
         elif generic_results.get("open_ports"):
             open_ports = generic_results.get("open_ports", [])
         else:
-            # Fall back to node scanner results if available
-            node_results = scan_results.get("node_scan", {})
-            open_ports = node_results.get("open_ports", [])
+            # Check port scanner results
+            port_scan_results = scan_results.get("port_scan", {})
+            if port_scan_results.get("open_ports"):
+                open_ports = port_scan_results.get("open_ports", [])
+            else:
+                # Fall back to node scanner results if available
+                node_results = scan_results.get("node_scan", {})
+                open_ports = node_results.get("open_ports", [])
+        
+        # Extract banners from generic or port scanner results
+        banners = generic_results.get("banners", {})
+        if not banners:
+            port_scan_results = scan_results.get("port_scan", {})
+            banners = port_scan_results.get("banners", {})
+        
+        # Extract TLS from generic or port scanner results
+        tls = generic_results.get("tls", {})
+        if not tls:
+            port_scan_results = scan_results.get("port_scan", {})
+            tls = port_scan_results.get("tls", {})
         
         network_payload = {
             "ip": target,
             "resolved_ip": resolved_ip,
             "open_ports": open_ports,
-            "banners": generic_results.get("banners", {}),
-            "tls": generic_results.get("tls", {}),
+            "banners": banners,
+            "tls": tls,
             "http_headers": self._extract_http_headers(web_results)
         }
         data.append({"type": "network", "payload": network_payload})
@@ -660,6 +677,11 @@ class ScanOrchestrator:
         
         if protocol_results:
             data.append({"type": "protocol", "payload": protocol_results})
+        
+        # Add port scanner results directly if available
+        port_scan_results = scan_results.get("port_scan", {})
+        if port_scan_results and self._has_meaningful_results(port_scan_results):
+            data.append({"type": "port_scan", "payload": port_scan_results})
         
         # Build meta object
         import uuid
@@ -766,6 +788,12 @@ class ScanOrchestrator:
         if "open_ports" in results:
             open_ports = results.get("open_ports", [])
             return len(open_ports) > 0
+            
+        # For port scanner results specifically
+        if "scanner_type" in results and results.get("scanner_type") == "port_scan":
+            # Port scanner is meaningful if it has detailed results
+            detailed_results = results.get("detailed_results", [])
+            return len(detailed_results) > 0
             
         # For web results
         if "web_results" in results:
