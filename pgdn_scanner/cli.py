@@ -16,7 +16,7 @@ from .core.result import Result, DictResult
 
 
 def perform_scan(scanner, target: str, hostname: str, run_type: str, 
-                protocol: str, port: str, skip_nmap: bool, debug: bool) -> Result:
+                protocol: str, port: str, skip_nmap: bool, nmap_args: str, debug: bool) -> Result:
     """
     Perform scan based on run type.
     
@@ -28,6 +28,7 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         protocol: Protocol for compliance/node_scan/protocol_scan
         port: Port(s) for port_scan
         skip_nmap: Skip nmap for port_scan
+        nmap_args: Additional nmap arguments for port_scan
         debug: Debug mode
         
     Returns:
@@ -46,6 +47,8 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
     if run_type == 'port_scan':
         scan_kwargs['port'] = port
         scan_kwargs['skip_nmap'] = skip_nmap
+        if nmap_args:
+            scan_kwargs['nmap_args'] = nmap_args
     
     return scanner.scan(**scan_kwargs)
 
@@ -106,6 +109,7 @@ def main():
             protocol=args.protocol,
             port=args.port,
             skip_nmap=getattr(args, 'skip_nmap', False),
+            nmap_args=getattr(args, 'nmap_args', None),
             debug=args.debug
         )
         
@@ -201,6 +205,8 @@ Examples:
   # Port scanning
   pgdn-scanner --target example.com --run port_scan --port 22,80,443
   pgdn-scanner --target example.com --run port_scan --port 22 --skip-nmap
+  pgdn-scanner --target example.com --run port_scan --port 80,443 --nmap-args "-sV --script=banner,default"
+  pgdn-scanner --target fullnode.mainnet.sui.io --run port_scan --port 3306,5432,27017,6379 --nmap-args "-sS -sV -Pn --script=banner,default"
   
   # Node scanning with protocol-specific probes
   pgdn-scanner --target example.com --run node_scan --protocol sui
@@ -260,6 +266,11 @@ Examples:
         '--skip-nmap',
         action='store_true',
         help='Skip nmap scanning for faster port scan results'
+    )
+    
+    parser.add_argument(
+        '--nmap-args',
+        help='Additional arguments to pass to nmap (e.g., "--nmap-args \'-Pn --script=banner,default\'"). Supports -Pn (skip host discovery), scripts, timing, etc.'
     )
     
     parser.add_argument(

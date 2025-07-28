@@ -5,12 +5,12 @@ Respectful port scanning functionality integrated into the PGDN scanner framewor
 Based on the port-scan-new.py script, adapted for modular architecture.
 """
 
-import asyncio
 import socket
 import subprocess
 import json
 import ssl
 import requests
+import os
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
@@ -39,6 +39,7 @@ class PortScanResult:
     port: int
     timestamp: str
     is_open: bool
+    port_state: str = "unknown"  # open, closed, filtered, open|filtered, closed|filtered
     confidence_score: float = 0.0
     service: Optional[str] = None
     version: Optional[str] = None
@@ -73,6 +74,9 @@ class PortScanner(BaseScanner):
         self.read_timeout = min(5, self.timeout // 2)     # Quick read timeout
         self.nmap_timeout = min(15, self.timeout + 5)     # Brief nmap scan
         self.max_threads = self.config.get('max_threads', 10)
+        
+        # Additional nmap arguments
+        self.nmap_args = self.config.get('nmap_args', [])
         
         # Setup HTTP session
         self.session = requests.Session()
@@ -113,6 +117,7 @@ class PortScanner(BaseScanner):
             **kwargs: Additional scan parameters including:
                 - port: Alternative way to specify ports as string (from CLI)
                 - skip_nmap: Skip nmap scanning for faster results
+                - nmap_args: Additional arguments to pass to nmap
                 
         Returns:
             Scan results dictionary
@@ -147,12 +152,21 @@ class PortScanner(BaseScanner):
             ports = ports[:5]
         
         skip_nmap = kwargs.get('skip_nmap', False)
+        nmap_args = kwargs.get('nmap_args', self.nmap_args)
+        
+        # Validate and parse nmap_args if provided as string
+        if isinstance(nmap_args, str):
+            nmap_args = self._parse_nmap_args(nmap_args)
+        elif nmap_args is None:
+            nmap_args = []
         
         self.logger.info(f"Starting port scan of {target} on ports: {ports}")
+        if nmap_args:
+            self.logger.info(f"Additional nmap args: {' '.join(nmap_args)}")
         
-        # Run the async scan
+        # Run the scan
         try:
-            results = asyncio.run(self._scan_ports_async(target, ports, skip_nmap))
+            results = self._scan_ports(target, ports, skip_nmap, nmap_args)
             return self._generate_scan_report(target, results, skip_nmap)
         except Exception as e:
             self.logger.error(f"Port scan failed: {e}")
@@ -206,15 +220,45 @@ class PortScanner(BaseScanner):
         
         return valid_ports
 
-    async def _scan_ports_async(self, target: str, ports: List[int], skip_nmap: bool = False) -> List[PortScanResult]:
+    def _parse_nmap_args(self, nmap_args_str: str) -> List[str]:
+        """Parse and validate nmap arguments from string."""
+        import shlex
+        
+        try:
+            # Parse shell-like arguments safely
+            args = shlex.split(nmap_args_str)
+            
+            # Basic security validation - block dangerous arguments
+            dangerous_args = [
+                '--script-args', '--datadir', '--script-updatedb', 
+                '|', '&', ';', '$(', '`', '>', '<', '*'
+            ]
+            
+            for arg in args:
+                for dangerous in dangerous_args:
+                    if dangerous in arg:
+                        self.logger.warning(f"Potentially dangerous nmap argument blocked: {arg}")
+                        return []
+            
+            self.logger.debug(f"Parsed nmap args: {args}")
+            return args
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse nmap args '{nmap_args_str}': {e}")
+            return []
+
+    def _scan_ports(self, target: str, ports: List[int], skip_nmap: bool = False, nmap_args: List[str] = None) -> List[PortScanResult]:
         """
-        Main async entry point - scans ports respectfully
+        Main entry point - scans ports respectfully
         """
+        if nmap_args is None:
+            nmap_args = []
+            
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_threads) as executor:
             futures = []
             for port in ports:
-                future = executor.submit(self._scan_single_port, target, port, skip_nmap)
+                future = executor.submit(self._scan_single_port, target, port, skip_nmap, nmap_args)
                 futures.append(future)
             
             for future in concurrent.futures.as_completed(futures):
@@ -226,50 +270,78 @@ class PortScanner(BaseScanner):
         
         return results
 
-    def _scan_single_port(self, target: str, port: int, skip_nmap: bool = False) -> PortScanResult:
+    def _scan_single_port(self, target: str, port: int, skip_nmap: bool = False, nmap_args: List[str] = None) -> PortScanResult:
         """
         Respectfully scan a single port using available techniques
         """
+        if nmap_args is None:
+            nmap_args = []
+            
         timestamp = datetime.now().isoformat()
-        result = PortScanResult(target=target, port=port, timestamp=timestamp, is_open=False)
+        result = PortScanResult(target=target, port=port, timestamp=timestamp, is_open=False, port_state="unknown")
         
         self.logger.debug(f"Starting comprehensive scan of {target}:{port}")
         result.scan_log.append(f"SCAN_START: {timestamp}")
         
         # 1. Basic connectivity check
         self.logger.debug(f"Testing port connectivity for {target}:{port}")
-        if not self._check_port_open(target, port):
+        port_open = self._check_port_open(target, port)
+        if not port_open:
             self.logger.debug(f"Port {port} is closed or filtered on {target}")
+            result.port_state = "closed"  # Initial assumption, nmap may correct this
             result.scan_log.append("CONNECTIVITY: Port closed/filtered")
-            result.confidence_score = 100.0  # We're confident it's closed
-            return result
+            result.confidence_score = 50.0  # Lower confidence since we can't distinguish closed vs filtered
+            # Continue to nmap scan to get accurate state
+        else:
+            result.is_open = True
+            result.port_state = "open"
+            self.logger.info(f"Port {port} is OPEN on {target} - beginning enumeration")
+            result.scan_log.append("CONNECTIVITY: Port open - proceeding with enumeration")
         
-        result.is_open = True
-        self.logger.info(f"Port {port} is OPEN on {target} - beginning enumeration")
-        result.scan_log.append("CONNECTIVITY: Port open - proceeding with enumeration")
-        
-        # 2. Banner grabbing
-        self.logger.debug(f"Banner grabbing for {target}:{port}")
-        try:
-            result.banner = self._grab_banner(target, port)
-            if result.banner:
-                self.logger.debug(f"Banner captured for {target}:{port}: {len(result.banner)} bytes")
-                result.scan_log.append(f"BANNER: Captured {len(result.banner)} bytes")
-            else:
-                self.logger.debug(f"No banner data received from {target}:{port}")
-                result.scan_log.append("BANNER: No response to probes")
-        except Exception as e:
-            self.logger.error(f"Banner grab failed for {target}:{port}: {e}")
-            result.scan_log.append(f"BANNER: Failed - {str(e)}")
+        # 2. Banner grabbing (only if port appears open)
+        if result.is_open:
+            self.logger.debug(f"Banner grabbing for {target}:{port}")
+            try:
+                result.banner = self._grab_banner(target, port)
+                if result.banner:
+                    self.logger.debug(f"Banner captured for {target}:{port}: {len(result.banner)} bytes")
+                    result.scan_log.append(f"BANNER: Captured {len(result.banner)} bytes")
+                else:
+                    self.logger.debug(f"No banner data received from {target}:{port}")
+                    result.scan_log.append("BANNER: No response to probes")
+            except Exception as e:
+                self.logger.error(f"Banner grab failed for {target}:{port}: {e}")
+                result.scan_log.append(f"BANNER: Failed - {str(e)}")
+        else:
+            self.logger.debug(f"Skipping banner grab for {target}:{port} - port not open")
+            result.scan_log.append("BANNER: Skipped - port not open")
         
         # 3. Nmap basic scan (optional)
         if not skip_nmap:
             self.logger.debug(f"Running nmap service detection for {target}:{port}")
             try:
-                result.nmap_results = self._nmap_basic_scan(target, port)
+                result.nmap_results = self._nmap_basic_scan(target, port, nmap_args)
                 if result.nmap_results and not result.nmap_results.get('error'):
                     self.logger.debug(f"Nmap service detection completed for {target}:{port}")
                     result.scan_log.append("NMAP: Service detection completed")
+                    
+                    # Update port state based on nmap results
+                    if 'port_state' in result.nmap_results:
+                        nmap_state = result.nmap_results['port_state']
+                        result.port_state = nmap_state
+                        
+                        # Update is_open based on nmap results
+                        if nmap_state == 'open' or 'open' in nmap_state:
+                            result.is_open = True
+                        elif nmap_state in ['closed', 'filtered', 'closed|filtered']:
+                            result.is_open = False
+                        
+                        if nmap_state == 'filtered':
+                            self.logger.info(f"Port {port} is FILTERED on {target}")
+                            result.scan_log.append("NMAP: Port state updated to filtered")
+                        elif nmap_state == 'closed':
+                            self.logger.debug(f"Port {port} is CLOSED on {target}")
+                            result.scan_log.append("NMAP: Port state confirmed as closed")
                 else:
                     self.logger.debug(f"Nmap service detection failed for {target}:{port}")
                     result.scan_log.append("NMAP: Failed or unavailable")
@@ -294,8 +366,8 @@ class PortScanner(BaseScanner):
             self.logger.error(f"Service detection error for {target}:{port}: {e}")
             result.scan_log.append(f"SERVICE: Detection failed - {str(e)}")
         
-        # 5. SSL/TLS analysis (if applicable)
-        if self._is_ssl_port(port) or self._appears_ssl(result.banner):
+        # 5. SSL/TLS analysis (if applicable and port is open)
+        if result.is_open and (self._is_ssl_port(port) or self._appears_ssl(result.banner)):
             self.logger.debug(f"Running SSL/TLS analysis for {target}:{port}")
             try:
                 result.ssl_info = self._analyze_ssl(target, port)
@@ -310,11 +382,15 @@ class PortScanner(BaseScanner):
                 self.logger.error(f"SSL analysis error for {target}:{port}: {e}")
                 result.scan_log.append(f"SSL: Error - {str(e)}")
         else:
-            self.logger.debug(f"Skipping SSL analysis for {target}:{port} - not an SSL port")
-            result.scan_log.append("SSL: Skipped - not SSL port")
+            if not result.is_open:
+                self.logger.debug(f"Skipping SSL analysis for {target}:{port} - port not open")
+                result.scan_log.append("SSL: Skipped - port not open")
+            else:
+                self.logger.debug(f"Skipping SSL analysis for {target}:{port} - not an SSL port")
+                result.scan_log.append("SSL: Skipped - not SSL port")
         
-        # 6. HTTP analysis (if applicable)
-        if self._is_http_port(port) or self._appears_http(result.service):
+        # 6. HTTP analysis (if applicable and port is open)
+        if result.is_open and (self._is_http_port(port) or self._appears_http(result.service)):
             self.logger.debug(f"Running HTTP analysis for {target}:{port}")
             try:
                 result.http_info = self._analyze_http(target, port)
@@ -330,23 +406,31 @@ class PortScanner(BaseScanner):
                 self.logger.error(f"HTTP analysis error for {target}:{port}: {e}")
                 result.scan_log.append(f"HTTP: Error - {str(e)}")
         else:
-            self.logger.debug(f"Skipping HTTP analysis for {target}:{port} - not an HTTP service")
-            result.scan_log.append("HTTP: Skipped - not HTTP service")
-        
-        # 7. Protocol-specific probing
-        self.logger.debug(f"Running protocol-specific probing for {target}:{port}")
-        try:
-            self._protocol_specific_probe(target, port, result)
-            probe_count = len([k for k in result.raw_data.keys() if not k.startswith('_')])
-            if probe_count > 0:
-                self.logger.debug(f"Protocol-specific probing completed for {target}:{port}: {probe_count} additional data points")
-                result.scan_log.append(f"PROTOCOL_PROBE: {probe_count} data points collected")
+            if not result.is_open:
+                self.logger.debug(f"Skipping HTTP analysis for {target}:{port} - port not open")
+                result.scan_log.append("HTTP: Skipped - port not open")
             else:
-                self.logger.debug(f"No protocol-specific probes applicable for {target}:{port}")
-                result.scan_log.append("PROTOCOL_PROBE: No applicable probes")
-        except Exception as e:
-            self.logger.error(f"Protocol-specific probing error for {target}:{port}: {e}")
-            result.scan_log.append(f"PROTOCOL_PROBE: Error - {str(e)}")
+                self.logger.debug(f"Skipping HTTP analysis for {target}:{port} - not an HTTP service")
+                result.scan_log.append("HTTP: Skipped - not HTTP service")
+        
+        # 7. Protocol-specific probing (only for open ports)
+        if result.is_open:
+            self.logger.debug(f"Running protocol-specific probing for {target}:{port}")
+            try:
+                self._protocol_specific_probe(target, port, result)
+                probe_count = len([k for k in result.raw_data.keys() if not k.startswith('_')])
+                if probe_count > 0:
+                    self.logger.debug(f"Protocol-specific probing completed for {target}:{port}: {probe_count} additional data points")
+                    result.scan_log.append(f"PROTOCOL_PROBE: {probe_count} data points collected")
+                else:
+                    self.logger.debug(f"No protocol-specific probes applicable for {target}:{port}")
+                    result.scan_log.append("PROTOCOL_PROBE: No applicable probes")
+            except Exception as e:
+                self.logger.error(f"Protocol-specific probing error for {target}:{port}: {e}")
+                result.scan_log.append(f"PROTOCOL_PROBE: Error - {str(e)}")
+        else:
+            self.logger.debug(f"Skipping protocol-specific probing for {target}:{port} - port not open")
+            result.scan_log.append("PROTOCOL_PROBE: Skipped - port not open")
         
         # 8. Calculate confidence score
         result.confidence_score = self._calculate_confidence_score(result)
@@ -386,15 +470,42 @@ class PortScanner(BaseScanner):
         
         return None
 
-    def _nmap_basic_scan(self, target: str, port: int) -> Optional[Dict]:
-        """Basic nmap service detection only"""
+    def _nmap_basic_scan(self, target: str, port: int, nmap_args: List[str] = None) -> Optional[Dict]:
+        """Basic nmap service detection with optional additional arguments"""
+        if nmap_args is None:
+            nmap_args = []
+            
         try:
-            cmd = [
-                'nmap', '-sV',  # Just version detection
-                '-p', str(port), target, 
-                '--host-timeout', f'{self.nmap_timeout}s',
-                '--max-retries', '1'
-            ]
+            # Check if we should use sudo commands
+            use_sudo = os.environ.get('USE_SUDO', '').lower() == 'true' or os.geteuid() == 0
+            
+            # Start with basic command
+            cmd = ['nmap']
+            
+            # Add user-provided arguments first (they can override defaults)
+            cmd.extend(nmap_args)
+            
+            # Add port specification if not already provided in nmap_args
+            if not any('-p' in arg for arg in nmap_args):
+                cmd.extend(['-p', str(port)])
+            
+            # Add scan type and version detection if not already specified
+            has_scan_type = any(arg in ['-sS', '-sT', '-sU', '-sY', '-sN', '-sF', '-sX'] for arg in nmap_args)
+            has_version = any(arg in ['-sV', '-sC', '-A'] for arg in nmap_args)
+            
+            if not has_scan_type:
+                if use_sudo:
+                    cmd.append('-sS')  # SYN scan
+                # If no sudo, nmap defaults to -sT (connect scan)
+            
+            if not has_version:
+                cmd.append('-sV')  # Version detection
+            
+            # Add target
+            cmd.append(target)
+            
+            # Add timeout and retry limits (these are for safety)
+            cmd.extend(['--host-timeout', f'{self.nmap_timeout}s', '--max-retries', '1'])
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.nmap_timeout)
             
@@ -406,8 +517,22 @@ class PortScanner(BaseScanner):
                 }
                 
                 # Extract key information
-                if 'open' in output:
-                    parsed['status'] = 'open'
+                # Look for port state patterns in nmap output
+                port_state_patterns = {
+                    'open': r'(\d+)/tcp\s+open',
+                    'closed': r'(\d+)/tcp\s+closed',
+                    'filtered': r'(\d+)/tcp\s+filtered',
+                    'open|filtered': r'(\d+)/tcp\s+open\|filtered',
+                    'closed|filtered': r'(\d+)/tcp\s+closed\|filtered'
+                }
+                
+                for state, pattern in port_state_patterns.items():
+                    if re.search(pattern, output):
+                        parsed['port_state'] = state
+                        parsed['status'] = 'open' if 'open' in state else state
+                        break
+                
+                # Extract version information
                 if 'version' in output.lower():
                     version_match = re.search(r'version ([^\s<]+)', output, re.IGNORECASE)
                     if version_match:
@@ -627,7 +752,13 @@ class PortScanner(BaseScanner):
         Higher score = more confidence in the accuracy and completeness of collected data
         """
         if not result.is_open:
-            return 100.0  # High confidence that port is closed
+            # Different confidence levels based on port state
+            if result.port_state == 'filtered':
+                return 95.0  # High confidence that port is filtered
+            elif result.port_state == 'closed':
+                return 100.0  # Very high confidence that port is closed
+            else:
+                return 85.0  # Good confidence for other non-open states
         
         score = 0.0
         max_score = 0.0
@@ -700,8 +831,10 @@ class PortScanner(BaseScanner):
 
     def _generate_scan_report(self, target: str, results: List[PortScanResult], skip_nmap: bool) -> Dict[str, Any]:
         """Generate comprehensive scan report in orchestrator-compatible format"""
-        # Extract open ports for orchestrator compatibility
+        # Extract ports by state
         open_ports = [r.port for r in results if r.is_open]
+        closed_ports = [r.port for r in results if r.port_state == 'closed']
+        filtered_ports = [r.port for r in results if r.port_state == 'filtered']
         
         # Extract banners for orchestrator compatibility
         banners = {}
@@ -726,12 +859,18 @@ class PortScanner(BaseScanner):
             'banners': banners,
             'tls': tls,
             
+            # Enhanced port state information
+            'closed_ports': closed_ports,
+            'filtered_ports': filtered_ports,
+            
             # Keep detailed results for comprehensive data
             'scan_summary': {
                 'timestamp': datetime.now().isoformat(),
                 'total_ports': len(results),
                 'open_ports': len(open_ports),
-                'closed_ports': sum(1 for r in results if not r.is_open),
+                'closed_ports': len(closed_ports),
+                'filtered_ports': len(filtered_ports),
+                'other_ports': len(results) - len(open_ports) - len(closed_ports) - len(filtered_ports),
                 'average_confidence': sum(r.confidence_score for r in results) / len(results) if results else 0
             },
             'scan_config': {

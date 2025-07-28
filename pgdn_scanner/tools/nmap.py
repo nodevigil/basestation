@@ -56,7 +56,7 @@ def _select_sudo_command(ip, ports, timeout):
         logger.info(f"Sudo not available ({e}), using connect scan")
         return connect_cmd
 
-def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True):
+def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True, additional_args=None):
     """
     Run nmap scan and return dict results, with logging.
     
@@ -65,36 +65,59 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
         ports: Comma-separated port list
         timeout: Timeout in seconds
         fast_mode: If True, skip version detection for speed
+        additional_args: List of additional nmap arguments
     """
     import os
     
-    # Check if we have sudo privileges
-    has_sudo = os.geteuid() == 0
+    if additional_args is None:
+        additional_args = []
+    
+    # Check if we should use sudo commands (environment variable or actual sudo privileges)
+    use_sudo = os.environ.get('USE_SUDO', '').lower() == 'true' or os.geteuid() == 0
 
-    # Build command - optimize for speed using guard clauses
-    if not fast_mode:
-        cmd = [
-            "nmap", 
-            "-T4", 
-            "-p", ports, 
-            "-sV",  # Version detection (slower)
-            "--version-intensity", "2",  # Light version detection
-            "-oX", "-", 
-            ip
-        ]
-    elif has_sudo:
-        cmd = [
-            "nmap", 
-            "-T5",  # Insane timing (fastest)
-            "-p", ports, 
-            "-sS",  # SYN scan (requires sudo, faster)
-            "--min-rate", "1000",
-            "--max-retries", "1",
-            "-oX", "-", 
-            ip
-        ]
-    else:
-        cmd = _select_sudo_command(ip, ports, timeout)
+    # Build base command
+    cmd = ["nmap"]
+    
+    # Add additional arguments first (they take precedence)
+    if additional_args:
+        cmd.extend(additional_args)
+    
+    # Add port specification if not already provided
+    if not any('-p' in arg for arg in additional_args):
+        cmd.extend(["-p", ports])
+    
+    # Add scan type if not already specified
+    has_scan_type = any(arg in ['-sS', '-sT', '-sU', '-sY', '-sN', '-sF', '-sX'] for arg in additional_args)
+    if not has_scan_type:
+        if use_sudo:
+            cmd.append("-sS")  # SYN scan
+        # If no sudo, nmap defaults to -sT (connect scan)
+    
+    # Add version detection if not already specified and not in fast mode
+    has_version = any(arg in ['-sV', '-sC', '-A'] for arg in additional_args)
+    if not fast_mode and not has_version:
+        cmd.extend(["-sV", "--version-intensity", "2"])
+    
+    # Add timing if not already specified
+    has_timing = any(arg.startswith('-T') for arg in additional_args)
+    if not has_timing:
+        if fast_mode:
+            cmd.append("-T5" if use_sudo else "-T4")
+        else:
+            cmd.append("-T4")
+    
+    # Add performance options for fast mode if not already specified
+    if fast_mode and use_sudo:
+        if not any('--min-rate' in arg for arg in additional_args):
+            cmd.extend(["--min-rate", "1000"])
+        if not any('--max-retries' in arg for arg in additional_args):
+            cmd.extend(["--max-retries", "1"])
+    
+    # Add XML output
+    cmd.extend(["-oX", "-"])
+    
+    # Add target IP
+    cmd.append(ip)
 
     try:
         logger.info(f"Running nmap: {' '.join(cmd)} (timeout={timeout}s)")
