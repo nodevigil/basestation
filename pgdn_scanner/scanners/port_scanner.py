@@ -478,13 +478,18 @@ class PortScanner(BaseScanner):
         try:
             # Check if we should use enhanced scanning (root privileges)
             is_root = os.geteuid() == 0
-            use_enhanced = os.environ.get('USE_SUDO', '').lower() == 'true' or is_root
+            use_sudo_env = os.environ.get('USE_SUDO', '').lower() == 'true'
+            use_enhanced = use_sudo_env or is_root
+            
+            self.logger.debug(f"Nmap scan setup - is_root: {is_root}, USE_SUDO env: {use_sudo_env}, enhanced: {use_enhanced}")
             
             # Start with basic command
             if use_enhanced and not is_root:
                 cmd = ['sudo', 'nmap']
+                self.logger.debug(f"Using sudo nmap command for {target}:{port}")
             else:
                 cmd = ['nmap']
+                self.logger.debug(f"Using standard nmap command for {target}:{port}")
             
             # Add user-provided arguments first (they can override defaults)
             cmd.extend(nmap_args)
@@ -500,6 +505,9 @@ class PortScanner(BaseScanner):
             if not has_scan_type:
                 if use_enhanced:
                     cmd.extend(['-sS', '-T4'])  # SYN scan with faster timing
+                    self.logger.debug(f"Added enhanced scan args (-sS -T4) for {target}:{port}")
+                else:
+                    self.logger.debug(f"Using default connect scan for {target}:{port}")
                 # If no enhanced privileges, nmap defaults to -sT (connect scan)
             
             if not has_version:
@@ -510,6 +518,8 @@ class PortScanner(BaseScanner):
             
             # Add timeout and retry limits (these are for safety)
             cmd.extend(['--host-timeout', f'{self.nmap_timeout}s', '--max-retries', '1'])
+            
+            self.logger.debug(f"Final nmap command for {target}:{port}: {' '.join(cmd)}")
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.nmap_timeout)
             
