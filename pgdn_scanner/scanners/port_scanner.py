@@ -25,6 +25,7 @@ import hashlib
 
 from .base_scanner import BaseScanner
 from ..core.logging import get_logger
+from ..tools.nmap import nmap_scan
 
 # Disable urllib3 warnings for cleaner output
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -316,14 +317,25 @@ class PortScanner(BaseScanner):
             self.logger.debug(f"Skipping banner grab for {target}:{port} - port not open")
             result.scan_log.append("BANNER: Skipped - port not open")
         
-        # 3. Nmap basic scan (optional)
+        # 3. Nmap basic scan (optional) - using shared nmap tool
         if not skip_nmap:
             self.logger.debug(f"Running nmap service detection for {target}:{port}")
             try:
-                result.nmap_results = self._nmap_basic_scan(target, port, nmap_args)
-                if result.nmap_results and not result.nmap_results.get('error'):
+                # Use shared nmap_scan function with enhanced scanning
+                nmap_result = nmap_scan(
+                    ip=target, 
+                    ports=str(port), 
+                    timeout=self.nmap_timeout,
+                    fast_mode=False,  # Enable version detection
+                    additional_args=nmap_args
+                )
+                
+                if nmap_result and not nmap_result.get('error'):
                     self.logger.debug(f"Nmap service detection completed for {target}:{port}")
                     result.scan_log.append("NMAP: Service detection completed")
+                    
+                    # Convert shared nmap result to expected format
+                    result.nmap_results = self._convert_nmap_result(nmap_result, port)
                     
                     # Update port state based on nmap results
                     if 'port_state' in result.nmap_results:
@@ -345,9 +357,11 @@ class PortScanner(BaseScanner):
                 else:
                     self.logger.debug(f"Nmap service detection failed for {target}:{port}")
                     result.scan_log.append("NMAP: Failed or unavailable")
+                    result.nmap_results = nmap_result or {'error': 'no_result'}
             except Exception as e:
                 self.logger.debug(f"Nmap scan error for {target}:{port}: {e}")
                 result.scan_log.append(f"NMAP: Error - {str(e)}")
+                result.nmap_results = {'error': str(e)}
         else:
             self.logger.debug(f"Skipping nmap scan for {target}:{port}")
             result.scan_log.append("NMAP: Skipped by user request")
@@ -438,6 +452,33 @@ class PortScanner(BaseScanner):
         result.scan_log.append(f"SCAN_COMPLETE: Confidence {result.confidence_score:.1f}/100")
         
         return result
+    
+    def _convert_nmap_result(self, nmap_result: Dict, target_port: int) -> Dict:
+        """Convert shared nmap result format to PortScanner expected format"""
+        if nmap_result.get('error'):
+            return {'error': nmap_result['error']}
+        
+        # Find the specific port in the nmap results
+        target_port_info = None
+        for port_info in nmap_result.get('ports', []):
+            if port_info.get('port') == target_port:
+                target_port_info = port_info
+                break
+        
+        if not target_port_info:
+            return {'error': 'port_not_found', 'raw_output': nmap_result.get('raw_output', '')}
+        
+        # Convert to expected format
+        result = {
+            'raw_output': nmap_result.get('raw_output', ''),
+            'command': nmap_result.get('cmd', ''),
+            'port_state': target_port_info.get('state', 'unknown'),
+            'service': target_port_info.get('service', ''),
+            'product': target_port_info.get('product', ''),
+            'version': target_port_info.get('version', '')
+        }
+        
+        return result
 
     def _check_port_open(self, target: str, port: int) -> bool:
         """Basic port connectivity check"""
@@ -470,101 +511,6 @@ class PortScanner(BaseScanner):
         
         return None
 
-    def _nmap_basic_scan(self, target: str, port: int, nmap_args: List[str] = None) -> Optional[Dict]:
-        """Basic nmap service detection with optional additional arguments"""
-        if nmap_args is None:
-            nmap_args = []
-            
-        try:
-            # Check if we should use enhanced scanning (root privileges)
-            is_root = os.geteuid() == 0
-            use_sudo_env = os.environ.get('USE_SUDO', '').lower() == 'true'
-            use_enhanced = use_sudo_env or is_root
-            
-            self.logger.debug(f"Nmap scan setup - is_root: {is_root}, USE_SUDO env: {use_sudo_env}, enhanced: {use_enhanced}")
-            
-            # Start with basic command
-            if use_enhanced and not is_root:
-                cmd = ['sudo', 'nmap']
-                self.logger.debug(f"Using sudo nmap command for {target}:{port}")
-            else:
-                cmd = ['nmap']
-                self.logger.debug(f"Using standard nmap command for {target}:{port}")
-            
-            # Add user-provided arguments first (they can override defaults)
-            cmd.extend(nmap_args)
-            
-            # Add port specification if not already provided in nmap_args
-            if not any('-p' in arg for arg in nmap_args):
-                cmd.extend(['-p', str(port)])
-            
-            # Add scan type and version detection if not already specified
-            has_scan_type = any(arg in ['-sS', '-sT', '-sU', '-sY', '-sN', '-sF', '-sX'] for arg in nmap_args)
-            has_version = any(arg in ['-sV', '-sC', '-A'] for arg in nmap_args)
-            
-            if not has_scan_type:
-                if use_enhanced:
-                    cmd.extend(['-sS', '-T4'])  # SYN scan with faster timing
-                    self.logger.debug(f"Added enhanced scan args (-sS -T4) for {target}:{port}")
-                else:
-                    self.logger.debug(f"Using default connect scan for {target}:{port}")
-                # If no enhanced privileges, nmap defaults to -sT (connect scan)
-            
-            if not has_version:
-                cmd.append('-sV')  # Version detection
-            
-            # Add target
-            cmd.append(target)
-            
-            # Add timeout and retry limits (these are for safety)
-            cmd.extend(['--host-timeout', f'{self.nmap_timeout}s', '--max-retries', '1'])
-            
-            self.logger.debug(f"Final nmap command for {target}:{port}: {' '.join(cmd)}")
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=self.nmap_timeout)
-            
-            if result.returncode == 0:
-                output = result.stdout
-                parsed = {
-                    'raw_output': output,
-                    'command': ' '.join(cmd)
-                }
-                
-                # Extract key information
-                # Look for port state patterns in nmap output
-                port_state_patterns = {
-                    'open': r'(\d+)/tcp\s+open',
-                    'closed': r'(\d+)/tcp\s+closed',
-                    'filtered': r'(\d+)/tcp\s+filtered',
-                    'open|filtered': r'(\d+)/tcp\s+open\|filtered',
-                    'closed|filtered': r'(\d+)/tcp\s+closed\|filtered'
-                }
-                
-                for state, pattern in port_state_patterns.items():
-                    if re.search(pattern, output):
-                        parsed['port_state'] = state
-                        parsed['status'] = 'open' if 'open' in state else state
-                        break
-                
-                # Extract version information
-                if 'version' in output.lower():
-                    version_match = re.search(r'version ([^\s<]+)', output, re.IGNORECASE)
-                    if version_match:
-                        parsed['version'] = version_match.group(1)
-                
-                return parsed
-                
-        except subprocess.TimeoutExpired:
-            self.logger.debug(f"Nmap scan timed out for {target}:{port} after {self.nmap_timeout}s")
-            return {'error': 'timeout', 'timeout_duration': self.nmap_timeout}
-        except FileNotFoundError:
-            self.logger.debug("Nmap not found - skipping nmap scan")
-            return {'error': 'nmap_not_found'}
-        except Exception as e:
-            self.logger.debug(f"Nmap scan error: {e}")
-            return {'error': str(e)}
-        
-        return None
 
     def _detect_service_version(self, target: str, port: int, banner: Optional[str], 
                               nmap_results: Optional[Dict]) -> tuple:
