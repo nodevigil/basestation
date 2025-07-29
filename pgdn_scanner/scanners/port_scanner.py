@@ -322,6 +322,7 @@ class PortScanner(BaseScanner):
             self.logger.debug(f"Running nmap service detection for {target}:{port}")
             try:
                 # Use shared nmap_scan function with enhanced scanning
+                self.logger.debug(f"Calling nmap_scan with args: {nmap_args}")
                 nmap_result = nmap_scan(
                     ip=target, 
                     ports=str(port), 
