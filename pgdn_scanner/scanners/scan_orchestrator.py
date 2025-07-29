@@ -13,6 +13,7 @@ from ..tools.whatweb import whatweb_scan
 from ..tools.ssltester import ssl_test
 from ..tools.docker import DockerExposureChecker
 from ..core.logging import get_logger
+from ..core.schema import ScanResultSchema, ScanType, ScanLevel, ScanStatus, ErrorType
 
 logger = get_logger(__name__)
 
@@ -50,12 +51,20 @@ class ScanOrchestrator:
             **kwargs: Additional scan parameters
             
         Returns:
-            Comprehensive scan results
+            Standardized scan results following strict schema
         """
         # Track overall scan timing
-        scan_start_time = int(time.time())
+        scan_start_time = time.time()
         
         self.logger.info(f"Starting comprehensive scan of {target} (protocol: {protocol})")
+        
+        # Determine scan level string
+        if scan_level == 1:
+            scan_level_str = ScanLevel.BASIC.value
+        elif scan_level == 2:
+            scan_level_str = ScanLevel.DEEP.value
+        else:
+            scan_level_str = ScanLevel.DISCOVERY.value
         
         # Use enabled_scanners if explicitly set, otherwise determine based on protocol
         if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
@@ -69,17 +78,9 @@ class ScanOrchestrator:
                 scanners_to_run = self.enabled_scanners
             self.logger.info(f"Scanners to run for protocol {protocol}: {scanners_to_run}")
 
-        results = {
-            "target": target,
-            "resolved_ip": resolved_ip,
-            "hostname": hostname,
-            "scan_level": None,
-            "protocol": protocol,
-            "scan_timestamp": kwargs.get('scan_timestamp'),
-            "scan_start_time": scan_start_time,
-            "scan_results": {},
-            "external_tools": {}
-        }
+        # Initialize array for structured scan results
+        scan_data = []
+        tools_used = []
         
         # Determine which scanners and tools to run
         if hasattr(self, '_enabled_scanners_set') and self._enabled_scanners_set:
@@ -91,56 +92,80 @@ class ScanOrchestrator:
             internal_scanners = [s for s in scanners_to_run if s in self.scanner_registry.get_registered_scanners()]
             external_tools = []  # No external tools for protocol scans
 
-        # Run internal scanners with timing
+        # Run internal scanners with strict schema enforcement
         if internal_scanners:
-            scanners_stage_start = int(time.time())
+            scanners_stage_start = time.time()
             self.logger.info(f"Starting scanner stage with {len(internal_scanners)} scanners")
             
             for scanner_type in internal_scanners:
                 try:
                     scanner = self.scanner_registry.get_scanner(scanner_type)
                     if scanner:
-                        scanner_start = int(time.time())
+                        scanner_start = time.time()
                         self.logger.info(f"Running {scanner_type} scanner")
                         
                         # Check if this is an async protocol scanner
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
                             import asyncio
-                            scan_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs))
+                            raw_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs))
                         else:
                             # Regular scanner - include protocol in kwargs if provided
                             scanner_kwargs = kwargs.copy()
                             if protocol:
                                 scanner_kwargs['protocol'] = protocol
-                            scan_result = scanner.scan(target, hostname=hostname, ports=ports, **scanner_kwargs)
+                            raw_result = scanner.scan(target, hostname=hostname, ports=ports, **scanner_kwargs)
                             
-                        scanner_end = int(time.time())
-                        self.logger.info(f"Completed {scanner_type} scanner in {scanner_end - scanner_start} seconds")
+                        scanner_end = time.time()
+                        scan_duration = scanner_end - scanner_start
+                        self.logger.info(f"Completed {scanner_type} scanner in {scan_duration:.3f} seconds")
                         
-                        # Embed timing directly into the scan result if it has meaningful results
-                        if self._has_meaningful_results(scan_result):
-                            scan_result["start_time"] = scanner_start
-                            scan_result["end_time"] = scanner_end
-                            scan_result["duration"] = scanner_end - scanner_start
-                        
-                        results["scan_results"][scanner_type] = scan_result
+                        # Convert to structured format and add to scan data
+                        if self._has_meaningful_results(raw_result):
+                            # Extract clean result data based on scanner type
+                            clean_result = self._extract_clean_result(scanner_type, raw_result)
+                            
+                            # Create standardized scan result
+                            scan_result = ScanResultSchema.create_scan_result(
+                                scan_type=self._map_scanner_to_scan_type(scanner_type),
+                                target=target,
+                                result=clean_result,
+                                scan_duration=scan_duration,
+                                status=ScanStatus.SUCCESS.value
+                            )
+                            
+                            scan_data.append(scan_result)
+                            tools_used.append(scanner_type)
+                        else:
+                            # Create failed scan result
+                            scan_result = ScanResultSchema.create_scan_result(
+                                scan_type=self._map_scanner_to_scan_type(scanner_type),
+                                target=target,
+                                result={},
+                                scan_duration=scan_duration,
+                                status=ScanStatus.FAILED.value
+                            )
+                            scan_data.append(scan_result)
                     else:
                         self.logger.warning(f"Scanner {scanner_type} not available")
                 except Exception as e:
+                    scanner_end = time.time()
+                    scan_duration = scanner_end - (scanner_start if 'scanner_start' in locals() else scanner_end)
                     self.logger.error(f"Failed to run {scanner_type} scanner: {e}")
-                    # Include timing and error info for failed scans
-                    scanner_end = int(time.time())
-                    results["scan_results"][scanner_type] = {
-                        "error": str(e),
-                        "start_time": scanner_start if 'scanner_start' in locals() else None,
-                        "end_time": scanner_end,
-                        "duration": scanner_end - scanner_start if 'scanner_start' in locals() else None
-                    }
+                    
+                    # Create error scan result
+                    scan_result = ScanResultSchema.create_scan_result(
+                        scan_type=self._map_scanner_to_scan_type(scanner_type),
+                        target=target,
+                        result={"error": str(e)},
+                        scan_duration=scan_duration,
+                        status=ScanStatus.FAILED.value
+                    )
+                    scan_data.append(scan_result)
             
-            scanners_stage_end = int(time.time())
+            scanners_stage_end = time.time()
         
-        # Run external tools with timing
+        # Run external tools with schema enforcement
         external_tools_to_run = []
         if self.use_external_tools:
             if hasattr(self, '_enabled_external_tools_set') and self._enabled_external_tools_set:
@@ -151,23 +176,29 @@ class ScanOrchestrator:
                 external_tools_to_run = external_tools
         
         if external_tools_to_run:
-            external_tools_stage_start = int(time.time())
+            external_tools_stage_start = time.time()
             self.logger.info(f"Starting external tools stage with {len(external_tools_to_run)} tools")
             
-            results["external_tools"] = self._run_external_tools(target, hostname, results, external_tools_to_run, resolved_ip)
+            external_results = self._run_external_tools_with_schema(target, hostname, external_tools_to_run, resolved_ip)
+            scan_data.extend(external_results)
+            tools_used.extend([tool for tool in external_tools_to_run if tool in self.enabled_external_tools])
             
-            external_tools_stage_end = int(time.time())
+            external_tools_stage_end = time.time()
         
-        # Record total scan timing only if any meaningful results were found
-        scan_end_time = int(time.time())
-        results["scan_end_time"] = scan_end_time
+        # Record total scan timing
+        scan_end_time = time.time()
         
-        self.logger.info(f"Scan completed in {scan_end_time - scan_start_time} seconds")
+        self.logger.info(f"Scan completed in {scan_end_time - scan_start_time:.3f} seconds")
         
-        # Convert to new structured format
-        structured_results = self._convert_to_structured_format(results)
-        
-        return structured_results
+        # Create standardized response structure
+        return ScanResultSchema.create_response_structure(
+            data=scan_data,
+            scan_level=scan_level_str,
+            target=target,
+            tools_used=tools_used,
+            scan_start_time=scan_start_time,
+            scan_end_time=scan_end_time
+        )
     
     def _filter_infrastructure_scanners(self, enabled_scanners: List[str]) -> List[str]:
         """Filter out protocol-specific scanners, keeping only infrastructure scanners.
@@ -858,6 +889,330 @@ class ScanOrchestrator:
                 return any(summary.get(key, 0) > 0 for key in meaningful_summary_keys)
             
         return len(meaningful_keys) > 0
+
+    def _map_scanner_to_scan_type(self, scanner_type: str) -> str:
+        """Map scanner type to standardized scan type.
+        
+        Args:
+            scanner_type: Internal scanner type name
+            
+        Returns:
+            Standardized scan type
+        """
+        type_mapping = {
+            'web': ScanType.WEB.value,
+            'port_scan': ScanType.PORT_SCAN.value,
+            'vulnerability': ScanType.DISCOVERY.value,
+            'geo': ScanType.GEO.value,
+            'compliance': ScanType.COMPLIANCE.value,
+            'node_scan': ScanType.NODE_SCAN.value,
+            'sui': ScanType.DISCOVERY.value,
+            'filecoin': ScanType.DISCOVERY.value,
+            'ethereum': ScanType.DISCOVERY.value,
+            'arweave': ScanType.DISCOVERY.value,
+        }
+        return type_mapping.get(scanner_type, ScanType.DISCOVERY.value)
+
+    def _extract_clean_result(self, scanner_type: str, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean, essential data from raw scanner results.
+        
+        Args:
+            scanner_type: Type of scanner
+            raw_result: Raw result from scanner
+            
+        Returns:
+            Clean result data for schema
+        """
+        if scanner_type == 'web':
+            return self._extract_web_result(raw_result)
+        elif scanner_type == 'port_scan':
+            return self._extract_port_scan_result(raw_result)
+        elif scanner_type == 'geo':
+            return self._extract_geo_result(raw_result)
+        elif scanner_type in ['sui', 'filecoin', 'ethereum', 'arweave']:
+            return self._extract_protocol_result(raw_result)
+        elif scanner_type == 'vulnerability':
+            return self._extract_vulnerability_result(raw_result)
+        elif scanner_type == 'compliance':
+            return self._extract_compliance_result(raw_result)
+        elif scanner_type == 'node_scan':
+            return self._extract_node_scan_result(raw_result)
+        else:
+            # Generic extraction - remove debugging/metadata fields
+            clean = {}
+            for key, value in raw_result.items():
+                if key not in ['start_time', 'end_time', 'duration', 'timestamp', 'scanner_type', 'scan_level', 'hostname', 'protocol']:
+                    clean[key] = value
+            return clean
+
+    def _extract_web_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean web scan results."""
+        from ..core.schema import ScanResultSchema
+        
+        web_results = raw_result.get('web_results', {})
+        if not web_results:
+            return {}
+        
+        # Get first successful web result
+        for url, result in web_results.items():
+            if isinstance(result, dict) and not result.get('error'):
+                return ScanResultSchema.format_web_result(
+                    status_code=result.get('status_code'),
+                    headers=result.get('headers'),
+                    technologies=result.get('technologies', []),
+                    security_headers=result.get('security_headers'),
+                    endpoints=result.get('fuzzed_endpoints', [])
+                )
+        
+        return {}
+
+    def _extract_port_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean port scan results."""
+        from ..core.schema import ScanResultSchema
+        
+        return ScanResultSchema.format_port_scan_result(
+            open_ports=raw_result.get('open_ports', []),
+            closed_ports=raw_result.get('closed_ports', []),
+            filtered_ports=raw_result.get('filtered_ports', []),
+            port_details=raw_result.get('detailed_results', [])
+        )
+
+    def _extract_geo_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean geo scan results."""
+        from ..core.schema import ScanResultSchema
+        
+        return ScanResultSchema.format_geo_result(
+            country=raw_result.get('country_name'),
+            city=raw_result.get('city_name'),
+            latitude=raw_result.get('latitude'),
+            longitude=raw_result.get('longitude'),
+            asn=raw_result.get('asn_number'),
+            organization=raw_result.get('asn_organization')
+        )
+
+    def _extract_protocol_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean protocol scan results."""
+        from ..core.schema import ScanResultSchema
+        
+        protocols = []
+        if raw_result.get('protocol'):
+            protocols.append(raw_result['protocol'])
+        
+        endpoints = []
+        results = raw_result.get('results', [])
+        if isinstance(results, list):
+            for result in results:
+                if isinstance(result, dict) and result.get('endpoint'):
+                    endpoints.append({
+                        'protocol': result.get('protocol', ''),
+                        'port': result.get('port'),
+                        'status': 'active' if result.get('healthy') else 'inactive'
+                    })
+        
+        return ScanResultSchema.format_discovery_result(
+            protocols_detected=protocols,
+            node_type=raw_result.get('node_type'),
+            network=raw_result.get('network'),
+            endpoints=endpoints,
+            capabilities=raw_result.get('capabilities', [])
+        )
+
+    def _extract_vulnerability_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean vulnerability scan results."""
+        vulnerabilities = []
+        vuln_data = raw_result.get('vulnerabilities', {})
+        
+        for port, port_vulns in vuln_data.items():
+            if isinstance(port_vulns, list):
+                for vuln in port_vulns:
+                    if isinstance(vuln, dict):
+                        vulnerabilities.append({
+                            'port': int(port) if isinstance(port, str) else port,
+                            'cve': vuln.get('cve'),
+                            'severity': vuln.get('severity'),
+                            'description': vuln.get('description')
+                        })
+        
+        return {'vulnerabilities': vulnerabilities}
+
+    def _extract_compliance_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean compliance scan results."""
+        return {
+            'compliance_flags': raw_result.get('compliance_flags', []),
+            'checks_passed': raw_result.get('checks_passed', 0),
+            'checks_failed': raw_result.get('checks_failed', 0),
+            'total_checks': raw_result.get('total_checks', 0)
+        }
+
+    def _extract_node_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract clean node scan results."""
+        return {
+            'node_status': raw_result.get('node_status', 'unknown'),
+            'node_info': raw_result.get('node_info', {}),
+            'endpoints_discovered': raw_result.get('endpoints', []),
+            'health_status': raw_result.get('health_status', 'unknown')
+        }
+
+    def _run_external_tools_with_schema(self, target: str, hostname: Optional[str], enabled_tools: List[str], resolved_ip: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Run external tools and return results in standardized schema format.
+        
+        Args:
+            target: Target hostname (FQDN)
+            hostname: Optional hostname for target IP
+            enabled_tools: List of external tools to run
+            resolved_ip: Resolved IP address for IP-based operations
+            
+        Returns:
+            List of standardized scan results
+        """
+        external_results = []
+        
+        # Nmap scan
+        if 'nmap' in enabled_tools:
+            nmap_start = time.time()
+            try:
+                self.logger.info(f"Running nmap scan")
+                nmap_target = resolved_ip if resolved_ip else target
+                nmap_raw = nmap_scan(nmap_target)
+                nmap_end = time.time()
+                scan_duration = nmap_end - nmap_start
+                
+                if self._has_meaningful_results(nmap_raw):
+                    # Extract port information from nmap
+                    open_ports = []
+                    port_details = []
+                    
+                    if nmap_raw and "ports" in nmap_raw:
+                        for port_info in nmap_raw["ports"]:
+                            if port_info.get("state") == "open":
+                                open_ports.append(port_info["port"])
+                                port_details.append({
+                                    "port": port_info["port"],
+                                    "protocol": "tcp",
+                                    "service": port_info.get("service", ""),
+                                    "version": port_info.get("version", "")
+                                })
+                    
+                    from ..core.schema import ScanResultSchema
+                    clean_result = ScanResultSchema.format_port_scan_result(
+                        open_ports=open_ports,
+                        port_details=port_details
+                    )
+                    
+                    scan_result = ScanResultSchema.create_scan_result(
+                        scan_type=ScanType.PORT_SCAN.value,
+                        target=target,
+                        result=clean_result,
+                        scan_duration=scan_duration,
+                        status=ScanStatus.SUCCESS.value
+                    )
+                    external_results.append(scan_result)
+                    
+            except Exception as e:
+                nmap_end = time.time()
+                scan_duration = nmap_end - nmap_start
+                self.logger.error(f"Nmap scan failed for {target}: {e}")
+                
+                scan_result = ScanResultSchema.create_scan_result(
+                    scan_type=ScanType.PORT_SCAN.value,
+                    target=target,
+                    result={"error": str(e)},
+                    scan_duration=scan_duration,
+                    status=ScanStatus.FAILED.value
+                )
+                external_results.append(scan_result)
+        
+        # WhatWeb scan
+        if 'whatweb' in enabled_tools:
+            whatweb_start = time.time()
+            self.logger.info(f"Running whatweb scan")
+            
+            # Try common web ports
+            web_ports = [(80, "http"), (443, "https")]
+            whatweb_found = False
+            
+            for port, scheme in web_ports:
+                try:
+                    scan_target = hostname if (hostname and self._is_ip_address(target)) else target
+                    result = whatweb_scan(scan_target, port=port, scheme=scheme)
+                    
+                    if result and (not isinstance(result, dict) or not result.get("error")):
+                        whatweb_end = time.time()
+                        scan_duration = whatweb_end - whatweb_start
+                        
+                        from ..core.schema import ScanResultSchema
+                        clean_result = ScanResultSchema.format_web_result(
+                            technologies=result.get('technologies', []) if isinstance(result, dict) else []
+                        )
+                        
+                        scan_result = ScanResultSchema.create_scan_result(
+                            scan_type=ScanType.WHATWEB.value,
+                            target=target,
+                            result=clean_result,
+                            scan_duration=scan_duration,
+                            status=ScanStatus.SUCCESS.value
+                        )
+                        external_results.append(scan_result)
+                        whatweb_found = True
+                        break
+                        
+                except Exception as e:
+                    self.logger.debug(f"WhatWeb scan failed for {scan_target}:{port}: {e}")
+                    continue
+            
+            if not whatweb_found:
+                whatweb_end = time.time()
+                scan_duration = whatweb_end - whatweb_start
+                scan_result = ScanResultSchema.create_scan_result(
+                    scan_type=ScanType.WHATWEB.value,
+                    target=target,
+                    result={},
+                    scan_duration=scan_duration,
+                    status=ScanStatus.FAILED.value
+                )
+                external_results.append(scan_result)
+        
+        # SSL test
+        if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
+            ssl_start = time.time()
+            try:
+                self.logger.info(f"Running SSL test")
+                ssl_raw = ssl_test(target, port=443)
+                ssl_end = time.time()
+                scan_duration = ssl_end - ssl_start
+                
+                from ..core.schema import ScanResultSchema
+                clean_result = ScanResultSchema.format_ssl_result(
+                    certificate=ssl_raw.get('certificate'),
+                    ssl_version=ssl_raw.get('ssl_version'),
+                    cipher_suites=ssl_raw.get('cipher_suites', []),
+                    vulnerabilities=ssl_raw.get('vulnerabilities', [])
+                )
+                
+                scan_result = ScanResultSchema.create_scan_result(
+                    scan_type=ScanType.SSL.value,
+                    target=target,
+                    result=clean_result,
+                    scan_duration=scan_duration,
+                    status=ScanStatus.SUCCESS.value
+                )
+                external_results.append(scan_result)
+                
+            except Exception as e:
+                ssl_end = time.time()
+                scan_duration = ssl_end - ssl_start
+                self.logger.debug(f"SSL test failed for {target}: {e}")
+                
+                scan_result = ScanResultSchema.create_scan_result(
+                    scan_type=ScanType.SSL.value,
+                    target=target,
+                    result={"error": str(e)},
+                    scan_duration=scan_duration,
+                    status=ScanStatus.FAILED.value
+                )
+                external_results.append(scan_result)
+        
+        return external_results
 
 # Legacy compatibility: provide the old Scanner class interface
 class Scanner(ScanOrchestrator):
