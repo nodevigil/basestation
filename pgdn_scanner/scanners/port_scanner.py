@@ -480,7 +480,10 @@ class PortScanner(BaseScanner):
             use_sudo = os.environ.get('USE_SUDO', '').lower() == 'true' or os.geteuid() == 0
             
             # Start with basic command
-            cmd = ['nmap']
+            if use_sudo and os.geteuid() != 0:
+                cmd = ['sudo', 'nmap']
+            else:
+                cmd = ['nmap']
             
             # Add user-provided arguments first (they can override defaults)
             cmd.extend(nmap_args)
