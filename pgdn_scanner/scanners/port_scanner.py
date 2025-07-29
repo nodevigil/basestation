@@ -476,11 +476,12 @@ class PortScanner(BaseScanner):
             nmap_args = []
             
         try:
-            # Check if we should use sudo commands
-            use_sudo = os.environ.get('USE_SUDO', '').lower() == 'true' or os.geteuid() == 0
+            # Check if we should use enhanced scanning (root privileges)
+            is_root = os.geteuid() == 0
+            use_enhanced = os.environ.get('USE_SUDO', '').lower() == 'true' or is_root
             
             # Start with basic command
-            if use_sudo and os.geteuid() != 0:
+            if use_enhanced and not is_root:
                 cmd = ['sudo', 'nmap']
             else:
                 cmd = ['nmap']
@@ -497,9 +498,9 @@ class PortScanner(BaseScanner):
             has_version = any(arg in ['-sV', '-sC', '-A'] for arg in nmap_args)
             
             if not has_scan_type:
-                if use_sudo:
-                    cmd.append('-sS')  # SYN scan
-                # If no sudo, nmap defaults to -sT (connect scan)
+                if use_enhanced:
+                    cmd.extend(['-sS', '-T4'])  # SYN scan with faster timing
+                # If no enhanced privileges, nmap defaults to -sT (connect scan)
             
             if not has_version:
                 cmd.append('-sV')  # Version detection
