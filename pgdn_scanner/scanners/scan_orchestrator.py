@@ -966,31 +966,31 @@ class ScanOrchestrator:
 
     def _extract_port_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean port scan results with enhanced details."""
-        # Use base schema format for core data
-        base_result = ScanResultSchema.format_port_scan_result(
-            open_ports=raw_result.get('open_ports', []),
-            closed_ports=raw_result.get('closed_ports', []),
-            filtered_ports=raw_result.get('filtered_ports', []),
-            port_details=raw_result.get('detailed_results', [])
-        )
+        # Start with basic port information
+        result = {
+            'open_ports': raw_result.get('open_ports', []),
+        }
         
-        # Enhance with additional valuable data from port scanner
-        enhanced_result = base_result.copy()
-        
-        # Add service banners if available
-        banners = raw_result.get('banners', {})
-        if banners:
-            enhanced_result['service_banners'] = banners
-        
-        # Add TLS/SSL information if available
-        tls_info = raw_result.get('tls', {})
-        if tls_info:
-            enhanced_result['tls_info'] = tls_info
-        
-        # Add scan summary statistics
-        scan_summary = raw_result.get('scan_summary', {})
-        if scan_summary:
-            enhanced_result['scan_statistics'] = {
+        # Add optional basic fields
+        if raw_result.get('closed_ports'):
+            result['closed_ports'] = raw_result['closed_ports']
+        if raw_result.get('filtered_ports'):
+            result['filtered_ports'] = raw_result['filtered_ports']
+            
+        # Add rich data fields directly from port scanner
+        if raw_result.get('detailed_results'):
+            result['port_details'] = raw_result['detailed_results']
+            
+        if raw_result.get('banners'):
+            result['service_banners'] = raw_result['banners']
+            
+        if raw_result.get('tls'):
+            result['tls_info'] = raw_result['tls']
+            
+        # Convert scan_summary to scan_statistics
+        if raw_result.get('scan_summary'):
+            scan_summary = raw_result['scan_summary']
+            result['scan_statistics'] = {
                 'total_ports_scanned': scan_summary.get('total_ports', 0),
                 'open_count': scan_summary.get('open_ports', 0),
                 'closed_count': scan_summary.get('closed_ports', 0),
@@ -998,33 +998,32 @@ class ScanOrchestrator:
                 'average_confidence': scan_summary.get('average_confidence', 0),
                 'scan_timestamp': scan_summary.get('timestamp')
             }
-        
-        # Add service detection summary
+            
+        # Extract services from detailed results
         services_detected = []
         detailed_results = raw_result.get('detailed_results', [])
-        for result in detailed_results:
-            if isinstance(result, dict) and result.get('service') and result.get('is_open'):
-                service_info = {
-                    'port': result.get('port'),
-                    'service': result.get('service'),
-                    'version': result.get('version'),
-                    'confidence': result.get('confidence_score', 0)
-                }
-                services_detected.append(service_info)
-        
+        for detail in detailed_results:
+            if isinstance(detail, dict) and detail.get('service') and detail.get('is_open'):
+                services_detected.append({
+                    'port': detail.get('port'),
+                    'service': detail.get('service'),
+                    'version': detail.get('version', ''),
+                    'confidence': detail.get('confidence_score', 0)
+                })
+                
         if services_detected:
-            enhanced_result['services_detected'] = services_detected
-        
-        # Add scan configuration used
-        scan_config = raw_result.get('scan_config', {})
-        if scan_config:
-            enhanced_result['scan_configuration'] = {
+            result['services_detected'] = services_detected
+            
+        # Add scan configuration
+        if raw_result.get('scan_config'):
+            scan_config = raw_result['scan_config']
+            result['scan_configuration'] = {
                 'timeout': scan_config.get('timeout'),
                 'max_threads': scan_config.get('max_threads'),
                 'nmap_enabled': not scan_config.get('skip_nmap', True)
             }
         
-        return enhanced_result
+        return result
 
     def _extract_geo_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean geo scan results."""
