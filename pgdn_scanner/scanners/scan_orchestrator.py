@@ -104,6 +104,12 @@ class ScanOrchestrator:
                         scanner_start = time.time()
                         self.logger.info(f"Running {scanner_type} scanner")
                         
+                        # DEBUG: Log scanner details
+                        if scanner_type == 'port_scan':
+                            self.logger.info(f"DEBUG: Scanner class: {scanner.__class__}")
+                            self.logger.info(f"DEBUG: Scanner module: {scanner.__class__.__module__}")
+                            self.logger.info(f"DEBUG: Scanner scanner_type: {getattr(scanner, 'scanner_type', 'NO_SCANNER_TYPE')}")
+                        
                         # Check if this is an async protocol scanner
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
