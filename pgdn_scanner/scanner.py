@@ -115,14 +115,20 @@ class Scanner:
 
             # Convert port string to ports list for port_scan
             orchestrator_kwargs = kwargs.copy()
-            if run == 'port_scan' and 'port' in kwargs:
-                port_str = kwargs['port']
-                try:
-                    ports_list = [int(p.strip()) for p in port_str.split(',') if p.strip()]
-                    orchestrator_kwargs['ports'] = ports_list
-                    orchestrator_kwargs.pop('port', None)  # Remove the string version
-                except ValueError as e:
-                    return DictResult.from_error(f"Invalid port format: {e}")
+            if run == 'port_scan':
+                # Handle port conversion
+                if 'port' in kwargs:
+                    port_str = kwargs['port']
+                    try:
+                        ports_list = [int(p.strip()) for p in port_str.split(',') if p.strip()]
+                        orchestrator_kwargs['ports'] = ports_list
+                        orchestrator_kwargs.pop('port', None)  # Remove the string version
+                    except ValueError as e:
+                        return DictResult.from_error(f"Invalid port format: {e}")
+                
+                # Ensure rich data by providing default nmap_args if none specified
+                if 'nmap_args' not in orchestrator_kwargs:
+                    orchestrator_kwargs['nmap_args'] = '-sV'
             
             scan_results = self.orchestrator.scan(
                 target=original_target,
