@@ -104,12 +104,6 @@ class ScanOrchestrator:
                         scanner_start = time.time()
                         self.logger.info(f"Running {scanner_type} scanner")
                         
-                        # DEBUG: Log scanner details
-                        if scanner_type == 'port_scan':
-                            self.logger.info(f"DEBUG: Scanner class: {scanner.__class__}")
-                            self.logger.info(f"DEBUG: Scanner module: {scanner.__class__.__module__}")
-                            self.logger.info(f"DEBUG: Scanner scanner_type: {getattr(scanner, 'scanner_type', 'NO_SCANNER_TYPE')}")
-                        
                         # Check if this is an async protocol scanner
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner with async support
@@ -128,20 +122,8 @@ class ScanOrchestrator:
                         
                         # Convert to structured format and add to scan data
                         if self._has_meaningful_results(raw_result):
-                            # DEBUG: Log raw result keys for port_scan
-                            if scanner_type == 'port_scan':
-                                self.logger.info(f"DEBUG: Raw port_scan result keys: {list(raw_result.keys())}")
-                                if 'detailed_results' in raw_result:
-                                    self.logger.info(f"DEBUG: detailed_results length: {len(raw_result['detailed_results'])}")
-                                else:
-                                    self.logger.info(f"DEBUG: NO detailed_results in raw_result!")
-                            
                             # Extract clean result data based on scanner type
                             clean_result = self._extract_clean_result(scanner_type, raw_result)
-                            
-                            # DEBUG: Log clean result keys for port_scan
-                            if scanner_type == 'port_scan':
-                                self.logger.info(f"DEBUG: Clean result keys: {list(clean_result.keys())}")
                             
                             # Create standardized scan result
                             scan_result = ScanResultSchema.create_scan_result(
