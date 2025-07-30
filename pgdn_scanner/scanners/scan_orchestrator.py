@@ -1002,20 +1002,57 @@ class ScanOrchestrator:
         results = raw_result.get('results', [])
         if isinstance(results, list):
             for result in results:
-                if isinstance(result, dict) and result.get('endpoint'):
-                    endpoints.append({
-                        'protocol': result.get('protocol', ''),
-                        'port': result.get('port'),
-                        'status': 'active' if result.get('healthy') else 'inactive'
-                    })
+                if isinstance(result, dict):
+                    # Extract endpoint info if available
+                    if result.get('endpoint') or result.get('port'):
+                        endpoints.append({
+                            'protocol': result.get('protocol', ''),
+                            'port': result.get('port'),
+                            'status': 'active' if result.get('healthy') else 'inactive',
+                            'endpoint': result.get('endpoint', ''),
+                            'version': result.get('version', ''),
+                            'node_type': result.get('node_type', '')
+                        })
         
-        return ScanResultSchema.format_discovery_result(
+        # Extract compliance flags and health information
+        compliance_flags = []
+        healthy_nodes = 0
+        total_nodes = len(results) if isinstance(results, list) else 0
+        
+        if isinstance(results, list):
+            for result in results:
+                if isinstance(result, dict):
+                    # Check for health status
+                    if result.get('healthy'):
+                        healthy_nodes += 1
+                    
+                    # Extract compliance flags
+                    if result.get('compliance_flags'):
+                        compliance_flags.extend(result['compliance_flags'])
+        
+        # Create base discovery result
+        discovery_result = ScanResultSchema.format_discovery_result(
             protocols_detected=protocols,
             node_type=raw_result.get('node_type'),
             network=raw_result.get('network'),
             endpoints=endpoints,
             capabilities=raw_result.get('capabilities', [])
         )
+        
+        # Add compliance and health information for compliance scans
+        if compliance_flags or total_nodes > 0:
+            discovery_result.update({
+                'compliance_flags': list(set(compliance_flags)),  # Remove duplicates
+                'health_summary': {
+                    'total_nodes': total_nodes,
+                    'healthy_nodes': healthy_nodes,
+                    'unhealthy_nodes': total_nodes - healthy_nodes,
+                    'health_percentage': round((healthy_nodes / total_nodes * 100), 2) if total_nodes > 0 else 0
+                },
+                'scan_summary': raw_result.get('summary', {})
+            })
+        
+        return discovery_result
 
     def _extract_vulnerability_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean vulnerability scan results."""
