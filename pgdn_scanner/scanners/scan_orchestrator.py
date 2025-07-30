@@ -947,8 +947,6 @@ class ScanOrchestrator:
 
     def _extract_web_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean web scan results."""
-        from ..core.schema import ScanResultSchema
-        
         web_results = raw_result.get('web_results', {})
         if not web_results:
             return {}
@@ -968,8 +966,6 @@ class ScanOrchestrator:
 
     def _extract_port_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean port scan results."""
-        from ..core.schema import ScanResultSchema
-        
         return ScanResultSchema.format_port_scan_result(
             open_ports=raw_result.get('open_ports', []),
             closed_ports=raw_result.get('closed_ports', []),
@@ -979,8 +975,6 @@ class ScanOrchestrator:
 
     def _extract_geo_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean geo scan results."""
-        from ..core.schema import ScanResultSchema
-        
         return ScanResultSchema.format_geo_result(
             country=raw_result.get('country_name'),
             city=raw_result.get('city_name'),
@@ -992,7 +986,6 @@ class ScanOrchestrator:
 
     def _extract_protocol_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean protocol scan results."""
-        from ..core.schema import ScanResultSchema
         
         protocols = []
         if raw_result.get('protocol'):
@@ -1174,7 +1167,6 @@ class ScanOrchestrator:
                                     "version": port_info.get("version", "")
                                 })
                     
-                    from ..core.schema import ScanResultSchema
                     clean_result = ScanResultSchema.format_port_scan_result(
                         open_ports=open_ports,
                         port_details=port_details
@@ -1221,7 +1213,6 @@ class ScanOrchestrator:
                         whatweb_end = time.time()
                         scan_duration = whatweb_end - whatweb_start
                         
-                        from ..core.schema import ScanResultSchema
                         clean_result = ScanResultSchema.format_web_result(
                             technologies=result.get('technologies', []) if isinstance(result, dict) else []
                         )
@@ -1262,7 +1253,6 @@ class ScanOrchestrator:
                 ssl_end = time.time()
                 scan_duration = ssl_end - ssl_start
                 
-                from ..core.schema import ScanResultSchema
                 clean_result = ScanResultSchema.format_ssl_result(
                     certificate=ssl_raw.get('certificate'),
                     ssl_version=ssl_raw.get('ssl_version'),
