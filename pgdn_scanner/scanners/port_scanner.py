@@ -453,8 +453,12 @@ class PortScanner(BaseScanner):
         
         # 8. Calculate confidence score
         result.confidence_score = self._calculate_confidence_score(result)
-        self.logger.debug(f"Scan completed for {target}:{port} - Confidence Score: {result.confidence_score:.1f}/100")
-        result.scan_log.append(f"SCAN_COMPLETE: Confidence {result.confidence_score:.1f}/100")
+        
+        # 9. Final port state determination based on confidence
+        result = self._finalize_port_state(result)
+        
+        self.logger.debug(f"Scan completed for {target}:{port} - State: {result.port_state}, Confidence: {result.confidence_score:.1f}/100")
+        result.scan_log.append(f"SCAN_COMPLETE: State {result.port_state}, Confidence {result.confidence_score:.1f}/100")
         
         return result
     
@@ -794,12 +798,57 @@ class PortScanner(BaseScanner):
         
         return max(0.0, min(100.0, confidence))
 
+    def _finalize_port_state(self, result: PortScanResult) -> PortScanResult:
+        """
+        Finalize port state based on both connectivity and confidence level.
+        
+        Args:
+            result: PortScanResult with preliminary state and calculated confidence
+            
+        Returns:
+            PortScanResult with finalized state
+        """
+        confidence = result.confidence_score
+        
+        # For ports that initially appeared closed/filtered
+        if not result.is_open:
+            # High confidence in closed/filtered state - keep as is
+            if confidence >= 70:
+                return result
+            else:
+                # Low confidence in closed state - mark as uncertain
+                result.port_state = "uncertain"
+                result.scan_log.append(f"STATE_FINALIZED: Low confidence in closed state, marked as uncertain")
+                return result
+        
+        # For ports that initially appeared open
+        else:
+            if confidence >= 70:
+                # High confidence - definitely open
+                result.port_state = "open"
+                result.is_open = True
+                result.scan_log.append(f"STATE_FINALIZED: High confidence, confirmed open")
+            elif confidence >= 40:
+                # Medium confidence - likely open but uncertain
+                result.port_state = "likely_open" 
+                result.is_open = True  # Keep as open but flag uncertainty
+                result.scan_log.append(f"STATE_FINALIZED: Medium confidence, marked as likely_open")
+            else:
+                # Low confidence - too uncertain to claim it's open
+                result.port_state = "uncertain"
+                result.is_open = False  # Change from open to uncertain
+                result.scan_log.append(f"STATE_FINALIZED: Low confidence ({confidence:.1f}%), marked as uncertain")
+        
+        return result
+
     def _generate_scan_report(self, target: str, results: List[PortScanResult], skip_nmap: bool) -> Dict[str, Any]:
         """Generate comprehensive scan report in orchestrator-compatible format"""
         # Extract ports by state
-        open_ports = [r.port for r in results if r.is_open]
+        open_ports = [r.port for r in results if r.port_state == 'open']
+        likely_open_ports = [r.port for r in results if r.port_state == 'likely_open']
         closed_ports = [r.port for r in results if r.port_state == 'closed']
         filtered_ports = [r.port for r in results if r.port_state == 'filtered']
+        uncertain_ports = [r.port for r in results if r.port_state == 'uncertain']
         
         # Extract banners for orchestrator compatibility
         banners = {}
@@ -819,23 +868,28 @@ class PortScanner(BaseScanner):
             'scanner_type': self.scanner_type,
             'timestamp': datetime.now().isoformat(),
             
-            # Orchestrator-expected format
-            'open_ports': open_ports,
+            # Orchestrator-expected format (combine open + likely_open for backward compatibility)
+            'open_ports': open_ports + likely_open_ports,
             'banners': banners,
             'tls': tls,
             
-            # Enhanced port state information
+            # Enhanced port state information with confidence-based states
+            'confirmed_open_ports': open_ports,      # High confidence open
+            'likely_open_ports': likely_open_ports,  # Medium confidence open
             'closed_ports': closed_ports,
             'filtered_ports': filtered_ports,
+            'uncertain_ports': uncertain_ports,      # Low confidence, unclear state
             
             # Keep detailed results for comprehensive data
             'scan_summary': {
                 'timestamp': datetime.now().isoformat(),
                 'total_ports': len(results),
-                'open_ports': len(open_ports),
+                'confirmed_open_ports': len(open_ports),
+                'likely_open_ports': len(likely_open_ports),
+                'open_ports': len(open_ports) + len(likely_open_ports),  # Total open for backward compatibility
                 'closed_ports': len(closed_ports),
                 'filtered_ports': len(filtered_ports),
-                'other_ports': len(results) - len(open_ports) - len(closed_ports) - len(filtered_ports),
+                'uncertain_ports': len(uncertain_ports),
                 'average_confidence': sum(r.confidence_score for r in results) / len(results) if results else 0
             },
             'scan_config': {
