@@ -966,6 +966,12 @@ class ScanOrchestrator:
 
     def _extract_port_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean port scan results with enhanced details."""
+        # DEBUG: Log what raw_result contains
+        self.logger.info(f"DEBUG _extract_port_scan_result: Raw result keys: {list(raw_result.keys())}")
+        self.logger.info(f"DEBUG _extract_port_scan_result: Has detailed_results: {'detailed_results' in raw_result}")
+        self.logger.info(f"DEBUG _extract_port_scan_result: Has scan_summary: {'scan_summary' in raw_result}")
+        self.logger.info(f"DEBUG _extract_port_scan_result: Has banners: {'banners' in raw_result}")
+        
         # Use base schema format for core data
         base_result = ScanResultSchema.format_port_scan_result(
             open_ports=raw_result.get('open_ports', []),
