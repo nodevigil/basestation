@@ -1046,11 +1046,55 @@ class ScanOrchestrator:
 
     def _extract_node_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean node scan results."""
+        # The node scanner returns: target, protocol, results, total_probes, successful_probes, detected_services, open_ports
+        results = raw_result.get('results', [])
+        detected_services = raw_result.get('detected_services', [])
+        open_ports = raw_result.get('open_ports', [])
+        
+        # Extract meaningful information from the results
+        active_endpoints = []
+        service_info = {}
+        
+        for result in results:
+            if isinstance(result, dict) and not result.get('error'):
+                if result.get('banner') or result.get('service'):
+                    endpoint = {
+                        'port': result.get('port'),
+                        'protocol': result.get('protocol'),
+                        'service': result.get('service'),
+                        'version': result.get('version'),
+                        'ssl': result.get('ssl', False),
+                        'latency_ms': result.get('latency_ms')
+                    }
+                    active_endpoints.append(endpoint)
+                    
+                    # Aggregate service info
+                    if result.get('service'):
+                        service_info[result.get('service')] = result.get('version')
+        
+        # Determine node status based on findings
+        if detected_services:
+            node_status = 'active'
+        elif open_ports:
+            node_status = 'responding'
+        else:
+            node_status = 'inactive'
+        
         return {
-            'node_status': raw_result.get('node_status', 'unknown'),
-            'node_info': raw_result.get('node_info', {}),
-            'endpoints_discovered': raw_result.get('endpoints', []),
-            'health_status': raw_result.get('health_status', 'unknown')
+            'node_status': node_status,
+            'protocol': raw_result.get('protocol'),
+            'total_probes': raw_result.get('total_probes', 0),
+            'successful_probes': raw_result.get('successful_probes', 0),
+            'open_ports': open_ports,
+            'active_endpoints': active_endpoints,
+            'detected_services': [service.get('service') for service in detected_services if service.get('service')],
+            'service_versions': service_info,
+            'scan_summary': {
+                'probes_sent': raw_result.get('total_probes', 0),
+                'responses_received': raw_result.get('successful_probes', 0),
+                'services_detected': len(detected_services),
+                'ports_open': len(open_ports)
+            }
         }
 
     def _run_external_tools_with_schema(self, target: str, hostname: Optional[str], enabled_tools: List[str], resolved_ip: Optional[str] = None) -> List[Dict[str, Any]]:
