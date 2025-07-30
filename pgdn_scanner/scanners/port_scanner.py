@@ -155,6 +155,10 @@ class PortScanner(BaseScanner):
         skip_nmap = kwargs.get('skip_nmap', False)
         nmap_args = kwargs.get('nmap_args', self.nmap_args)
         
+        # Ensure rich data collection by default - use service detection when no specific args provided
+        if not nmap_args and not skip_nmap:
+            nmap_args = ['-sV']  # Service version detection for rich data
+        
         # Validate and parse nmap_args if provided as string
         if isinstance(nmap_args, str):
             nmap_args = self._parse_nmap_args(nmap_args)
