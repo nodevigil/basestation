@@ -148,9 +148,6 @@ class PortScanner(BaseScanner):
                 'timestamp': datetime.now().isoformat()
             }
         
-        if len(ports) > 5:
-            self.logger.warning(f"Too many ports specified ({len(ports)}), limiting to first 5")
-            ports = ports[:5]
         
         skip_nmap = kwargs.get('skip_nmap', False)
         nmap_args = kwargs.get('nmap_args', self.nmap_args)
