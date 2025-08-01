@@ -16,6 +16,7 @@ from urllib3.util.retry import Retry
 import urllib3
 import time
 import re
+import random
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass, asdict
 from urllib.parse import urlparse
@@ -281,7 +282,7 @@ class PortScanner(BaseScanner):
 
     def _batch_nmap_scan(self, target: str, ports: List[int], nmap_args: List[str]) -> Dict[int, Dict]:
         """
-        Run a single nmap scan for all ports and return results indexed by port number.
+        Run nmap scans in smaller batches and return consolidated results indexed by port number.
         
         Args:
             target: Target to scan
@@ -293,55 +294,59 @@ class PortScanner(BaseScanner):
         """
         port_results = {}
         
-        try:
-            # Convert ports list to comma-separated string
-            ports_str = ','.join(map(str, ports))
-            
-            self.logger.debug(f"Running batched nmap scan on ports: {ports_str}")
-            
-            # Calculate timeout based on complexity and port count
-            # Base timeout + extra time for version detection and scripts
-            batch_timeout = self.nmap_timeout * 2  # Base batch timeout
-            
-            # Add extra time for complex operations
-            if nmap_args:
-                args_str = ' '.join(nmap_args)
-                if '-sV' in args_str:
-                    batch_timeout += 10 * len(ports)  # 10s per port for version detection
-                if '--script' in args_str:
-                    batch_timeout += 5 * len(ports)   # 5s per port for scripts
+        # Use simple batching approach - just get port states quickly
+        batch_size = 8  # Larger batches since we're keeping it simple
+        
+        self.logger.info(f"Using fast batching approach: {len(ports)} ports split into batches of {batch_size}")
+        self.logger.info(f"Note: Using fast port state detection for batching, detailed analysis per port")
+        
+        # Split ports into batches
+        port_batches = [ports[i:i + batch_size] for i in range(0, len(ports), batch_size)]
+        self.logger.info(f"Created {len(port_batches)} batches: {[len(batch) for batch in port_batches]} ports each")
+        
+        for batch_num, port_batch in enumerate(port_batches, 1):
+            try:
+                ports_str = ','.join(map(str, port_batch))
+                
+                self.logger.info(f"Batch {batch_num}/{len(port_batches)}: fast scanning ports {ports_str}")
+                
+                # Use FAST nmap scan for batching - just get port states
+                # Don't use the slow args for batching, save those for individual scans
+                batch_result = nmap_scan(
+                    ip=target,
+                    ports=ports_str,
+                    timeout=30,  # Short timeout for fast scan
+                    fast_mode=True,  # Fast mode - no version detection
+                    additional_args=[]  # No slow arguments for batching
+                )
+                
+                if batch_result and not batch_result.get('error'):
+                    self.logger.info(f"Batch {batch_num}/{len(port_batches)} completed successfully")
                     
-            # Cap the timeout at a reasonable maximum
-            batch_timeout = min(batch_timeout, 300)  # Max 5 minutes
+                    # Parse the batch results and index by port
+                    for port_info in batch_result.get('ports', []):
+                        port_num = port_info.get('port')
+                        if port_num in port_batch:  # Only include ports from this batch
+                            port_results[port_num] = batch_result.copy()
+                            # Create a single-port version of the results for this port
+                            port_results[port_num]['ports'] = [port_info]
+                            
+                    self.logger.info(f"Batch {batch_num} found {len([p for p in port_batch if p in port_results])} ports with results")
+                else:
+                    self.logger.warning(f"Batch {batch_num}/{len(port_batches)} failed: {batch_result.get('error', 'unknown error') if batch_result else 'no result'}")
+                    # Continue with other batches even if one fails
+                    
+            except Exception as e:
+                self.logger.warning(f"Batch {batch_num}/{len(port_batches)} failed with exception: {e}")
+                # Continue with other batches even if one fails
             
-            self.logger.info(f"Using batch timeout of {batch_timeout}s for {len(ports)} ports with complex nmap args")
-            
-            # Run single nmap command for all ports
-            batch_result = nmap_scan(
-                ip=target,
-                ports=ports_str,
-                timeout=batch_timeout,
-                fast_mode=False,
-                additional_args=nmap_args
-            )
-            
-            if batch_result and not batch_result.get('error'):
-                self.logger.debug(f"Batch nmap scan successful, parsing results for {len(ports)} ports")
-                
-                # Parse the batch results and index by port
-                for port_info in batch_result.get('ports', []):
-                    port_num = port_info.get('port')
-                    if port_num in ports:
-                        port_results[port_num] = batch_result.copy()
-                        # Create a single-port version of the results for this port
-                        port_results[port_num]['ports'] = [port_info]
-                        
-                self.logger.info(f"Batch nmap scan completed successfully for {len(port_results)} ports")
-            else:
-                self.logger.warning(f"Batch nmap scan failed: {batch_result.get('error', 'unknown error')}")
-                
-        except Exception as e:
-            self.logger.warning(f"Batch nmap scan failed with exception: {e}")
+            # Small delay between batches to be respectful
+            if batch_num < len(port_batches):
+                time.sleep(1)  # Just 1 second between fast batches
+        
+        total_successful = len(port_results)
+        total_requested = len(ports)
+        self.logger.info(f"Fast batching completed: {total_successful}/{total_requested} ports scanned successfully across {len(port_batches)} batches")
         
         return port_results
 
@@ -401,30 +406,17 @@ class PortScanner(BaseScanner):
                     nmap_result = batch_nmap_result
                     result.scan_log.append("NMAP: Using batch scan results")
                 else:
-                    # Check if we should skip individual nmap due to complex args
-                    should_skip_individual = False
-                    if nmap_args:
-                        args_str = ' '.join(nmap_args)
-                        if ('-sV' in args_str or '--script' in args_str) and result.is_open:
-                            # If we have complex nmap args and port is confirmed open,
-                            # skip individual scan to avoid timeout - we already have connectivity info
-                            should_skip_individual = True
-                            self.logger.info(f"Skipping individual nmap scan for {target}:{port} - port confirmed open, avoiding timeout with complex args")
-                            result.scan_log.append("NMAP: Skipped individual scan - port confirmed open, complex args would timeout")
-                    
-                    if not should_skip_individual:
-                        # Use shared nmap_scan function with enhanced scanning
-                        self.logger.debug(f"Calling individual nmap_scan with args: {nmap_args}")
-                        nmap_result = nmap_scan(
-                            ip=target, 
-                            ports=str(port), 
-                            timeout=self.nmap_timeout,
-                            fast_mode=False,  # Enable version detection
-                            additional_args=nmap_args
-                        )
-                        result.scan_log.append("NMAP: Individual scan completed")
-                    else:
-                        nmap_result = None
+                    # Run individual detailed scan with the user's nmap args
+                    # Since batch scan was fast, we can afford to do detailed individual scans
+                    self.logger.debug(f"Running individual detailed nmap scan with args: {nmap_args}")
+                    nmap_result = nmap_scan(
+                        ip=target, 
+                        ports=str(port), 
+                        timeout=self.nmap_timeout,
+                        fast_mode=False,  # Enable version detection
+                        additional_args=nmap_args
+                    )
+                    result.scan_log.append("NMAP: Individual detailed scan completed")
                 
                 if nmap_result and not nmap_result.get('error'):
                     self.logger.debug(f"Nmap service detection completed for {target}:{port}")

@@ -3,6 +3,8 @@ import xml.etree.ElementTree as ET
 import logging
 import json
 import sys
+import threading
+import time
 
 logger = logging.getLogger("nmap_scan")
 
@@ -55,6 +57,57 @@ def _select_sudo_command(ip, ports, timeout):
     except Exception as e:
         logger.info(f"Sudo not available ({e}), using connect scan")
         return connect_cmd
+
+def _run_nmap_with_progress(cmd, timeout, logger):
+    """Run nmap with periodic progress updates for long scans."""
+    import select
+    import os
+    
+    # Start the process
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    
+    start_time = time.time()
+    last_update = start_time
+    
+    def progress_updater():
+        nonlocal last_update
+        while process.poll() is None:  # While process is running
+            current_time = time.time()
+            if current_time - last_update >= 30:  # Every 30 seconds
+                elapsed = int(current_time - start_time)
+                remaining = max(0, timeout - elapsed)
+                logger.info(f"Nmap scan progress: {elapsed}s elapsed, {remaining}s remaining...")
+                last_update = current_time
+            time.sleep(5)  # Check every 5 seconds
+    
+    # Start progress thread
+    progress_thread = threading.Thread(target=progress_updater, daemon=True)
+    progress_thread.start()
+    
+    try:
+        # Wait for completion with timeout
+        stdout, stderr = process.communicate(timeout=timeout)
+        
+        # Create a result object similar to subprocess.run
+        class Result:
+            def __init__(self, returncode, stdout, stderr):
+                self.returncode = returncode
+                self.stdout = stdout
+                self.stderr = stderr
+        
+        return Result(process.returncode, stdout, stderr)
+        
+    except subprocess.TimeoutExpired:
+        process.kill()
+        stdout, stderr = process.communicate()
+        elapsed = int(time.time() - start_time)
+        logger.warning(f"Nmap scan timed out after {elapsed}s")
+        raise subprocess.TimeoutExpired(cmd, timeout, stdout, stderr)
 
 def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_mode=True, additional_args=None):
     """
@@ -113,6 +166,10 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
         if not any('--max-retries' in arg for arg in additional_args):
             cmd.extend(["--max-retries", "1"])
     
+    # Add verbose output for long scans if not already specified
+    if timeout > 60 and not any(arg in ['-v', '-vv', '-d'] for arg in additional_args):
+        cmd.append("-v")  # Verbose output to show progress
+    
     # Add XML output
     cmd.extend(["-oX", "-"])
     
@@ -121,12 +178,18 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
 
     try:
         logger.info(f"Running nmap: {' '.join(cmd)} (timeout={timeout}s)")
-        result = subprocess.run(
-            cmd, 
-            capture_output=True, 
-            timeout=timeout,
-            text=True
-        )
+        
+        # For long scans (>60s), provide progress updates
+        if timeout > 60:
+            logger.info(f"Starting long nmap scan - will provide progress updates every 30 seconds")
+            result = _run_nmap_with_progress(cmd, timeout, logger)
+        else:
+            result = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                timeout=timeout,
+                text=True
+            )
         
         logger.info(f"Nmap return code: {result.returncode}")
         
@@ -195,7 +258,19 @@ def nmap_scan(ip, ports="22,80,443,2375,3306,8080,9000,9184", timeout=30, fast_m
                         **service_info
                     })
         
-        logger.info(f"Nmap scan found {len(scan_data['ports'])} ports on {ip} in {scan_data['scan_time']}s")
+        # Count open ports for summary
+        open_ports = [p for p in scan_data['ports'] if p['state'] == 'open']
+        
+        if timeout > 60:
+            # For long scans, provide detailed completion info
+            logger.info(f"Nmap scan completed successfully!")
+            logger.info(f"Results: {len(open_ports)} open ports found out of {len(scan_data['ports'])} scanned in {scan_data['scan_time']}s")
+            if open_ports:
+                open_list = [f"{p['port']}/{p['protocol']}" for p in open_ports]
+                logger.info(f"Open ports: {', '.join(open_list)}")
+        else:
+            logger.info(f"Nmap scan found {len(scan_data['ports'])} ports on {ip} in {scan_data['scan_time']}s")
+        
         return scan_data
         
     except subprocess.TimeoutExpired:
