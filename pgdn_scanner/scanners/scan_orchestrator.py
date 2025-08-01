@@ -104,11 +104,10 @@ class ScanOrchestrator:
                         scanner_start = time.time()
                         self.logger.info(f"Running {scanner_type} scanner")
                         
-                        # Check if this is an async protocol scanner
+                        # All scanners should now be synchronous
                         if hasattr(scanner, 'scan_protocol'):
-                            # This is a protocol scanner with async support
-                            import asyncio
-                            raw_result = asyncio.run(scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs))
+                            # This is a protocol scanner
+                            raw_result = scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs)
                         else:
                             # Regular scanner - include protocol in kwargs if provided
                             scanner_kwargs = kwargs.copy()
@@ -1358,3 +1357,4 @@ class Scanner(ScanOrchestrator):
                 elif service in ("http", "http-proxy") or port in (80, 8080):
                     web_ports.append((port, "http"))
         return web_ports
+

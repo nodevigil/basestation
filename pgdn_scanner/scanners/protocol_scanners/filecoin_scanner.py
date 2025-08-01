@@ -81,7 +81,7 @@ class FilecoinScanner(ProtocolScanner):
             3: "Comprehensive security analysis with deep protocol inspection and vulnerability testing"
         }
 
-    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Filecoin-specific scan at the specified level.
         
         Args:
@@ -109,13 +109,13 @@ class FilecoinScanner(ProtocolScanner):
             self.logger.info(f"Executing Filecoin scan level {scan_level}")
             if scan_level == 1:
                 self.logger.debug(f"Level 1: Basic Lotus API detection and node info")
-                level_results = await self._scan_level_1(target, hostname)
+                level_results = self._scan_level_1(target, hostname)
             elif scan_level == 2:
                 self.logger.debug(f"Level 2: Extended API checks including storage and market APIs")
-                level_results = await self._scan_level_2(target, hostname)
+                level_results = self._scan_level_2(target, hostname)
             elif scan_level == 3:
                 self.logger.debug(f"Level 3: Comprehensive security analysis with deep protocol inspection")
-                level_results = await self._scan_level_3(target, hostname)
+                level_results = self._scan_level_3(target, hostname)
             else:
                 raise ValueError(f"Invalid scan_level: {scan_level}")
             
@@ -145,7 +145,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 1: Basic node info and RPC auth check."""
         self.logger.debug(f"Level 1 Filecoin scan for {target}" + (f" via {hostname}" if hostname else ""))
         
@@ -214,7 +214,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 2: Enhanced API checks and metrics detection."""
         self.logger.info(f"Level 2 Filecoin scan for {target}")
         
@@ -230,24 +230,24 @@ class FilecoinScanner(ProtocolScanner):
         }
         
         # Check Lotus API
-        lotus_result = await self._check_lotus_api_basic(target)
+        lotus_result = self._check_lotus_api_basic(target)
         results.update(lotus_result)
         
         # Check Storage API
-        storage_result = await self._check_storage_api(target, hostname)
+        storage_result = self._check_storage_api(target, hostname)
         results.update(storage_result)
         
         # Check Market API
-        market_result = await self._check_market_api(target, hostname)
+        market_result = self._check_market_api(target, hostname)
         results.update(market_result)
         
         # Check metrics
-        metrics_result = await self._check_metrics(target, hostname)
+        metrics_result = self._check_metrics(target, hostname)
         results.update(metrics_result)
         
         return results
 
-    async def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 3: Deep protocol inspection with security analysis."""
         self.logger.info(f"Level 3 Filecoin scan for {target}")
         
@@ -268,26 +268,26 @@ class FilecoinScanner(ProtocolScanner):
         }
         
         # Comprehensive API scanning
-        lotus_result = await self._check_lotus_api_comprehensive(target)
+        lotus_result = self._check_lotus_api_comprehensive(target)
         results.update(lotus_result)
         
-        storage_result = await self._check_storage_api(target, hostname)
+        storage_result = self._check_storage_api(target, hostname)
         results.update(storage_result)
         
-        market_result = await self._check_market_api(target, hostname)
+        market_result = self._check_market_api(target, hostname)
         results.update(market_result)
         
         # Network analysis
-        network_result = await self._check_network_ports(target)
+        network_result = self._check_network_ports(target)
         results.update(network_result)
         
         # Security analysis
-        security_result = await self._perform_security_analysis(target, results)
+        security_result = self._perform_security_analysis(target, results)
         results.update(security_result)
         
         return results
 
-    async def _check_lotus_api_basic(self, target: str) -> Dict[str, Any]:
+    def _check_lotus_api_basic(self, target: str) -> Dict[str, Any]:
         """Basic Lotus API check."""
         result = {
             'lotus_api_exposed': False,
@@ -340,7 +340,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_lotus_api_comprehensive(self, target: str) -> Dict[str, Any]:
+    def _check_lotus_api_comprehensive(self, target: str) -> Dict[str, Any]:
         """Comprehensive Lotus API check for level 3."""
         result = {
             'lotus_api_exposed': False,
@@ -406,7 +406,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_storage_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _check_storage_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for Storage Provider API."""
         result = {
             'storage_api_exposed': False,
@@ -437,7 +437,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_market_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _check_market_api(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for Market API."""
         result = {
             'market_api_exposed': False,
@@ -468,7 +468,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_metrics(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _check_metrics(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Check for metrics endpoints."""
         result = {
             'metrics_exposed': False,
@@ -491,7 +491,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _check_network_ports(self, target: str) -> Dict[str, Any]:
+    def _check_network_ports(self, target: str) -> Dict[str, Any]:
         """Check P2P network ports."""
         result = {'p2p_ports_open': []}
         
@@ -505,7 +505,7 @@ class FilecoinScanner(ProtocolScanner):
         
         return result
 
-    async def _perform_security_analysis(self, target: str, scan_results: Dict[str, Any]) -> Dict[str, Any]:
+    def _perform_security_analysis(self, target: str, scan_results: Dict[str, Any]) -> Dict[str, Any]:
         """Perform security analysis for level 3."""
         result = {
             'sensitive_methods_exposed': [],

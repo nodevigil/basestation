@@ -1,4 +1,3 @@
-import asyncio
 import httpx
 import logging
 import time
@@ -218,7 +217,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         self.known_vulnerabilities = self._load_sui_vulnerability_db()
         self.security_baselines = self._load_sui_security_baselines()
 
-    async def scan_protocol(self, target: str, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Sui protocol-specific scan.
         
         Args:
@@ -260,7 +259,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         try:
             # Perform the scan using the existing scan method
-            results = await self.scan(target, hostname, ports)
+            results = self.scan(target, hostname, ports)
             
             # Convert results to dictionary format expected by the framework
             def serialize_result(result):
@@ -293,7 +292,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             # Restore original scan level
             self.scan_level = original_scan_level
 
-    async def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[SuiScanResult]:
+    def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[SuiScanResult]:
         """Enhanced Sui scan with comprehensive protocol analysis
         
         Args:
@@ -321,13 +320,9 @@ class EnhancedSuiScanner(ProtocolScanner):
         self.logger.info(f"Scan configuration: level={self.scan_level.name}, ports={ports}, timeout={self.timeout}s")
         
         # Add overall timeout to prevent hanging (5 minutes max)
-        try:
-            return await asyncio.wait_for(self._perform_scan(ip, hostname, ports), timeout=300)
-        except asyncio.TimeoutError:
-            self.logger.warning(f"Sui scan timeout after 5 minutes for {ip}")
-            return []
+        return self._perform_scan(ip, hostname, ports)
 
-    async def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[SuiScanResult]:
+    def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[SuiScanResult]:
         """Internal scan method with timeout protection"""
         
         # Ensure ports is properly initialized
@@ -343,7 +338,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         # Rate limiting
         if self.rate_limit_delay > 0:
             self.logger.debug(f"Rate limiting: waiting {self.rate_limit_delay}s before scan")
-            await asyncio.sleep(self.rate_limit_delay)
+            time.sleep(self.rate_limit_delay)
         
         scan_start = time.time()
         results = []
@@ -351,7 +346,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         self.logger.info(f"Beginning port scanning on {len(ports)} Sui ports")
         for i, port in enumerate(ports, 1):
             self.logger.info(f"Scanning port {port} ({i}/{len(ports)})")
-            result = await self._scan_port(ip, port, hostname)
+            result = self._scan_port(ip, port, hostname)
             if result:
                 self.logger.info(f"Port {port}: Sui node detected (healthy: {result.healthy})")
                 results.append(result)
@@ -375,7 +370,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_port(self, ip: str, port: int, hostname: Optional[str] = None) -> Optional[SuiScanResult]:
+    def _scan_port(self, ip: str, port: int, hostname: Optional[str] = None) -> Optional[SuiScanResult]:
         """Comprehensive Sui port scanning with protocol-specific analysis"""
         # Use hostname for URL if provided (for SNI/virtual host support)
         host_for_url = hostname if hostname else ip
@@ -404,28 +399,28 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         try:
             self.logger.debug(f"Starting multi-level Sui scan on port {port}")
-            async with httpx.AsyncClient(
+            with httpx.Client(
                 timeout=httpx.Timeout(self.timeout),
                 limits=httpx.Limits(max_connections=10)
             ) as client:
                 
                 # Level 1: Basic Sui node health and blockchain state
                 self.logger.debug(f"Level 1: Basic Sui node health check")
-                success = await self._scan_sui_basic(client, base_url, result)
+                success = self._scan_sui_basic(client, base_url, result)
                 total_requests += 5
                 successful_requests += success
                 self.logger.debug(f"Level 1 completed: {success}/5 requests successful")
                 
                 if self.scan_level.value >= 2:
                     self.logger.debug(f"Level 2: Medium scan - enhanced metrics and consensus data")
-                    success = await self._scan_sui_medium(client, base_url, result)
+                    success = self._scan_sui_medium(client, base_url, result)
                     total_requests += 8
                     successful_requests += success
                     self.logger.debug(f"Level 2 completed: {success}/8 requests successful")
                 
                 if self.scan_level.value >= 3:
                     self.logger.debug(f"Level 3: Ferocious scan - deep security analysis")
-                    success = await self._scan_sui_ferocious(client, base_url, result, hostname)
+                    success = self._scan_sui_ferocious(client, base_url, result, hostname)
                     total_requests += 12
                     successful_requests += success
                     self.logger.debug(f"Level 3 completed: {success}/12 requests successful")
@@ -434,25 +429,25 @@ class EnhancedSuiScanner(ProtocolScanner):
                 self.logger.debug(f"Starting advanced Sui analysis phases")
                 
                 self.logger.debug(f"Analyzing consensus health")
-                await self._analyze_sui_consensus_health(result)
+                self._analyze_sui_consensus_health(result)
                 
                 self.logger.debug(f"Analyzing validator ecosystem")
-                await self._analyze_validator_ecosystem(result)
+                self._analyze_validator_ecosystem(result)
                 
                 self.logger.debug(f"Analyzing checkpoint consistency")
-                await self._analyze_checkpoint_consistency(result)
+                self._analyze_checkpoint_consistency(result)
                 
                 self.logger.debug(f"Analyzing security posture")
-                await self._analyze_security_posture(result)
+                self._analyze_security_posture(result)
                 
                 self.logger.debug(f"Analyzing behavioral patterns")
-                await self._analyze_behavioral_patterns(result)
+                self._analyze_behavioral_patterns(result)
                 
                 self.logger.debug(f"Checking reputation intelligence")
-                await self._check_reputation_intelligence(result)
+                self._check_reputation_intelligence(result)
                 
                 self.logger.debug(f"Assessing Sui compliance")
-                await self._assess_sui_compliance(result)
+                self._assess_sui_compliance(result)
                 
         except Exception as e:
             self.logger.warning(f"Sui scan failed for {ip}:{port} - {e}")
@@ -475,14 +470,14 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return result
 
-    async def _scan_sui_basic(self, client: httpx.AsyncClient, base_url: str, result: SuiScanResult) -> int:
+    def _scan_sui_basic(self, client: httpx.Client, base_url: str, result: SuiScanResult) -> int:
         """Level 1: Core Sui blockchain state and health indicators"""
         successful_requests = 0
         
         try:
             # System state - core Sui blockchain info
             self.logger.debug(f"Fetching Sui system state from {base_url}/v1/system_state")
-            system_state = await self._robust_fetch(client, f"{base_url}/v1/system_state")
+            system_state = self._robust_fetch(client, f"{base_url}/v1/system_state")
             result.endpoints_status['/v1/system_state'] = system_state is not None
             
             if system_state:
@@ -517,7 +512,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             
             # Checkpoint state - sync and consensus health
             self.logger.debug(f"Fetching checkpoint data from {base_url}/v1/checkpoints")
-            checkpoints = await self._robust_fetch(client, f"{base_url}/v1/checkpoints")
+            checkpoints = self._robust_fetch(client, f"{base_url}/v1/checkpoints")
             result.endpoints_status['/v1/checkpoints'] = checkpoints is not None
             
             if checkpoints:
@@ -542,7 +537,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                 self.logger.warning(f"❌ Failed to fetch checkpoint data")
             
             # Basic validator endpoint check
-            validators_response = await self._robust_fetch(client, f"{base_url}/v1/validators")
+            validators_response = self._robust_fetch(client, f"{base_url}/v1/validators")
             result.endpoints_status['/v1/validators'] = validators_response is not None
             
             if validators_response:
@@ -555,7 +550,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     result.compliance_flags.append("network_security_risk")
             
             # RPC endpoint availability check
-            rpc_test = await self._robust_fetch(client, f"{base_url}/v1/transactions")
+            rpc_test = self._robust_fetch(client, f"{base_url}/v1/transactions")
             result.endpoints_status['/v1/transactions'] = rpc_test is not None
             if rpc_test:
                 successful_requests += 1
@@ -570,13 +565,13 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _scan_sui_medium(self, client: httpx.AsyncClient, base_url: str, result: SuiScanResult) -> int:
+    def _scan_sui_medium(self, client: httpx.Client, base_url: str, result: SuiScanResult) -> int:
         """Level 2: Metrics analysis, validator deep-dive, and consensus monitoring"""
         successful_requests = 0
         
         try:
             # Comprehensive metrics parsing
-            metrics_response = await client.get(f"{base_url}/metrics")
+            metrics_response = client.get(f"{base_url}/metrics")
             result.endpoints_status['/metrics'] = metrics_response.status_code == 200
             
             if metrics_response.status_code == 200:
@@ -679,7 +674,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _scan_sui_ferocious(self, client: httpx.AsyncClient, base_url: str, result: SuiScanResult, hostname: Optional[str] = None) -> int:
+    def _scan_sui_ferocious(self, client: httpx.Client, base_url: str, result: SuiScanResult, hostname: Optional[str] = None) -> int:
         """Level 3: Deep behavioral analysis, security probing, and anomaly detection"""
         successful_requests = 0
         
@@ -692,14 +687,14 @@ class EnhancedSuiScanner(ProtocolScanner):
             for i in range(rpc_attempts):
                 start = time.time()
                 try:
-                    response = await client.get(f"{base_url}/v1/system_state")
+                    response = client.get(f"{base_url}/v1/system_state")
                     if response.status_code == 200:
                         latencies.append((time.time() - start) * 1000)
                         rpc_successes += 1
                         successful_requests += 0.2
                 except:
                     pass
-                await asyncio.sleep(0.1)
+                time.sleep(0.1)
             
             if latencies:
                 result.latency_ms = statistics.mean(latencies)
@@ -717,7 +712,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     result.compliance_flags.append("availability_issue")
             
             # Comprehensive header analysis
-            headers_response = await client.get(f"{base_url}/v1/checkpoints")
+            headers_response = client.get(f"{base_url}/v1/checkpoints")
             if headers_response.status_code == 200:
                 successful_requests += 1
                 result.headers = dict(headers_response.headers)
@@ -731,7 +726,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                 result.misconfigs.extend(security_issues)
             
             # Malformed request testing for error handling
-            malformed_tx = await client.post(
+            malformed_tx = client.post(
                 f"{base_url}/v1/transactions", 
                 json={"invalid": "transaction", "malformed": True}
             )
@@ -743,13 +738,13 @@ class EnhancedSuiScanner(ProtocolScanner):
                 successful_requests += 1
             
             # Advanced port scanning for Sui-specific services
-            result.open_ports = await self._scan_sui_port_range(result.ip)
+            result.open_ports = self._scan_sui_port_range(result.ip)
             
             # Identify exposed services
             exposed_services = []
             for port in result.open_ports:
                 if port not in self.default_ports:
-                    service = await self._identify_service(result.ip, port)
+                    service = self._identify_service(result.ip, port)
                     if service:
                         exposed_services.append(f"{service}:{port}")
                         
@@ -763,7 +758,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             # TLS analysis for HTTPS endpoints
             if 443 in result.open_ports or 9184 in result.open_ports:
                 tls_port = 443 if 443 in result.open_ports else 9184
-                tls_analysis = await self._analyze_tls_config(result.ip, tls_port, hostname)
+                tls_analysis = self._analyze_tls_config(result.ip, tls_port, hostname)
                 result.tls_grade = tls_analysis.get('grade')
                 
                 if result.tls_grade in ['C', 'D', 'F']:
@@ -771,7 +766,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     result.compliance_flags.append("encryption_weakness")
             
             # RPC authentication testing
-            auth_test = await self._test_rpc_authentication(client, base_url)
+            auth_test = self._test_rpc_authentication(client, base_url)
             result.rpc_auth_enabled = auth_test['auth_required']
             if not result.rpc_auth_enabled:
                 result.misconfigs.append("rpc_no_authentication")
@@ -789,7 +784,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _analyze_sui_consensus_health(self, result: SuiScanResult):
+    def _analyze_sui_consensus_health(self, result: SuiScanResult):
         """Analyze Narwhal/Bullshark consensus health"""
         
         # Consensus performance indicators
@@ -816,7 +811,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             if result.certificate_throughput < 1.0:  # Less than 1 cert/sec
                 result.consensus_anomalies.append("low_certificate_throughput")
 
-    async def _analyze_validator_ecosystem(self, result: SuiScanResult):
+    def _analyze_validator_ecosystem(self, result: SuiScanResult):
         """Comprehensive validator ecosystem analysis"""
         
         if not result.validator_list:
@@ -865,7 +860,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         if behavior_scores:
             result.validator_behavior_score = statistics.mean(behavior_scores)
 
-    async def _analyze_checkpoint_consistency(self, result: SuiScanResult):
+    def _analyze_checkpoint_consistency(self, result: SuiScanResult):
         """Analyze checkpoint consistency and sequencing"""
         
         if result.checkpoint_height and result.network_checkpoint:
@@ -894,7 +889,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     elif any(rate < 0 for rate in progression_rates):  # Backwards progression
                         result.checkpoint_anomalies.append("checkpoint_regression")
 
-    async def _analyze_security_posture(self, result: SuiScanResult):
+    def _analyze_security_posture(self, result: SuiScanResult):
         """Sui-specific security posture analysis"""
         
         # Check for Sui-specific security misconfigurations
@@ -915,7 +910,7 @@ class EnhancedSuiScanner(ProtocolScanner):
             result.config_security_score *= (1.0 - len(exposed_risky) * 0.1)
             result.compliance_flags.append("risky_ports_exposed")
 
-    async def _analyze_behavioral_patterns(self, result: SuiScanResult):
+    def _analyze_behavioral_patterns(self, result: SuiScanResult):
         """Advanced behavioral pattern analysis for Sui nodes"""
         if not self.behavioral_analyzer:
             return
@@ -950,14 +945,14 @@ class EnhancedSuiScanner(ProtocolScanner):
         except Exception as e:
             self.logger.debug(f"Behavioral analysis error: {e}")
 
-    async def _check_reputation_intelligence(self, result: SuiScanResult):
+    def _check_reputation_intelligence(self, result: SuiScanResult):
         """Check against threat intelligence with Sui-specific considerations"""
         if not self.reputation_client:
             return
         
         try:
             # IP reputation check
-            ip_reputation = await self.reputation_client.check_ip(result.ip)
+            ip_reputation = self.reputation_client.check_ip(result.ip)
             result.malicious_ip = ip_reputation.get('malicious', False)
             if result.malicious_ip:
                 result.reputation_flags.append("malicious_ip")
@@ -965,20 +960,20 @@ class EnhancedSuiScanner(ProtocolScanner):
             
             # Sui-specific node reputation
             if result.node_id:
-                node_reputation = await self.reputation_client.check_sui_node(result.node_id)
+                node_reputation = self.reputation_client.check_sui_node(result.node_id)
                 result.reputation_flags.extend(node_reputation.get('flags', []))
             
             # Validator reputation check
             for validator in result.validator_list:
                 validator_name = validator.get('name', '')
                 if validator_name:
-                    val_rep = await self.reputation_client.check_validator_reputation(validator_name)
+                    val_rep = self.reputation_client.check_validator_reputation(validator_name)
                     if val_rep.get('flagged', False):
                         result.reputation_flags.append(f"flagged_validator_{validator_name}")
             
             # Version vulnerability check
             if result.version:
-                vuln_check = await self.reputation_client.check_sui_version_vulnerabilities(result.version)
+                vuln_check = self.reputation_client.check_sui_version_vulnerabilities(result.version)
                 critical_vulns = vuln_check.get('critical_vulnerabilities', [])
                 result.known_vulnerabilities.extend(critical_vulns)
                 
@@ -988,7 +983,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         except Exception as e:
             self.logger.warning(f"Reputation check failed: {e}")
 
-    async def _assess_sui_compliance(self, result: SuiScanResult):
+    def _assess_sui_compliance(self, result: SuiScanResult):
         """Assess Sui-specific compliance indicators"""
         
         # Blockchain network compliance
@@ -1198,7 +1193,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return consistency
 
-    async def _scan_sui_port_range(self, ip: str) -> List[int]:
+    def _scan_sui_port_range(self, ip: str) -> List[int]:
         """Scan Sui-specific port ranges"""
         # Sui-specific ports and common admin ports
         ports_to_scan = [9000, 9184, 443, 80, 22, 8080, 9090, 3000, 8000, 9001]
@@ -1206,12 +1201,14 @@ class EnhancedSuiScanner(ProtocolScanner):
         open_ports = []
         for port in ports_to_scan:
             try:
-                future = asyncio.open_connection(ip, port)
-                reader, writer = await asyncio.wait_for(future, timeout=2.0)
-                writer.close()
-                await writer.wait_closed()
-                open_ports.append(port)
-            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2.0)
+                result = sock.connect_ex((ip, port))
+                sock.close()
+                if result == 0:
+                    open_ports.append(port)
+            except (ConnectionRefusedError, OSError):
                 continue
             except Exception as e:
                 self.logger.debug(f"Port scan error {ip}:{port} - {e}")
@@ -1219,7 +1216,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return open_ports
 
-    async def _test_rpc_authentication(self, client: httpx.AsyncClient, base_url: str) -> Dict[str, Any]:
+    def _test_rpc_authentication(self, client: httpx.Client, base_url: str) -> Dict[str, Any]:
         """Test if RPC endpoints require authentication"""
         auth_test = {
             'auth_required': True,
@@ -1236,7 +1233,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         for endpoint in sensitive_endpoints:
             try:
                 # Test without authentication
-                response = await client.get(f"{base_url}{endpoint}")
+                response = client.get(f"{base_url}{endpoint}")
                 auth_test['endpoints_tested'].append({
                     'endpoint': endpoint,
                     'status_code': response.status_code,
@@ -1343,7 +1340,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                 'last_updated': datetime.utcnow()
             })
 
-    async def _robust_fetch(self, client: httpx.AsyncClient, url: str, retries: int = None) -> Optional[Dict]:
+    def _robust_fetch(self, client: httpx.Client, url: str, retries: int = None) -> Optional[Dict]:
         """Fetch with comprehensive retry logic"""
         if retries is None:
             retries = self.max_retries
@@ -1353,7 +1350,7 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         for attempt in range(retries):
             try:
-                response = await client.get(url)
+                response = client.get(url)
                 if response.status_code == 200:
                     try:
                         return response.json()
@@ -1375,7 +1372,7 @@ class EnhancedSuiScanner(ProtocolScanner):
                     first_failure_logged = True
                 last_exception = e
                 if attempt < retries - 1:
-                    await asyncio.sleep(0.2 * (2 ** attempt))  # Reduced sleep time
+                    time.sleep(0.2 * (2 ** attempt))  # Reduced sleep time
             except Exception as e:
                 if not first_failure_logged:
                     self.logger.debug(f"Error fetching {url}: {type(e).__name__}")
@@ -1385,17 +1382,18 @@ class EnhancedSuiScanner(ProtocolScanner):
         
         return None
 
-    async def _identify_service(self, ip: str, port: int) -> Optional[str]:
+    def _identify_service(self, ip: str, port: int) -> Optional[str]:
         """Identify service running on specific port"""
         try:
-            future = asyncio.open_connection(ip, port)
-            reader, writer = await asyncio.wait_for(future, timeout=3.0)
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3.0)
+            sock.connect((ip, port))
             
-            writer.write(b"GET / HTTP/1.0\r\n\r\n")
-            await writer.drain()
+            sock.send(b"GET / HTTP/1.0\r\n\r\n")
             
             try:
-                banner = await asyncio.wait_for(reader.read(1024), timeout=2.0)
+                banner = sock.recv(1024)
                 banner_str = banner.decode('utf-8', errors='ignore').lower()
                 
                 # Service identification patterns
@@ -1411,13 +1409,12 @@ class EnhancedSuiScanner(ProtocolScanner):
                     return 'unknown'
                     
             finally:
-                writer.close()
-                await writer.wait_closed()
+                sock.close()
                 
         except Exception:
             return None
 
-    async def _analyze_tls_config(self, ip: str, port: int, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _analyze_tls_config(self, ip: str, port: int, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Analyze TLS/SSL configuration"""
         try:
             import ssl
@@ -1676,7 +1673,7 @@ class ReputationClient:
         self.api_keys = self.config.get('api_keys', {})
         self.enabled_services = self.config.get('enabled_services', [])
     
-    async def check_ip(self, ip: str) -> Dict[str, Any]:
+    def check_ip(self, ip: str) -> Dict[str, Any]:
         """Check IP reputation across multiple services"""
         return {
             'malicious': False,
@@ -1684,7 +1681,7 @@ class ReputationClient:
             'sources': []
         }
     
-    async def check_sui_node(self, node_id: str) -> Dict[str, Any]:
+    def check_sui_node(self, node_id: str) -> Dict[str, Any]:
         """Check Sui-specific node reputation"""
         return {
             'flags': [],
@@ -1692,7 +1689,7 @@ class ReputationClient:
             'validator_history': []
         }
     
-    async def check_validator_reputation(self, validator_name: str) -> Dict[str, Any]:
+    def check_validator_reputation(self, validator_name: str) -> Dict[str, Any]:
         """Check individual validator reputation"""
         # Integration points for:
         # - Sui validator registry
@@ -1704,7 +1701,7 @@ class ReputationClient:
             'community_rating': 0.7
         }
     
-    async def check_sui_version_vulnerabilities(self, version: str) -> Dict[str, Any]:
+    def check_sui_version_vulnerabilities(self, version: str) -> Dict[str, Any]:
         """Check Sui version against vulnerability databases"""
         return {
             'critical_vulnerabilities': [],
@@ -1813,14 +1810,14 @@ class SuiNetworkAnalyzer:
         self.scanner = scanner
         self.logger = logging.getLogger(__name__)
     
-    async def analyze_network_health(self, node_ips: List[str]) -> Dict[str, Any]:
+    def analyze_network_health(self, node_ips: List[str]) -> Dict[str, Any]:
         """Comprehensive Sui network health analysis"""
         all_results = []
         
         # Scan all nodes
         for ip in node_ips:
             try:
-                results = await self.scanner.scan(ip)
+                results = self.scanner.scan(ip)
                 all_results.extend(results)
             except Exception as e:
                 self.logger.warning(f"Failed to scan {ip}: {e}")
@@ -2000,7 +1997,7 @@ class SuiNetworkAnalyzer:
             return lower + (upper - lower) * (index - int(index))
 
 # # Example usage
-# async def example_sui_network_scan():
+# def example_sui_network_scan():
 #     """Example of how to use the enhanced Sui scanner"""
     
 #     # Initialize scanner with ferocious level scanning
@@ -2023,7 +2020,7 @@ class SuiNetworkAnalyzer:
     
 #     all_results = []
 #     for ip in sui_node_ips:
-#         results = await scanner.scan(ip)
+#         results = scanner.scan(ip)
 #         all_results.extend(results)
     
 #     # Export results for trust scoring
@@ -2036,7 +2033,7 @@ class SuiNetworkAnalyzer:
     
 #     # High-level network analysis
 #     analyzer = SuiNetworkAnalyzer(scanner)
-#     network_health = await analyzer.analyze_network_health(sui_node_ips)
+#     network_health = analyzer.analyze_network_health(sui_node_ips)
 #     print("Network health analysis:", json.dumps(network_health, indent=2, default=str))
 
 # if __name__ == "__main__":

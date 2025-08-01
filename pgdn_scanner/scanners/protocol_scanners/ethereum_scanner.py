@@ -62,7 +62,7 @@ class EthereumScanner(ProtocolScanner):
             3: "Comprehensive node analysis with security assessment and performance metrics"
         }
 
-    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Ethereum-specific scan at the specified level."""
         self.logger.info(f"Starting Ethereum scan of {target} at level {scan_level}")
         scan_start_time = time.time()
@@ -79,11 +79,11 @@ class EthereumScanner(ProtocolScanner):
         
         try:
             if scan_level == 1:
-                level_results = await self._scan_level_1(target)
+                level_results = self._scan_level_1(target)
             elif scan_level == 2:
-                level_results = await self._scan_level_2(target)
+                level_results = self._scan_level_2(target)
             elif scan_level == 3:
-                level_results = await self._scan_level_3(target)
+                level_results = self._scan_level_3(target)
             else:
                 raise ValueError(f"Invalid scan_level: {scan_level}")
             
@@ -101,7 +101,7 @@ class EthereumScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_1(self, target: str) -> Dict[str, Any]:
+    def _scan_level_1(self, target: str) -> Dict[str, Any]:
         """Level 1: Basic RPC endpoint detection."""
         self.logger.info(f"Level 1 Ethereum scan for {target}")
         
@@ -147,10 +147,10 @@ class EthereumScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_2(self, target: str) -> Dict[str, Any]:
+    def _scan_level_2(self, target: str) -> Dict[str, Any]:
         """Level 2: Extended node information."""
         # Get level 1 results first
-        results = await self._scan_level_1(target)
+        results = self._scan_level_1(target)
         
         if results.get('rpc_exposed'):
             url = results['rpc_url']
@@ -171,10 +171,10 @@ class EthereumScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_3(self, target: str) -> Dict[str, Any]:
+    def _scan_level_3(self, target: str) -> Dict[str, Any]:
         """Level 3: Comprehensive analysis."""
         # Get level 2 results first
-        results = await self._scan_level_2(target)
+        results = self._scan_level_2(target)
         
         if results.get('rpc_exposed'):
             url = results['rpc_url']

@@ -251,16 +251,23 @@ class PortScanner(BaseScanner):
 
     def _scan_ports(self, target: str, ports: List[int], skip_nmap: bool = False, nmap_args: List[str] = None) -> List[PortScanResult]:
         """
-        Main entry point - scans ports respectfully
+        Main entry point - scans ports respectfully with batched nmap for efficiency
         """
         if nmap_args is None:
             nmap_args = []
-            
+        
+        # Use batched nmap scanning if we have many ports and nmap is enabled
+        batch_nmap_results = {}
+        if not skip_nmap and len(ports) > 3:
+            self.logger.info(f"Using batched nmap scan for {len(ports)} ports to improve efficiency")
+            batch_nmap_results = self._batch_nmap_scan(target, ports, nmap_args)
+        
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_threads) as executor:
             futures = []
             for port in ports:
-                future = executor.submit(self._scan_single_port, target, port, skip_nmap, nmap_args)
+                # Pass the batch nmap results to each individual port scan
+                future = executor.submit(self._scan_single_port, target, port, skip_nmap, nmap_args, batch_nmap_results.get(port))
                 futures.append(future)
             
             for future in concurrent.futures.as_completed(futures):
@@ -272,7 +279,73 @@ class PortScanner(BaseScanner):
         
         return results
 
-    def _scan_single_port(self, target: str, port: int, skip_nmap: bool = False, nmap_args: List[str] = None) -> PortScanResult:
+    def _batch_nmap_scan(self, target: str, ports: List[int], nmap_args: List[str]) -> Dict[int, Dict]:
+        """
+        Run a single nmap scan for all ports and return results indexed by port number.
+        
+        Args:
+            target: Target to scan
+            ports: List of ports to scan
+            nmap_args: Additional nmap arguments
+            
+        Returns:
+            Dictionary mapping port numbers to nmap results for that port
+        """
+        port_results = {}
+        
+        try:
+            # Convert ports list to comma-separated string
+            ports_str = ','.join(map(str, ports))
+            
+            self.logger.debug(f"Running batched nmap scan on ports: {ports_str}")
+            
+            # Calculate timeout based on complexity and port count
+            # Base timeout + extra time for version detection and scripts
+            batch_timeout = self.nmap_timeout * 2  # Base batch timeout
+            
+            # Add extra time for complex operations
+            if nmap_args:
+                args_str = ' '.join(nmap_args)
+                if '-sV' in args_str:
+                    batch_timeout += 10 * len(ports)  # 10s per port for version detection
+                if '--script' in args_str:
+                    batch_timeout += 5 * len(ports)   # 5s per port for scripts
+                    
+            # Cap the timeout at a reasonable maximum
+            batch_timeout = min(batch_timeout, 300)  # Max 5 minutes
+            
+            self.logger.info(f"Using batch timeout of {batch_timeout}s for {len(ports)} ports with complex nmap args")
+            
+            # Run single nmap command for all ports
+            batch_result = nmap_scan(
+                ip=target,
+                ports=ports_str,
+                timeout=batch_timeout,
+                fast_mode=False,
+                additional_args=nmap_args
+            )
+            
+            if batch_result and not batch_result.get('error'):
+                self.logger.debug(f"Batch nmap scan successful, parsing results for {len(ports)} ports")
+                
+                # Parse the batch results and index by port
+                for port_info in batch_result.get('ports', []):
+                    port_num = port_info.get('port')
+                    if port_num in ports:
+                        port_results[port_num] = batch_result.copy()
+                        # Create a single-port version of the results for this port
+                        port_results[port_num]['ports'] = [port_info]
+                        
+                self.logger.info(f"Batch nmap scan completed successfully for {len(port_results)} ports")
+            else:
+                self.logger.warning(f"Batch nmap scan failed: {batch_result.get('error', 'unknown error')}")
+                
+        except Exception as e:
+            self.logger.warning(f"Batch nmap scan failed with exception: {e}")
+        
+        return port_results
+
+    def _scan_single_port(self, target: str, port: int, skip_nmap: bool = False, nmap_args: List[str] = None, batch_nmap_result: Dict = None) -> PortScanResult:
         """
         Respectfully scan a single port using available techniques
         """
@@ -322,15 +395,36 @@ class PortScanner(BaseScanner):
         if not skip_nmap:
             self.logger.debug(f"Running nmap service detection for {target}:{port}")
             try:
-                # Use shared nmap_scan function with enhanced scanning
-                self.logger.debug(f"Calling nmap_scan with args: {nmap_args}")
-                nmap_result = nmap_scan(
-                    ip=target, 
-                    ports=str(port), 
-                    timeout=self.nmap_timeout,
-                    fast_mode=False,  # Enable version detection
-                    additional_args=nmap_args
-                )
+                # Use batch nmap results if available, otherwise run individual scan
+                if batch_nmap_result:
+                    self.logger.debug(f"Using batch nmap results for {target}:{port}")
+                    nmap_result = batch_nmap_result
+                    result.scan_log.append("NMAP: Using batch scan results")
+                else:
+                    # Check if we should skip individual nmap due to complex args
+                    should_skip_individual = False
+                    if nmap_args:
+                        args_str = ' '.join(nmap_args)
+                        if ('-sV' in args_str or '--script' in args_str) and result.is_open:
+                            # If we have complex nmap args and port is confirmed open,
+                            # skip individual scan to avoid timeout - we already have connectivity info
+                            should_skip_individual = True
+                            self.logger.info(f"Skipping individual nmap scan for {target}:{port} - port confirmed open, avoiding timeout with complex args")
+                            result.scan_log.append("NMAP: Skipped individual scan - port confirmed open, complex args would timeout")
+                    
+                    if not should_skip_individual:
+                        # Use shared nmap_scan function with enhanced scanning
+                        self.logger.debug(f"Calling individual nmap_scan with args: {nmap_args}")
+                        nmap_result = nmap_scan(
+                            ip=target, 
+                            ports=str(port), 
+                            timeout=self.nmap_timeout,
+                            fast_mode=False,  # Enable version detection
+                            additional_args=nmap_args
+                        )
+                        result.scan_log.append("NMAP: Individual scan completed")
+                    else:
+                        nmap_result = None
                 
                 if nmap_result and not nmap_result.get('error'):
                     self.logger.debug(f"Nmap service detection completed for {target}:{port}")

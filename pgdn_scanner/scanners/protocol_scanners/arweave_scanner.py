@@ -169,7 +169,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         self.known_vulnerabilities = self._load_vulnerability_db()
         self.security_baselines = self._load_security_baselines()
 
-    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform Arweave protocol-specific scan.
         
         Args:
@@ -203,7 +203,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         try:
             self.logger.info(f"Executing Arweave enhanced scan")
             # Perform the scan using the existing scan method
-            results = await self.scan(target, hostname, ports)
+            results = self.scan(target, hostname, ports)
             
             # Log scan results summary
             successful_scans = len(results)
@@ -236,7 +236,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             # Restore original scan level
             self.scan_level = original_scan_level
 
-    async def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[ArweaveScanResult]:
+    def scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None, **kwargs) -> List[ArweaveScanResult]:
         """Enhanced scan with comprehensive data collection"""
         if ports is None:
             ports = self.default_ports
@@ -244,20 +244,15 @@ class EnhancedArweaveScanner(ProtocolScanner):
         self.logger.debug(f"Starting Arweave port scan on {ip}" + (f" via hostname {hostname}" if hostname else ""))
         self.logger.debug(f"Scan level: {self.scan_level.name}, ports: {ports}")
         
-        # Add overall timeout to prevent hanging (5 minutes max)
-        try:
-            return await asyncio.wait_for(self._perform_scan(ip, hostname, ports), timeout=300)
-        except asyncio.TimeoutError:
-            self.logger.warning(f"⏰ Arweave scan timeout after 5 minutes for {ip}")
-            return []
+        return self._perform_scan(ip, hostname, ports)
 
-    async def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[ArweaveScanResult]:
+    def _perform_scan(self, ip: str, hostname: Optional[str] = None, ports: List[int] = None) -> List[ArweaveScanResult]:
         """Internal scan method with timeout protection"""
         
         # Rate limiting
         if self.rate_limit_delay > 0:
             self.logger.debug(f"Rate limiting: waiting {self.rate_limit_delay}s")
-            await asyncio.sleep(self.rate_limit_delay)
+            time.sleep(self.rate_limit_delay)
         
         scan_start = time.time()
         results = []
@@ -265,7 +260,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         self.logger.debug(f"Beginning port scanning on {len(ports)} Arweave ports")
         for i, port in enumerate(ports, 1):
             self.logger.debug(f"Scanning port {port} ({i}/{len(ports)})")
-            result = await self._scan_port(ip, port, hostname)
+            result = self._scan_port(ip, port, hostname)
             if result:
                 self.logger.debug(f"Port {port}: Arweave node detected (healthy: {result.healthy})")
                 results.append(result)
@@ -286,7 +281,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_port(self, ip: str, port: int, hostname: Optional[str] = None) -> Optional[ArweaveScanResult]:
+    def _scan_port(self, ip: str, port: int, hostname: Optional[str] = None) -> Optional[ArweaveScanResult]:
         """Comprehensive port scanning with all data collection"""
         # Use hostname for URL if provided (for SNI/virtual host support)
         host_for_url = hostname if hostname else ip
@@ -314,32 +309,32 @@ class EnhancedArweaveScanner(ProtocolScanner):
         total_requests = 0
         
         try:
-            async with httpx.AsyncClient(
+            with httpx.Client(
                 timeout=httpx.Timeout(self.timeout),
                 limits=httpx.Limits(max_connections=10)
             ) as client:
                 
                 # Level 1: Basic health and metadata collection
-                success = await self._scan_basic(client, base_url, result)
+                success = self._scan_basic(client, base_url, result)
                 total_requests += 4  # Approximate number of requests
                 successful_requests += success
                 
                 if self.scan_level.value >= 2:
-                    success = await self._scan_medium(client, base_url, result)
+                    success = self._scan_medium(client, base_url, result)
                     total_requests += 6
                     successful_requests += success
                 
                 if self.scan_level.value >= 3:
-                    success = await self._scan_ferocious(client, base_url, result)
+                    success = self._scan_ferocious(client, base_url, result)
                     total_requests += 10
                     successful_requests += success
                 
                 # Enhanced analysis phases
-                await self._analyze_security_posture(result)
-                await self._analyze_operational_metrics(result)
-                await self._analyze_behavior_patterns(result)
-                await self._check_reputation_intelligence(result)
-                await self._assess_compliance_indicators(result)
+                self._analyze_security_posture(result)
+                self._analyze_operational_metrics(result)
+                self._analyze_behavior_patterns(result)
+                self._check_reputation_intelligence(result)
+                self._assess_compliance_indicators(result)
                 
         except Exception as e:
             self.logger.warning(f"Scan failed for {ip}:{port} - {e}")
@@ -354,13 +349,13 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return result
 
-    async def _scan_basic(self, client: httpx.AsyncClient, base_url: str, result: ArweaveScanResult) -> int:
+    def _scan_basic(self, client: httpx.Client, base_url: str, result: ArweaveScanResult) -> int:
         """Level 1: Comprehensive basic node information collection"""
         successful_requests = 0
         
         try:
             # Node info with detailed parsing
-            info_response = await self._robust_fetch(client, f"{base_url}/info")
+            info_response = self._robust_fetch(client, f"{base_url}/info")
             result.endpoints_status['/info'] = info_response is not None
             
             if info_response:
@@ -380,7 +375,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     result.known_vulnerabilities = self._check_version_vulnerabilities(result.version)
             
             # Health check with detailed analysis
-            health_response = await client.get(f"{base_url}/health")
+            health_response = client.get(f"{base_url}/health")
             result.endpoints_status['/health'] = health_response.status_code == 200
             result.healthy = health_response.status_code == 200
             
@@ -397,13 +392,13 @@ class EnhancedArweaveScanner(ProtocolScanner):
                 result.misconfigs.append("node_unhealthy")
             
             # Price endpoint check (Arweave-specific)
-            price_response = await self._robust_fetch(client, f"{base_url}/price/0")
+            price_response = self._robust_fetch(client, f"{base_url}/price/0")
             result.endpoints_status['/price/0'] = price_response is not None
             if price_response:
                 successful_requests += 1
             
             # Current block endpoint
-            block_response = await self._robust_fetch(client, f"{base_url}/current_block")
+            block_response = self._robust_fetch(client, f"{base_url}/current_block")
             result.endpoints_status['/current_block'] = block_response is not None
             if block_response:
                 successful_requests += 1
@@ -415,13 +410,13 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _scan_medium(self, client: httpx.AsyncClient, base_url: str, result: ArweaveScanResult) -> int:
+    def _scan_medium(self, client: httpx.Client, base_url: str, result: ArweaveScanResult) -> int:
         """Level 2: Network metrics and peer analysis"""
         successful_requests = 0
         
         try:
             # Comprehensive peer analysis
-            peers_response = await self._robust_fetch(client, f"{base_url}/peers")
+            peers_response = self._robust_fetch(client, f"{base_url}/peers")
             result.endpoints_status['/peers'] = peers_response is not None
             
             if peers_response:
@@ -447,7 +442,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     result.compliance_flags.append("geographic_centralization")
             
             # Enhanced metrics parsing
-            metrics_response = await client.get(f"{base_url}/metrics")
+            metrics_response = client.get(f"{base_url}/metrics")
             result.endpoints_status['/metrics'] = metrics_response.status_code == 200
             
             if metrics_response.status_code == 200:
@@ -476,7 +471,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     result.misconfigs.append("low_mining_efficiency")
             
             # Block index check
-            block_index_response = await self._robust_fetch(client, f"{base_url}/block_index/current")
+            block_index_response = self._robust_fetch(client, f"{base_url}/block_index/current")
             result.endpoints_status['/block_index/current'] = block_index_response is not None
             if block_index_response:
                 successful_requests += 1
@@ -486,7 +481,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _scan_ferocious(self, client: httpx.AsyncClient, base_url: str, result: ArweaveScanResult) -> int:
+    def _scan_ferocious(self, client: httpx.Client, base_url: str, result: ArweaveScanResult) -> int:
         """Level 3: Deep behavioral and security analysis"""
         successful_requests = 0
         
@@ -496,13 +491,13 @@ class EnhancedArweaveScanner(ProtocolScanner):
             for i in range(5):  # More samples for better statistics
                 start = time.time()
                 try:
-                    response = await client.get(f"{base_url}/info")
+                    response = client.get(f"{base_url}/info")
                     if response.status_code == 200:
                         latencies.append((time.time() - start) * 1000)
                         successful_requests += 0.2  # Fractional success
                 except:
                     pass
-                await asyncio.sleep(0.1)
+                time.sleep(0.1)
             
             if latencies:
                 result.latency_ms = statistics.mean(latencies)
@@ -519,7 +514,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     result.compliance_flags.append("poor_user_experience")
             
             # Transaction anchor analysis with freshness check
-            tx_anchor_response = await client.get(f"{base_url}/tx_anchor")
+            tx_anchor_response = client.get(f"{base_url}/tx_anchor")
             result.endpoints_status['/tx_anchor'] = tx_anchor_response.status_code == 200
             
             if tx_anchor_response.status_code == 200:
@@ -544,13 +539,13 @@ class EnhancedArweaveScanner(ProtocolScanner):
             result.security_headers_score = self._calculate_security_headers_score(result.headers)
             
             # Advanced port scanning for security assessment
-            result.open_ports = await self._scan_port_range(result.ip, [1984, 1985, 22, 80, 443, 8080, 9090])
+            result.open_ports = self._scan_port_range(result.ip, [1984, 1985, 22, 80, 443, 8080, 9090])
             
             # Identify exposed services and admin interfaces
             exposed_services = []
             for port in result.open_ports:
                 if port not in self.default_ports:
-                    service = await self._identify_service(result.ip, port)
+                    service = self._identify_service(result.ip, port)
                     if service:
                         exposed_services.append(f"{service}:{port}")
                         
@@ -564,7 +559,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             # TLS analysis for HTTPS endpoints
             if 1985 in result.open_ports or 443 in result.open_ports:
                 tls_port = 1985 if 1985 in result.open_ports else 443
-                tls_analysis = await self._analyze_tls_config(result.ip, tls_port)
+                tls_analysis = self._analyze_tls_config(result.ip, tls_port)
                 result.tls_grade = tls_analysis.get('grade')
                 result.tls_cipher_strength = tls_analysis.get('cipher_strength')
                 
@@ -577,7 +572,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return successful_requests
 
-    async def _analyze_security_posture(self, result: ArweaveScanResult):
+    def _analyze_security_posture(self, result: ArweaveScanResult):
         """Comprehensive security posture analysis"""
         security_score = 1.0
         
@@ -602,7 +597,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         result.config_security_score = max(0.0, security_score)
 
-    async def _analyze_operational_metrics(self, result: ArweaveScanResult):
+    def _analyze_operational_metrics(self, result: ArweaveScanResult):
         """Analyze operational health and performance metrics"""
         
         # Calculate uptime score from scan history
@@ -627,7 +622,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         if hasattr(self, 'network_baseline') and self.network_baseline:
             self._compare_against_baseline(result)
 
-    async def _analyze_behavior_patterns(self, result: ArweaveScanResult):
+    def _analyze_behavior_patterns(self, result: ArweaveScanResult):
         """Advanced behavioral pattern analysis"""
         if not self.behavioral_analyzer:
             return
@@ -652,31 +647,31 @@ class EnhancedArweaveScanner(ProtocolScanner):
         except Exception as e:
             self.logger.debug(f"Behavioral analysis error: {e}")
 
-    async def _check_reputation_intelligence(self, result: ArweaveScanResult):
+    def _check_reputation_intelligence(self, result: ArweaveScanResult):
         """Check against threat intelligence and reputation databases"""
         if not self.reputation_client:
             return
         
         try:
             # IP reputation check
-            ip_reputation = await self.reputation_client.check_ip(result.ip)
+            ip_reputation = self.reputation_client.check_ip(result.ip)
             result.malicious_ip = ip_reputation.get('malicious', False)
             if result.malicious_ip:
                 result.reputation_flags.append("malicious_ip")
                 result.compliance_flags.append("security_threat")
             
             # Blacklist checking
-            blacklist_results = await self.reputation_client.check_blacklists(result.ip)
+            blacklist_results = self.reputation_client.check_blacklists(result.ip)
             result.blacklist_matches = blacklist_results.get('matches', [])
             
             # Node reputation check
             if result.node_id:
-                node_reputation = await self.reputation_client.check_node_reputation(result.node_id)
+                node_reputation = self.reputation_client.check_node_reputation(result.node_id)
                 result.reputation_flags.extend(node_reputation.get('flags', []))
             
             # Version vulnerability check
             if result.version:
-                vuln_check = await self.reputation_client.check_version_vulnerabilities(result.version)
+                vuln_check = self.reputation_client.check_version_vulnerabilities(result.version)
                 critical_vulns = vuln_check.get('critical_vulnerabilities', [])
                 result.known_vulnerabilities.extend(critical_vulns)
                 
@@ -686,7 +681,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         except Exception as e:
             self.logger.warning(f"Reputation check failed: {e}")
 
-    async def _assess_compliance_indicators(self, result: ArweaveScanResult):
+    def _assess_compliance_indicators(self, result: ArweaveScanResult):
         """Assess various compliance indicators"""
         
         # Data protection compliance
@@ -922,7 +917,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             result.sync_gap > self.network_baseline['avg_sync_gap'] * 3):
             result.compliance_flags.append("below_network_sync")
 
-    async def _robust_fetch(self, client: httpx.AsyncClient, url: str, retries: int = None) -> Optional[Dict]:
+    def _robust_fetch(self, client: httpx.Client, url: str, retries: int = None) -> Optional[Dict]:
         """Fetch with comprehensive retry logic and error handling"""
         if retries is None:
             retries = self.max_retries
@@ -931,7 +926,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         for attempt in range(retries):
             try:
-                response = await client.get(url)
+                response = client.get(url)
                 if response.status_code == 200:
                     try:
                         return response.json()
@@ -945,7 +940,7 @@ class EnhancedArweaveScanner(ProtocolScanner):
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_exception = e
                 if attempt < retries - 1:
-                    await asyncio.sleep(0.5 * (2 ** attempt))  # Exponential backoff
+                    time.sleep(0.5 * (2 ** attempt))  # Exponential backoff
             except Exception as e:
                 last_exception = e
                 break
@@ -955,19 +950,20 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return None
 
-    async def _scan_port_range(self, ip: str, ports: List[int]) -> List[int]:
+    def _scan_port_range(self, ip: str, ports: List[int]) -> List[int]:
         """Scan range of ports to identify open services"""
         open_ports = []
         
         for port in ports:
             try:
-                # Quick TCP connect test with short timeout
-                future = asyncio.open_connection(ip, port)
-                reader, writer = await asyncio.wait_for(future, timeout=2.0)
-                writer.close()
-                await writer.wait_closed()
-                open_ports.append(port)
-            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2.0)
+                result = sock.connect_ex((ip, port))
+                sock.close()
+                if result == 0:
+                    open_ports.append(port)
+            except (ConnectionRefusedError, OSError):
                 continue
             except Exception as e:
                 self.logger.debug(f"Port scan error {ip}:{port} - {e}")
@@ -975,19 +971,18 @@ class EnhancedArweaveScanner(ProtocolScanner):
         
         return open_ports
 
-    async def _identify_service(self, ip: str, port: int) -> Optional[str]:
+    def _identify_service(self, ip: str, port: int) -> Optional[str]:
         """Identify service running on specific port"""
         try:
-            # Quick banner grab
-            future = asyncio.open_connection(ip, port)
-            reader, writer = await asyncio.wait_for(future, timeout=3.0)
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3.0)
+            sock.connect((ip, port))
             
-            # Send minimal request and read response
-            writer.write(b"GET / HTTP/1.0\r\n\r\n")
-            await writer.drain()
+            sock.send(b"GET / HTTP/1.0\r\n\r\n")
             
             try:
-                banner = await asyncio.wait_for(reader.read(1024), timeout=2.0)
+                banner = sock.recv(1024)
                 banner_str = banner.decode('utf-8', errors='ignore').lower()
                 
                 # Service identification patterns
@@ -1005,13 +1000,12 @@ class EnhancedArweaveScanner(ProtocolScanner):
                     return 'unknown'
                     
             finally:
-                writer.close()
-                await writer.wait_closed()
+                sock.close()
                 
         except Exception:
             return None
 
-    async def _analyze_tls_config(self, ip: str, port: int) -> Dict[str, Any]:
+    def _analyze_tls_config(self, ip: str, port: int) -> Dict[str, Any]:
         """Analyze TLS/SSL configuration"""
         try:
             import ssl
@@ -1359,7 +1353,7 @@ class ReputationClient:
         self.api_keys = self.config.get('api_keys', {})
         self.enabled_services = self.config.get('enabled_services', [])
     
-    async def check_ip(self, ip: str) -> Dict[str, Any]:
+    def check_ip(self, ip: str) -> Dict[str, Any]:
         """Check IP reputation across multiple services"""
         reputation_data = {
             'malicious': False,
@@ -1375,21 +1369,21 @@ class ReputationClient:
         
         return reputation_data
     
-    async def check_blacklists(self, ip: str) -> Dict[str, Any]:
+    def check_blacklists(self, ip: str) -> Dict[str, Any]:
         """Check against various IP blacklists"""
         return {
             'matches': [],
             'total_lists_checked': 0
         }
     
-    async def check_node_reputation(self, node_id: str) -> Dict[str, Any]:
+    def check_node_reputation(self, node_id: str) -> Dict[str, Any]:
         """Check node-specific reputation"""
         return {
             'flags': [],
             'reputation_score': 0.7
         }
     
-    async def check_version_vulnerabilities(self, version: str) -> Dict[str, Any]:
+    def check_version_vulnerabilities(self, version: str) -> Dict[str, Any]:
         """Check version against CVE databases"""
         return {
             'critical_vulnerabilities': [],

@@ -59,7 +59,7 @@ class WebServerScanner(ProtocolScanner):
             3: "Advanced vulnerability detection, admin panel discovery, and comprehensive security assessment"
         }
 
-    async def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
         """Perform web server specific scan at the specified level."""
         self.logger.info(f"Starting Web Server scan of {target} at level {scan_level}")
         scan_start_time = time.time()
@@ -77,11 +77,11 @@ class WebServerScanner(ProtocolScanner):
         
         try:
             if scan_level == 1:
-                level_results = await self._scan_level_1(target, hostname)
+                level_results = self._scan_level_1(target, hostname)
             elif scan_level == 2:
-                level_results = await self._scan_level_2(target, hostname)
+                level_results = self._scan_level_2(target, hostname)
             elif scan_level == 3:
-                level_results = await self._scan_level_3(target, hostname)
+                level_results = self._scan_level_3(target, hostname)
             else:
                 raise ValueError(f"Invalid scan_level: {scan_level}")
             
@@ -99,7 +99,7 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 1: Basic web server detection and technology fingerprinting."""
         self.logger.info(f"Level 1 Web Server scan for {target}")
         
@@ -136,10 +136,10 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 2: Security headers, WAF detection, and behavioral analysis."""
         # Get level 1 results first
-        results = await self._scan_level_1(target, hostname)
+        results = self._scan_level_1(target, hostname)
         
         # Additional analysis for level 2
         if results.get('web_server_detected'):
@@ -161,10 +161,10 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    async def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Level 3: Advanced vulnerability detection and admin panel discovery."""
         # Get level 2 results first
-        results = await self._scan_level_2(target, hostname)
+        results = self._scan_level_2(target, hostname)
         
         if results.get('web_server_detected'):
             # Admin panel discovery

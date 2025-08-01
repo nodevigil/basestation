@@ -6,7 +6,6 @@ Node scanner that adapts to different DePIN protocols with protocol-specific con
 Based on the original node_scanner.py but integrated into the PGDN library architecture.
 """
 
-import asyncio
 import json
 import ssl
 import socket
@@ -97,16 +96,8 @@ class NodeScanner(BaseScanner):
         timeout = kwargs.get('timeout', self.timeout)
         
         try:
-            # Run async scan
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                results = loop.run_until_complete(
-                    self._scan_host_async(target, protocol, ports, concurrency, timeout)
-                )
-            finally:
-                loop.close()
+            # Run sync scan
+            results = self._scan_host_sync(target, protocol, ports, concurrency, timeout)
             
             # Format results
             return {
@@ -238,78 +229,92 @@ class NodeScanner(BaseScanner):
         
         return applicable
     
-    async def _probe_port(self, ip: str, port: int, probe: Dict[str, Any], protocol: str,
-                         timeout: float, semaphore: asyncio.Semaphore) -> Dict[str, Any]:
+    def _probe_port(self, ip: str, port: int, probe: Dict[str, Any], protocol: str,
+                         timeout: float, semaphore=None) -> Dict[str, Any]:
         """Execute a single probe against a port."""
-        async with semaphore:
-            start_time = time.time()
-            result = {
-                'ip': ip,
-                'port': port,
-                'probe': probe['name'],
-                'protocol': protocol,
-                'latency_ms': 0,
-                'ssl': probe.get('requires_ssl', False),
-                'error': None,
-                'banner': '',
-                'service': None,
-                'version': None
-            }
-            
-            try:
-                # Create connection
-                if probe.get('requires_ssl', False):
-                    context = ssl.create_default_context()
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    
-                    reader, writer = await asyncio.wait_for(
-                        asyncio.open_connection(ip, port, ssl=context),
-                        timeout=timeout
-                    )
-                else:
-                    reader, writer = await asyncio.wait_for(
-                        asyncio.open_connection(ip, port),
-                        timeout=timeout
-                    )
+        start_time = time.time()
+        result = {
+            'ip': ip,
+            'port': port,
+            'probe': probe['name'],
+            'protocol': protocol,
+            'latency_ms': 0,
+            'ssl': probe.get('requires_ssl', False),
+            'error': None,
+            'banner': '',
+            'service': None,
+            'version': None
+        }
+        
+        try:
+            # Create connection using regular sockets
+            if probe.get('requires_ssl', False):
+                import ssl as ssl_module
+                context = ssl_module.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl_module.CERT_NONE
+                
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                sock.connect((ip, port))
+                ssl_sock = context.wrap_socket(sock, server_hostname=ip)
                 
                 # Send probe payload
                 if 'payload' in probe and probe['payload']:
                     payload = probe['payload'].replace('\\r\\n', '\r\n').replace('\\r', '\r').replace('\\n', '\n')
-                    writer.write(payload.encode('utf-8'))
-                    await writer.drain()
+                    ssl_sock.send(payload.encode('utf-8'))
                 
                 # Read response
                 try:
-                    data = await asyncio.wait_for(reader.read(4096), timeout=timeout)
+                    data = ssl_sock.recv(4096)
                     result['banner'] = data.decode('utf-8', errors='replace').strip()
-                except asyncio.TimeoutError:
+                except socket.timeout:
                     result['error'] = 'timeout'
                 except Exception as e:
                     result['error'] = str(e)
                 
-                writer.close()
-                await writer.wait_closed()
+                ssl_sock.close()
                 
-            except asyncio.TimeoutError:
-                result['error'] = 'connection_timeout'
-            except ConnectionRefusedError:
-                result['error'] = 'connection_refused'
-            except Exception as e:
-                result['error'] = str(e)
-            
-            # Calculate latency
-            result['latency_ms'] = round((time.time() - start_time) * 1000, 1)
-            
-            # Try to identify service and version
-            if result['banner'] and not result['error']:
-                service, version = self._match_signatures(result['banner'], protocol)
-                result['service'] = service
-                result['version'] = version
-            
-            return result
+            else:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                sock.connect((ip, port))
+                
+                # Send probe payload
+                if 'payload' in probe and probe['payload']:
+                    payload = probe['payload'].replace('\\r\\n', '\r\n').replace('\\r', '\r').replace('\\n', '\n')
+                    sock.send(payload.encode('utf-8'))
+                
+                # Read response
+                try:
+                    data = sock.recv(4096)
+                    result['banner'] = data.decode('utf-8', errors='replace').strip()
+                except socket.timeout:
+                    result['error'] = 'timeout'
+                except Exception as e:
+                    result['error'] = str(e)
+                
+                sock.close()
+                
+        except socket.timeout:
+            result['error'] = 'connection_timeout'
+        except ConnectionRefusedError:
+            result['error'] = 'connection_refused'
+        except Exception as e:
+            result['error'] = str(e)
+        
+        # Calculate latency
+        result['latency_ms'] = round((time.time() - start_time) * 1000, 1)
+        
+        # Try to identify service and version
+        if result['banner'] and not result['error']:
+            service, version = self._match_signatures(result['banner'], protocol)
+            result['service'] = service
+            result['version'] = version
+        
+        return result
     
-    async def _scan_host_async(self, ip: str, protocol: str, ports: Optional[List[int]] = None,
+    def _scan_host_sync(self, ip: str, protocol: str, ports: Optional[List[int]] = None,
                        concurrency: int = 50, timeout: float = 3.0) -> List[Dict[str, Any]]:
         """
         Scan a host using protocol-specific configuration.
@@ -328,26 +333,19 @@ class NodeScanner(BaseScanner):
             ports = self.get_protocol_ports(protocol)
         
         probes = self.get_protocol_probes(protocol)
-        semaphore = asyncio.Semaphore(concurrency)
-        tasks = []
+        results = []
         
         for port in ports:
             applicable_probes = self._get_applicable_probes(port, probes)
             for probe in applicable_probes:
-                task = self._probe_port(ip, port, probe, protocol, timeout, semaphore)
-                tasks.append(task)
+                try:
+                    result = self._probe_port(ip, port, probe, protocol, timeout, None)
+                    if isinstance(result, dict):
+                        results.append(result)
+                except Exception as e:
+                    logger.warning(f"Probe failed: {e}")
         
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Filter out exceptions
-        valid_results = []
-        for result in results:
-            if isinstance(result, dict):
-                valid_results.append(result)
-            else:
-                logger.warning(f"Task failed: {result}")
-        
-        return valid_results
+        return results
     
     def list_protocols(self) -> List[str]:
         """List all available protocols."""
@@ -369,7 +367,7 @@ class NodeScanner(BaseScanner):
 
 
 # Library interface functions for backward compatibility
-async def scan_depin_node(ip: str, protocol: str, ports: Optional[List[int]] = None,
+def scan_depin_node(ip: str, protocol: str, ports: Optional[List[int]] = None,
                          concurrency: int = 50, timeout: float = 3.0,
                          protocols_dir: Optional[str] = None) -> List[Dict[str, Any]]:
     """
