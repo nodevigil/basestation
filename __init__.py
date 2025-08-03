@@ -1,2 +1,2 @@
 # DePIN Infrastructure Scanner
-__version__ = "1.8.4"
+__version__ = "1.9.0"
