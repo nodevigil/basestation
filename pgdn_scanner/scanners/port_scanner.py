@@ -606,9 +606,36 @@ class PortScanner(BaseScanner):
 
     def _detect_service_version(self, target: str, port: int, banner: Optional[str], 
                               nmap_results: Optional[Dict]) -> tuple:
-        """Detect service and version from multiple sources"""
+        """
+        Detect service and version from multiple sources with strict validation.
+        Returns 'unknown' service if expected responses are missing.
+        """
         service = self.common_services.get(port, 'unknown')
         version = None
+        
+        # Service-specific validation - require actual service responses for common ports
+        expected_service_responses = {
+            22: ['SSH', 'OpenSSH'],
+            80: ['HTTP', 'Server:', 'text/html', '<html'],
+            443: ['HTTP', 'Server:', 'text/html', '<html'],
+            3306: ['mysql', 'Access denied', 'Host', 'not allowed'],
+            5432: ['PostgreSQL', 'FATAL:', 'SCRAM', 'password'],
+            6379: ['+PONG', '-ERR', 'Redis'],
+            27017: ['MongoDB', 'ismaster', 'isMaster', 'documents'],
+        }
+        
+        # If this is a standard service port, validate the response
+        if port in expected_service_responses and banner:
+            expected_keywords = expected_service_responses[port]
+            has_expected_response = any(keyword in banner for keyword in expected_keywords)
+            if not has_expected_response:
+                # Banner exists but doesn't match expected service - suspicious
+                service = 'unknown'
+                self.logger.debug(f"Port {port} banner doesn't match expected {self.common_services.get(port)} service: {banner[:50]}...")
+        elif port in expected_service_responses and not banner:
+            # Expected service port but no banner - likely filtered/honeypot
+            service = 'unknown'
+            self.logger.debug(f"Port {port} expected {self.common_services.get(port)} service but no banner received")
         
         # Check nmap results first
         if nmap_results and 'version' in nmap_results:
@@ -804,6 +831,13 @@ class PortScanner(BaseScanner):
         Higher score = more confidence in the accuracy and completeness of collected data
         """
         if not result.is_open:
+            # Special case: if nmap identified a known service on a standard port, give it credit
+            standard_services = {'ssh': 22, 'mysql': 3306, 'postgresql': 5432, 'redis': 6379, 'mongodb': 27017}
+            if (result.nmap_results and 
+                result.nmap_results.get('service') in standard_services and
+                result.port == standard_services[result.nmap_results.get('service')]):
+                return 75.0  # Good confidence for nmap-identified services on correct ports
+            
             # Different confidence levels based on port state
             if result.port_state == 'filtered':
                 return 95.0  # High confidence that port is filtered
@@ -815,28 +849,45 @@ class PortScanner(BaseScanner):
         score = 0.0
         max_score = 0.0
         
-        # Banner grabbing (20 points possible)
-        max_score += 20
+        # Banner grabbing (30 points possible - more important now)
+        max_score += 30
         if result.banner:
-            if len(result.banner) > 50:
-                score += 20  # Good banner data
+            if len(result.banner) > 10:
+                score += 30  # Any meaningful banner data indicates genuine service
             else:
-                score += 10  # Some banner data
+                score += 15  # Very short banner data
+        else:
+            # Heavy penalty for missing banners on service ports that should respond
+            service_ports = {22: 'ssh', 25: 'smtp', 53: 'dns', 80: 'http', 110: 'pop3', 
+                           143: 'imap', 443: 'https', 993: 'imaps', 995: 'pop3s',
+                           3306: 'mysql', 5432: 'postgresql', 6379: 'redis', 27017: 'mongodb'}
+            if result.port in service_ports:
+                score -= 20  # Heavy penalty for missing expected service banner
         
-        # Nmap results (25 points possible)
-        max_score += 25
-        if result.nmap_results:
-            if result.nmap_results.get('raw_output') and len(result.nmap_results['raw_output']) > 100:
-                score += 25  # Comprehensive nmap data
+        # Nmap results (20 points possible - less important than actual responses)
+        max_score += 20
+        if result.nmap_results and not result.nmap_results.get('error'):
+            # Give full credit if we have service identification, even without product/version
+            if (result.nmap_results.get('service') and 
+                result.nmap_results.get('service') != 'unknown'):
+                score += 20  # Service identified by nmap
+            elif (result.nmap_results.get('product') or 
+                  result.nmap_results.get('version') or 
+                  len(result.nmap_results.get('raw_output', '')) > 100):
+                score += 20  # Detailed nmap data with service info
             else:
-                score += 15  # Basic nmap data
+                score += 10  # Basic nmap data without service details
         
-        # Service detection (15 points possible)
-        max_score += 15
+        # Service detection (20 points possible - more important)
+        max_score += 20
         if result.service and result.service != 'unknown':
-            score += 10
+            score += 15
             if result.version:
                 score += 5  # Bonus for version info
+        else:
+            # Penalty for unknown service on standard ports
+            if result.port in [22, 80, 443, 3306, 5432, 6379, 27017]:
+                score -= 10  # Penalty for unknown service on standard ports
         
         # SSL analysis (if applicable - 20 points possible)
         if self._is_ssl_port(result.port) or self._appears_ssl(result.banner):
@@ -873,13 +924,119 @@ class PortScanner(BaseScanner):
         timeout_count = len([log for log in result.scan_log if 'timeout' in log.lower()])
         score -= timeout_count * 8
         
+        # Honeypot/filtered service detection penalties
+        if result.is_open:
+            # TCP connects but no banner on service ports = likely filtered/honeypot
+            service_ports = [22, 25, 80, 443, 3306, 5432, 6379, 27017]
+            if result.port in service_ports and not result.banner:
+                score -= 25  # Heavy penalty for "open" service ports with no response
+            
+            # No service detected despite being "open" = suspicious
+            if not result.service or result.service == 'unknown':
+                score -= 15  # Penalty for unidentified services
+            
+            # Nmap reports open but no actual service data = likely filtered
+            if (result.nmap_results and 
+                not result.nmap_results.get('error') and 
+                not result.nmap_results.get('product') and 
+                not result.nmap_results.get('version') and
+                not result.banner):
+                score -= 20  # Penalty for "ghost" open ports
+        
         # Calculate percentage
         if max_score > 0:
             confidence = (score / max_score) * 100
         else:
             confidence = 50.0  # Default for edge cases
         
+        # Special case: If this looks like a filtered service, give high confidence
+        # for the filtered classification (not the open classification)
+        if result.is_open and confidence < 60:
+            standard_service_ports = {22, 25, 53, 80, 443, 110, 143, 993, 995, 
+                                    3306, 5432, 6379, 27017, 1433, 1521}
+            if (result.port in standard_service_ports and 
+                not result.banner and 
+                result.nmap_results and 
+                result.nmap_results.get('port_state') == 'open'):
+                # This pattern suggests filtered service - we're confident it's filtered
+                # (but not confident it's fully open, which is why confidence was low)
+                pass  # Keep the low confidence, filtered detection will handle classification
+        
         return max(0.0, min(100.0, confidence))
+
+    def _detect_filtered_service(self, result: PortScanResult) -> bool:
+        """
+        Detect if a port represents a filtered service (TCP open but protocol blocked).
+        
+        Key indicators:
+        - TCP connection succeeds (is_open = True)
+        - nmap reports port as "open"  
+        - No banner/protocol response
+        - Standard service port
+        - Service detection timeouts
+        
+        Returns True if this appears to be a filtered service
+        """
+        # Must be initially detected as open
+        if not result.is_open:
+            return False
+        
+        # Must be a standard service port that should respond
+        standard_service_ports = {
+            22: 'ssh', 25: 'smtp', 53: 'dns', 80: 'http', 443: 'https',
+            110: 'pop3', 143: 'imap', 993: 'imaps', 995: 'pop3s',
+            3306: 'mysql', 5432: 'postgresql', 6379: 'redis', 27017: 'mongodb',
+            1433: 'mssql', 1521: 'oracle'
+        }
+        
+        if result.port not in standard_service_ports:
+            return False
+        
+        # If nmap positively identified the expected service, trust it as open
+        expected_service = standard_service_ports[result.port]
+        if (result.nmap_results and 
+            result.nmap_results.get('service') and
+            expected_service in result.nmap_results.get('service', '').lower()):
+            self.logger.info(f"Port {result.port} confirmed as genuine {expected_service} service by nmap")
+            return False  # Not filtered - genuine service
+        
+        # Check for filtered indicators
+        filtered_indicators = 0
+        
+        # 1. nmap reports open but no service details
+        if (result.nmap_results and 
+            not result.nmap_results.get('error') and
+            result.nmap_results.get('port_state') == 'open' and
+            not result.nmap_results.get('product') and 
+            not result.nmap_results.get('version')):
+            # Only count if nmap also failed to identify service
+            if not result.nmap_results.get('service') or result.nmap_results.get('service') == 'unknown':
+                filtered_indicators += 1
+        
+        # 2. No banner response on port that should respond
+        if not result.banner:
+            filtered_indicators += 1
+        
+        # 3. Service detection failed or returned generic service name
+        if (not result.service or 
+            result.service == 'unknown'):
+            filtered_indicators += 1
+        
+        # 4. Check scan log for timeout patterns
+        timeout_keywords = ['timeout', 'no response', 'failed', 'timed out']
+        timeout_entries = [log for log in result.scan_log 
+                          if any(keyword in log.lower() for keyword in timeout_keywords)]
+        if timeout_entries:
+            filtered_indicators += 1
+        
+        # Require at least 4 indicators for high confidence filtered detection (stricter)
+        is_filtered = filtered_indicators >= 4
+        
+        if is_filtered:
+            self.logger.info(f"Detected filtered service on {result.target}:{result.port} "
+                           f"({filtered_indicators}/4 indicators: TCP open, no protocol response)")
+        
+        return is_filtered
 
     def _finalize_port_state(self, result: PortScanResult) -> PortScanResult:
         """
@@ -906,13 +1063,21 @@ class PortScanner(BaseScanner):
         
         # For ports that initially appeared open
         else:
-            if confidence >= 70:
-                # High confidence - definitely open
+            # Check for filtered service pattern first
+            is_filtered_service = self._detect_filtered_service(result)
+            
+            if is_filtered_service:
+                # High confidence filtered service - TCP open but protocol blocked
+                result.port_state = "filtered"
+                result.is_open = True  # Still security relevant
+                result.scan_log.append(f"STATE_FINALIZED: Detected filtered service (TCP open, protocol blocked)")
+            elif confidence >= 80:
+                # High confidence - definitely open and functional
                 result.port_state = "open"
                 result.is_open = True
                 result.scan_log.append(f"STATE_FINALIZED: High confidence, confirmed open")
-            elif confidence >= 40:
-                # Medium confidence - likely open but uncertain
+            elif confidence >= 60:
+                # Medium confidence - likely open but requires verification
                 result.port_state = "likely_open" 
                 result.is_open = True  # Keep as open but flag uncertainty
                 result.scan_log.append(f"STATE_FINALIZED: Medium confidence, marked as likely_open")
@@ -951,17 +1116,18 @@ class PortScanner(BaseScanner):
             'scanner_type': self.scanner_type,
             'timestamp': datetime.now().isoformat(),
             
-            # Orchestrator-expected format (combine open + likely_open for backward compatibility)
-            'open_ports': open_ports + likely_open_ports,
+            # Include both open and filtered ports as security-relevant (filtered ports are risks too)
+            'open_ports': open_ports + filtered_ports,
             'banners': banners,
             'tls': tls,
             
             # Enhanced port state information with confidence-based states
             'confirmed_open_ports': open_ports,      # High confidence open
             'likely_open_ports': likely_open_ports,  # Medium confidence open
+            'filtered_ports': filtered_ports,        # TCP open but protocol blocked (security relevant)
             'closed_ports': closed_ports,
-            'filtered_ports': filtered_ports,
             'uncertain_ports': uncertain_ports,      # Low confidence, unclear state
+            'security_relevant_ports': open_ports + filtered_ports,  # Combined for risk analysis
             
             # Keep detailed results for comprehensive data
             'scan_summary': {
