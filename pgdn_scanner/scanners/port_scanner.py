@@ -596,19 +596,40 @@ class PortScanner(BaseScanner):
             return False
 
     def _grab_banner(self, target: str, port: int) -> Optional[str]:
-        """Basic banner grabbing - single probe only"""
+        """Enhanced banner grabbing with service-specific probes"""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.settimeout(self.read_timeout)
                 sock.connect((target, port))
                 
-                # Single HTTP probe for web services, otherwise just listen
-                if port in [80, 443, 8080, 8443]:
-                    probe = b"GET / HTTP/1.1\r\nHost: " + target.encode() + b"\r\n\r\n"
-                    sock.send(probe)
+                # First, try to receive unsolicited banner (SSH, FTP, SMTP, etc.)
+                sock.settimeout(2)  # Short timeout for immediate banners
+                try:
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    if banner:
+                        return banner
+                except socket.timeout:
+                    # No immediate banner, continue with probes
+                    pass
                 
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
-                return banner if banner else None
+                # Reset timeout for probes
+                sock.settimeout(self.read_timeout)
+                
+                # Service-specific probes
+                if port in [80, 443, 8080, 8443]:
+                    # HTTP probe
+                    probe = b"GET / HTTP/1.1\r\nHost: " + target.encode() + b"\r\nConnection: close\r\n\r\n"
+                    sock.send(probe)
+                    banner = sock.recv(4096).decode('utf-8', errors='ignore').strip()
+                    return banner if banner else None
+                elif port == 22:
+                    # SSH - should have already received banner above, but try again
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    return banner if banner else None
+                else:
+                    # Generic TCP probe - send nothing, just listen
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                    return banner if banner else None
                         
         except Exception as e:
             self.logger.debug(f"Banner grab error for {target}:{port}: {e}")

@@ -3,6 +3,21 @@ network_type: "blockchain"
 default_ports: [22, 80, 443, 9000, 9184, 9100]
 
 probes:
+  - name: HTTP_GET_ROOT
+    payload: "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [80, 443]
+    requires_ssl: false
+  
+  - name: HTTPS_GET_ROOT
+    payload: "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    ports: [443]
+    requires_ssl: true
+  
+  - name: TCP_BANNER
+    payload: ""
+    ports: [22]
+    requires_ssl: false
+  
   - name: SUI_METRICS
     payload: "GET /metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
     ports: [9184]
@@ -19,6 +34,14 @@ probes:
     requires_ssl: false
 
 signatures:
+  - label: "Apache"
+    regex: 'Server: Apache/(?P<ver>[^\s\r\n]+)'
+    version_group: ver
+  
+  - label: "OpenSSH"
+    regex: 'SSH-2\.0-OpenSSH_(?P<ver>[^\s\r\n]+)'
+    version_group: ver
+  
   - label: "Sui Node"
     regex: 'sui_node_build_info.*version="(?P<ver>[^"]+)"'
     version_group: ver

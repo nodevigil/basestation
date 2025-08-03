@@ -1134,19 +1134,24 @@ class ScanOrchestrator:
         }
 
     def _extract_node_scan_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract clean node scan results."""
+        """Extract clean node scan results while preserving detailed probe information."""
         # The node scanner returns: target, protocol, results, total_probes, successful_probes, detected_services, open_ports
         results = raw_result.get('results', [])
         detected_services = raw_result.get('detected_services', [])
         open_ports = raw_result.get('open_ports', [])
         
-        # Extract meaningful information from the results
+        # Preserve detailed probe results for CVE detection and analysis
+        detailed_results = []
         active_endpoints = []
         service_info = {}
         
         for result in results:
-            if isinstance(result, dict) and not result.get('error'):
-                if result.get('banner') or result.get('service'):
+            if isinstance(result, dict):
+                # Always preserve the detailed probe result
+                detailed_results.append(result)
+                
+                # Also create simplified endpoint info for backward compatibility
+                if not result.get('error'):
                     endpoint = {
                         'port': result.get('port'),
                         'protocol': result.get('protocol'),
@@ -1176,6 +1181,7 @@ class ScanOrchestrator:
             'successful_probes': raw_result.get('successful_probes', 0),
             'open_ports': open_ports,
             'active_endpoints': active_endpoints,
+            'results': detailed_results,  # Preserve original detailed probe results
             'detected_services': [service.get('service') for service in detected_services if service.get('service')],
             'service_versions': service_info,
             'scan_summary': {
