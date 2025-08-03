@@ -74,7 +74,7 @@ class PortScanner(BaseScanner):
         self.timeout = self.config.get('timeout', 10)
         self.connect_timeout = min(3, self.timeout // 3)  # Quick connection timeout
         self.read_timeout = min(5, self.timeout // 2)     # Quick read timeout
-        self.nmap_timeout = min(15, self.timeout + 5)     # Brief nmap scan
+        self.nmap_timeout = min(30, self.timeout + 15)    # Longer timeout for service detection
         self.max_threads = self.config.get('max_threads', 10)
         
         # Additional nmap arguments
@@ -169,10 +169,19 @@ class PortScanner(BaseScanner):
         
         # Run the scan
         try:
+            self.logger.info(f"Starting _scan_ports for {target}")
             results = self._scan_ports(target, ports, skip_nmap, nmap_args)
-            return self._generate_scan_report(target, results, skip_nmap)
+            self.logger.info(f"_scan_ports completed, got {len(results)} results")
+            
+            self.logger.info(f"Starting _generate_scan_report")
+            report = self._generate_scan_report(target, results, skip_nmap)
+            self.logger.info(f"Report generation completed successfully")
+            self.logger.info(f"Report contains open_ports: {report.get('open_ports', [])}")
+            return report
         except Exception as e:
             self.logger.error(f"Port scan failed: {e}")
+            import traceback
+            self.logger.error(f"Full traceback: {traceback.format_exc()}")
             return {
                 'target': target,
                 'scanner_type': self.scanner_type,
@@ -275,8 +284,11 @@ class PortScanner(BaseScanner):
                 try:
                     result = future.result()
                     results.append(result)
+                    self.logger.debug(f"Successfully scanned port {result.port}")
                 except Exception as e:
                     self.logger.error(f"Error scanning port: {e}")
+                    import traceback
+                    self.logger.error(f"Traceback: {traceback.format_exc()}")
         
         return results
 
@@ -831,12 +843,15 @@ class PortScanner(BaseScanner):
         Higher score = more confidence in the accuracy and completeness of collected data
         """
         if not result.is_open:
-            # Special case: if nmap identified a known service on a standard port, give it credit
-            standard_services = {'ssh': 22, 'mysql': 3306, 'postgresql': 5432, 'redis': 6379, 'mongodb': 27017}
-            if (result.nmap_results and 
-                result.nmap_results.get('service') in standard_services and
-                result.port == standard_services[result.nmap_results.get('service')]):
-                return 75.0  # Good confidence for nmap-identified services on correct ports
+            # Special case: if ANY method identified a critical service, give it high confidence
+            critical_services = ['ssh', 'mysql', 'postgresql', 'redis', 'mongodb', 'docker', 'ftp', 'telnet']
+            # Check both nmap results and local service detection
+            nmap_service = result.nmap_results.get('service') if result.nmap_results and not result.nmap_results.get('error') else None
+            local_service = result.service if result.service and result.service != 'unknown' else None
+            
+            detected_service = nmap_service or local_service
+            if detected_service in critical_services:
+                return 85.0  # High confidence for any critical service detection
             
             # Different confidence levels based on port state
             if result.port_state == 'filtered':
@@ -881,13 +896,17 @@ class PortScanner(BaseScanner):
         # Service detection (20 points possible - more important)
         max_score += 20
         if result.service and result.service != 'unknown':
-            score += 15
-            if result.version:
-                score += 5  # Bonus for version info
+            # Give full credit for critical services like Docker, even without version
+            critical_services = ['docker', 'ssh', 'mysql', 'postgresql', 'redis', 'mongodb']
+            if result.service in critical_services:
+                score += 20  # Full credit for critical services
+            else:
+                score += 15
+                if result.version:
+                    score += 5  # Bonus for version info
         else:
-            # Penalty for unknown service on standard ports
-            if result.port in [22, 80, 443, 3306, 5432, 6379, 27017]:
-                score -= 10  # Penalty for unknown service on standard ports
+            # No port-based penalties - services can run anywhere
+            pass
         
         # SSL analysis (if applicable - 20 points possible)
         if self._is_ssl_port(result.port) or self._appears_ssl(result.banner):
@@ -1091,12 +1110,20 @@ class PortScanner(BaseScanner):
 
     def _generate_scan_report(self, target: str, results: List[PortScanResult], skip_nmap: bool) -> Dict[str, Any]:
         """Generate comprehensive scan report in orchestrator-compatible format"""
+        self.logger.debug(f"Generating report for {len(results)} port scan results")
+        
+        # Debug: log all port states
+        for r in results:
+            self.logger.debug(f"Port {r.port}: state={r.port_state}, is_open={r.is_open}, confidence={r.confidence_score}")
+        
         # Extract ports by state
         open_ports = [r.port for r in results if r.port_state == 'open']
         likely_open_ports = [r.port for r in results if r.port_state == 'likely_open']
         closed_ports = [r.port for r in results if r.port_state == 'closed']
         filtered_ports = [r.port for r in results if r.port_state == 'filtered']
         uncertain_ports = [r.port for r in results if r.port_state == 'uncertain']
+        
+        self.logger.debug(f"Port states: open={open_ports}, likely_open={likely_open_ports}, filtered={filtered_ports}, uncertain={uncertain_ports}")
         
         # Extract banners for orchestrator compatibility
         banners = {}

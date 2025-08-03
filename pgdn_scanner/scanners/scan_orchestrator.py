@@ -120,9 +120,12 @@ class ScanOrchestrator:
                         self.logger.info(f"Completed {scanner_type} scanner in {scan_duration:.3f} seconds")
                         
                         # Convert to structured format and add to scan data
-                        if self._has_meaningful_results(raw_result):
+                        has_meaningful = self._has_meaningful_results(raw_result)
+                        self.logger.info(f"Scanner {scanner_type} meaningful results check: {has_meaningful}")
+                        if has_meaningful:
                             # Extract clean result data based on scanner type
                             clean_result = self._extract_clean_result(scanner_type, raw_result)
+                            self.logger.info(f"Scanner {scanner_type} clean result size: {len(clean_result) if clean_result else 0}")
                             
                             # Create standardized scan result
                             scan_result = ScanResultSchema.create_scan_result(
@@ -817,7 +820,12 @@ class ScanOrchestrator:
         # For scanner results with open_ports
         if "open_ports" in results:
             open_ports = results.get("open_ports", [])
-            return len(open_ports) > 0
+            # Also check for other port states - a scan with uncertain/filtered ports is still meaningful
+            closed_ports = results.get("closed_ports", [])
+            filtered_ports = results.get("filtered_ports", [])
+            uncertain_ports = results.get("uncertain_ports", [])
+            total_ports = len(open_ports) + len(closed_ports) + len(filtered_ports) + len(uncertain_ports)
+            return total_ports > 0
             
         # For port scanner results specifically
         if "scanner_type" in results and results.get("scanner_type") == "port_scan":
