@@ -900,6 +900,9 @@ class PortScanner(BaseScanner):
             critical_services = ['docker', 'ssh', 'mysql', 'postgresql', 'redis', 'mongodb']
             if result.service in critical_services:
                 score += 20  # Full credit for critical services
+                # CRITICAL SERVICE BOOST: If we identified a critical service, ensure high confidence
+                if score < 70:  # If current score is too low, boost it
+                    score = 70  # Minimum 70% confidence for critical services
             else:
                 score += 15
                 if result.version:
