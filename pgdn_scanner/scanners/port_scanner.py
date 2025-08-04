@@ -699,6 +699,13 @@ class PortScanner(BaseScanner):
                 ssh_match = re.search(r'OpenSSH_(\S+)', banner)
                 if ssh_match:
                     version = ssh_match.group(1)
+            elif 'Exceeded MaxStartups' in banner:
+                # SSH daemon rejecting connections due to MaxStartups limit
+                service = 'ssh'
+                # Try to extract version from banner if present
+                version_match = re.search(r'(\d+\.\d+[\w\d\.\-]*)', banner)
+                if version_match:
+                    version = version_match.group(1)
             
             # FTP
             elif 'FTP' in banner:
@@ -888,7 +895,10 @@ class PortScanner(BaseScanner):
         # Banner grabbing (30 points possible - more important now)
         max_score += 30
         if result.banner:
-            if len(result.banner) > 10:
+            # Special case: SSH error messages are definitive service confirmations
+            if 'Exceeded MaxStartups' in result.banner or 'SSH' in result.banner:
+                score += 30  # Full credit for definitive SSH confirmation
+            elif len(result.banner) > 10:
                 score += 30  # Any meaningful banner data indicates genuine service
             else:
                 score += 15  # Very short banner data
