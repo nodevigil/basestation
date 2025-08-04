@@ -69,6 +69,37 @@ class Scanner:
             - scan_level is only meaningful for compliance scans. For all other scan types, it is ignored.
         """
         try:
+            # Special handling for ip_classify with multiple IPs
+            if run == "ip_classify" and ',' in target:
+                from .scanners.ip_classify_scanner import IpClassifyScanner
+                scanner = IpClassifyScanner()
+                result = scanner.scan(target, scan_level=scan_level)
+                
+                return DictResult.success(
+                    data={
+                        "data": [{
+                            "scan_type": "discovery",
+                            "target": target,
+                            "result": result,
+                            "metadata": {
+                                "scan_duration": 0,
+                                "timestamp": datetime.now().isoformat() + "Z",
+                                "status": "success"
+                            }
+                        }],
+                        "meta": {
+                            "operation": "scan",
+                            "scan_level": "basic",
+                            "total_scans": 1,
+                            "successful_scans": 1,
+                            "failed_scans": 0,
+                            "scan_duration": 0,
+                            "target": target,
+                            "tools_used": ["ip_classify"]
+                        }
+                    }
+                )
+            
             # Keep original target for hostname-based scans, resolve for IP-based operations
             original_target = target
             try:

@@ -11,7 +11,7 @@ def read_requirements():
 
 setup(
     name="pgdn-scanner",
-    version="1.10.0",
+    version="1.10.1",
     description="PGDN - DePIN Infrastructure Scanner Library",
     long_description="A clean library for DePIN infrastructure scanning with support for custom scanners like Sui and Filecoin.",
     author="DePIN Team",
