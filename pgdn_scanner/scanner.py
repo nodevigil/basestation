@@ -147,6 +147,8 @@ class Scanner:
                     scan_type = "web"
                 elif run == "geo":
                     scan_type = "location"
+                elif run == "ip_classify":
+                    scan_type = "classification"
                 elif run == "compliance":
                     scan_type = "analysis"
                 elif run == "whatweb":
@@ -299,6 +301,8 @@ class Scanner:
             return [], ['whatweb']
         elif run == 'geo':
             return ['geo'], []
+        elif run == 'ip_classify':
+            return ['ip_classify'], []
         elif run == 'ssl_test':
             return [], ['ssl_test']
         elif run == 'compliance':
@@ -311,4 +315,4 @@ class Scanner:
             # Protocol scan will use protocol-specific scanners based on the protocol parameter
             return [], []
         else:
-            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan")
+            raise ValueError(f"Unknown run type: {run}. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan, ip_classify")

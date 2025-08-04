@@ -9,6 +9,7 @@ PGDN (Programmatic Global DePIN Network) is a specialized security scanning plat
 - **Compliance Scanning**: Fast security compliance assessment focusing on dangerous ports and exposed services
 - **Single-Target Focus**: Streamlined scanning of individual infrastructure nodes
 - **Infrastructure Analysis**: Comprehensive port scanning, web service analysis, SSL/TLS testing
+- **IP Classification**: Cloud provider detection, CDN identification, and infrastructure service mapping
 - **Vulnerability Assessment**: CVE correlation and security vulnerability detection
 - **GeoIP Intelligence**: Geographic and ASN context for threat analysis
 - **External Tool Integration**: Native integration with nmap, whatweb, ssl testing tools
@@ -52,6 +53,7 @@ pgdn-scanner --target example.com --run web          # Web service detection
 pgdn-scanner --target example.com --run whatweb      # Web technology fingerprinting  
 pgdn-scanner --target example.com --run geo          # Geographic location detection
 pgdn-scanner --target example.com --run ssl_test     # SSL/TLS certificate analysis
+pgdn-scanner --target example.com --run ip_classify  # IP classification and cloud provider detection
 pgdn-scanner --target example.com --run port_scan --port 22,80,443  # Port scanning with service detection
 
 # Node scanning with protocol-specific probes (requires protocol)
@@ -83,7 +85,56 @@ web scanner: Detects web services and technologies running on the target.
 whatweb scanner: Fingerprints web technologies and frameworks.
 geo scanner: Performs GeoIP lookups to determine geographic location and ASN of the target.
 ssl_test scanner: Analyzes SSL/TLS certificates for security compliance and vulnerabilities.
+ip_classify scanner: Classifies IP addresses and detects cloud providers, CDNs, and infrastructure services.
 port_scan scanner: Respectful port scanning with service detection, banner grabbing, and SSL/TLS analysis.
+
+## 🏷️ IP Classification
+
+PGDN includes an IP classification scanner that provides comprehensive analysis of IP addresses to identify cloud providers, CDNs, hosting services, and infrastructure characteristics. This scanner is essential for threat intelligence and infrastructure mapping.
+
+> 📖 **[Complete Library Guide](docs/ip_classify_library_guide.md)** - Comprehensive documentation with examples, configuration, and integration patterns.
+
+### IP Classification Features
+
+- **Cloud Provider Detection**: Automatic identification of AWS, Azure, GCP, Cloudflare, Akamai, Fastly
+- **AWS Service Mapping**: Detailed AWS service and region identification using official IP ranges
+- **Reverse DNS Analysis**: Hostname resolution and pattern-based service classification
+- **TLS Certificate Inspection**: Common Name extraction for service identification
+- **HTTP Header Analysis**: Service fingerprinting via HTTP response headers
+- **Private Network Detection**: Automatic identification of RFC 1918 private IP ranges
+- **Organization Lookup**: ASN and organization information via IPInfo API
+- **Multi-IP Support**: Bulk analysis of multiple IP addresses simultaneously
+
+### IP Classification Usage
+
+```bash
+# Basic IP classification
+pgdn-scanner --target 1.1.1.1 --run ip_classify
+
+# Multiple IP classification (comma-separated)
+pgdn-scanner --target "8.8.8.8,1.1.1.1,192.168.1.1" --run ip_classify
+
+# JSON output for integration
+pgdn-scanner --target cloudfront.amazonaws.com --run ip_classify --json
+
+# Example output
+{
+  "data": [
+    {
+      "scan_type": "discovery",
+      "target": "1.1.1.1",
+      "result": {
+        "ip": "1.1.1.1",
+        "reverse_dns": "one.one.one.one",
+        "ipinfo_org": "AS13335 Cloudflare, Inc.",
+        "aws_service": null,
+        "classification": "Unknown or custom",
+        "likely_role": "Cloudflare WAF/CDN"
+      }
+    }
+  ]
+}
+```
 
 ## 🔌 Port Scanning
 

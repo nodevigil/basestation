@@ -118,6 +118,13 @@ class ScannerRegistry:
             self.logger.warning(f"Failed to register ComplianceScanner: {e}")
             
         try:
+            from .ip_classify_scanner import IpClassifyScanner
+            self._scanners['ip_classify'] = IpClassifyScanner
+            self.logger.debug("Registered built-in IpClassifyScanner")
+        except ImportError as e:
+            self.logger.warning(f"Failed to register IpClassifyScanner: {e}")
+            
+        try:
             from .node_scanner import NodeScanner
             self._scanners['node_scan'] = NodeScanner
             self.logger.debug("Registered built-in NodeScanner")

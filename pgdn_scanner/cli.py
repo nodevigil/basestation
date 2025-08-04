@@ -69,7 +69,7 @@ def main():
     
     # Require --run parameter
     if not args.run:
-        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan")
+        print("❌ Error: --run parameter is required. Choose from: web, whatweb, geo, ssl_test, port_scan, compliance, node_scan, protocol_scan, ip_classify")
         sys.exit(1)
     
     # Validate protocol-requiring scans
@@ -201,6 +201,8 @@ Examples:
   pgdn-scanner --target example.com --run whatweb
   pgdn-scanner --target example.com --run geo
   pgdn-scanner --target example.com --run ssl_test
+  pgdn-scanner --target example.com --run ip_classify
+  pgdn-scanner --target "1.2.3.4,5.6.7.8" --run ip_classify
   
   # Port scanning
   pgdn-scanner --target example.com --run port_scan --port 22,80,443
@@ -247,7 +249,7 @@ Examples:
     
     parser.add_argument(
         '--run',
-        choices=['web', 'whatweb', 'geo', 'ssl_test', 'port_scan', 'compliance', 'node_scan', 'protocol_scan'],
+        choices=['web', 'whatweb', 'geo', 'ssl_test', 'port_scan', 'compliance', 'node_scan', 'protocol_scan', 'ip_classify'],
         help='Run specific scanner type'
     )
     
@@ -422,6 +424,7 @@ def list_protocol_scanners():
         print("   pgdn-scanner --target example.com --run whatweb")
         print("   pgdn-scanner --target example.com --run geo")
         print("   pgdn-scanner --target example.com --run ssl_test")
+        print("   pgdn-scanner --target example.com --run ip_classify")
         print("   pgdn-scanner --target example.com --run port_scan --port 22,80,443")
         print("   pgdn-scanner --target example.com --run node_scan --protocol sui")
         
