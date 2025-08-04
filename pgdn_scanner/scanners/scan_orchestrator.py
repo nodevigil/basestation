@@ -113,6 +113,14 @@ class ScanOrchestrator:
                             scanner_kwargs = kwargs.copy()
                             if protocol:
                                 scanner_kwargs['protocol'] = protocol
+                            
+                            # Special handling for vulnerability scanner - it needs banner data
+                            if scanner_type == 'vulnerability':
+                                # Collect banners from previous scans
+                                banners = self._collect_banners_for_vulnerability_scan(scan_results)
+                                scanner_kwargs['banners'] = banners
+                                self.logger.debug(f"Passing {len(banners)} banners to vulnerability scanner")
+                            
                             raw_result = scanner.scan(target, hostname=hostname, ports=ports, **scanner_kwargs)
                             
                         scanner_end = time.time()
@@ -954,6 +962,54 @@ class ScanOrchestrator:
 
     def _extract_web_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean web scan results."""
+        # Handle WebServerScanner format (protocol scanner)
+        if raw_result.get('scan_type') == 'web_server_specific':
+            # Build custom web result for WebServerScanner
+            result = {}
+            
+            # Add core web server detection info
+            if raw_result.get('web_server_detected'):
+                result['web_server_detected'] = True
+            
+            # Add open ports
+            if raw_result.get('open_ports'):
+                result['open_ports'] = raw_result['open_ports']
+            
+            # Add technologies
+            if raw_result.get('technologies'):
+                result['technologies'] = raw_result['technologies']
+            
+            # Add HTTP headers
+            if raw_result.get('http_headers'):
+                result['headers'] = raw_result['http_headers']
+            
+            # Add security headers
+            if raw_result.get('security_headers'):
+                result['security_headers'] = raw_result['security_headers']
+            
+            # Add TLS info
+            if raw_result.get('tls_info'):
+                result['tls_info'] = raw_result['tls_info']
+            
+            # Add WAF detection
+            if raw_result.get('waf') is not None:
+                result['waf'] = raw_result['waf']
+            
+            # Add admin panels
+            if raw_result.get('admin_panels'):
+                result['endpoints'] = raw_result['admin_panels']
+            
+            # Add CVEs
+            if raw_result.get('cves'):
+                result['cves'] = raw_result['cves']
+            
+            # Add security score if available
+            if raw_result.get('security_score') is not None:
+                result['security_score'] = raw_result['security_score']
+            
+            return result
+        
+        # Handle WebScanner format (old format for backward compatibility)
         web_results = raw_result.get('web_results', {})
         if not web_results:
             return {}
@@ -1105,6 +1161,32 @@ class ScanOrchestrator:
             })
         
         return discovery_result
+
+    def _collect_banners_for_vulnerability_scan(self, scan_results: Dict[str, Any]) -> Dict[int, str]:
+        """Collect banners from previous scans to pass to vulnerability scanner."""
+        banners = {}
+        
+        # Check port scanner results first
+        port_results = scan_results.get("port_scan", {})
+        if port_results.get("banners"):
+            banners.update(port_results["banners"])
+        
+        # Check generic scanner results
+        generic_results = scan_results.get("generic", {})
+        if generic_results.get("banners"):
+            banners.update(generic_results["banners"])
+        
+        # Check node scan results for detailed probe data
+        node_results = scan_results.get("node_scan", {})
+        if node_results.get("results"):
+            for result in node_results["results"]:
+                if isinstance(result, dict) and result.get("banner") and result.get("port"):
+                    port = result["port"]
+                    banner = result["banner"]
+                    if banner.strip():  # Only add non-empty banners
+                        banners[port] = banner
+        
+        return banners
 
     def _extract_vulnerability_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
         """Extract clean vulnerability scan results."""
