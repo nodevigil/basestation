@@ -126,7 +126,7 @@ class ScanResultSchema:
             "successful_scans": successful_scans,
             "failed_scans": failed_scans,
             "scan_duration": total_duration,
-            "scanner_version": "pgdn-scanner-v1.9.4",
+            "scanner_version": "pgdn-scanner-v1.9.5",
             "scan_start": int(start_time),
             "scan_end": int(end_time)
         }

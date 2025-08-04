@@ -105,7 +105,7 @@ class TestScanResultSchema:
                 "successful_scans": 1,
                 "failed_scans": 0,
                 "scan_duration": 1.5,
-                "scanner_version": "pgdn-scanner-v1.9.4",
+                "scanner_version": "pgdn-scanner-v1.9.5",
                 "scan_start": 1752823059,
                 "scan_end": 1752823061
             }
