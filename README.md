@@ -56,6 +56,13 @@ pgdn-scanner --target example.com --run ssl_test     # SSL/TLS certificate analy
 pgdn-scanner --target example.com --run ip_classify  # IP classification and cloud provider detection
 pgdn-scanner --target example.com --run port_scan --port 22,80,443  # Port scanning with service detection
 
+# Advanced port scanning with nmap arguments
+pgdn-scanner --target example.com --run port_scan --port 80,443 --nmap-args "-sV --script=banner,default"
+pgdn-scanner --target example.com --run port_scan --port 3306,5432,27017,6379 --nmap-args "-sS -sV -Pn --script=banner,default"
+
+# SSL testing with multiple ports
+pgdn-scanner --target example.com --run ssl_test --port 443,8443,9443
+
 # Node scanning with protocol-specific probes (requires protocol)
 pgdn-scanner --target example.com --run node_scan --protocol sui
 pgdn-scanner --target example.com --run node_scan --protocol arweave
@@ -164,6 +171,12 @@ pgdn-scanner --target example.com --run port_scan --port 22
 # Skip nmap for faster results
 pgdn-scanner --target example.com --run port_scan --port 80 --skip-nmap
 
+# Port scanning with custom nmap arguments
+pgdn-scanner --target example.com --run port_scan --port 80,443 --nmap-args "-sV --script=banner,default"
+
+# Database port scanning with aggressive nmap args
+pgdn-scanner --target example.com --run port_scan --port 3306,5432,27017,6379 --nmap-args "-sS -sV -Pn --script=banner,default"
+
 # JSON output with pretty formatting
 pgdn-scanner --target example.com --run port_scan --port 22,80,443 --json --pretty
 
@@ -213,6 +226,67 @@ The port scanner provides detailed information about each scanned port:
 - **Ports Required**: Port scanning requires at least one port specified via `--port`
 - **Port Limit**: Maximum of 5 ports per scan for respectful scanning
 - **nmap Optional**: nmap integration is optional and can be skipped with `--skip-nmap`
+
+## 🔒 SSL/TLS Testing
+
+PGDN includes a dedicated SSL/TLS scanner that analyzes certificates, encryption configurations, and security compliance. The SSL tester now supports multiple ports for comprehensive SSL analysis.
+
+### SSL Scanner Features
+
+- **Certificate Analysis**: X.509 certificate validation and expiration checking
+- **Cipher Suite Detection**: Supported encryption algorithms and security assessment
+- **Protocol Version Testing**: SSL/TLS version support and deprecation warnings
+- **Multi-Port Support**: Test SSL on multiple ports simultaneously
+- **Security Compliance**: Assessment against security best practices
+- **Chain Validation**: Complete certificate chain verification
+
+### SSL Scanner Usage
+
+```bash
+# Basic SSL test (defaults to port 443)
+pgdn-scanner --target example.com --run ssl_test
+
+# SSL test on specific port
+pgdn-scanner --target example.com --run ssl_test --port 443
+
+# SSL test on multiple ports
+pgdn-scanner --target example.com --run ssl_test --port 443,8443,9443
+
+# SSL test with JSON output
+pgdn-scanner --target example.com --run ssl_test --port 443,8443 --json
+
+# Human-readable SSL report
+pgdn-scanner --target example.com --run ssl_test --port 443 --human
+```
+
+### SSL Scanner Output
+
+The SSL scanner provides comprehensive certificate and configuration information:
+
+```json
+{
+  "target": "example.com",
+  "scanner_type": "ssl_test", 
+  "ports_tested": [443, 8443],
+  "ssl_results": [
+    {
+      "port": 443,
+      "has_ssl": true,
+      "certificate": {
+        "subject": "CN=example.com",
+        "issuer": "CN=DigiCert Inc",
+        "valid_from": "2024-01-01T00:00:00Z",
+        "valid_to": "2024-12-31T23:59:59Z",
+        "is_valid": true,
+        "days_until_expiry": 245
+      },
+      "cipher_suites": ["TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256"],
+      "protocol_versions": ["TLSv1.2", "TLSv1.3"],
+      "security_grade": "A"
+    }
+  ]
+}
+```
 
 ## 📡 Node Scanning
 
@@ -365,6 +439,7 @@ The library usage directly mirrors the CLI structure with a simplified `run` par
 | `pgdn-scanner --target example.com --run whatweb` | `scanner.scan(target='example.com', run='whatweb')` |
 | `pgdn-scanner --target example.com --run geo` | `scanner.scan(target='example.com', run='geo')` |
 | `pgdn-scanner --target example.com --run ssl_test` | `scanner.scan(target='example.com', run='ssl_test')` |
+| `pgdn-scanner --target example.com --run ssl_test --port 443,8443` | `scanner.scan(target='example.com', run='ssl_test', port='443,8443')` |
 | `pgdn-scanner --target example.com --run port_scan --port 22,80,443` | `scanner.scan(target='example.com', run='port_scan', port='22,80,443')` |
 | `pgdn-scanner --target example.com --run node_scan --protocol sui` | `scanner.scan(target='example.com', run='node_scan', protocol='sui')` |
 | `pgdn-scanner --target example.com --run protocol_scan --protocol sui` | `scanner.scan(target='example.com', run='protocol_scan', protocol='sui')` |
@@ -427,6 +502,20 @@ result = scanner.scan(
 result = scanner.scan(
     target='example.com',
     run='ssl_test'
+)
+
+# SSL/TLS certificate analysis on specific port
+result = scanner.scan(
+    target='example.com',
+    run='ssl_test',
+    port='443'
+)
+
+# SSL/TLS certificate analysis on multiple ports
+result = scanner.scan(
+    target='example.com',
+    run='ssl_test',
+    port='443,8443,9443'  # Comma-separated port list
 )
 
 # Port scanning with service detection
