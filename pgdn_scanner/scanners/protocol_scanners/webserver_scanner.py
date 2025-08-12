@@ -1,8 +1,14 @@
 """
 Web Server Protocol Scanner
 
-An advanced web server scanner that performs comprehensive web server analysis.
-This scanner is designed to identify web server technologies, vulnerabilities, and configurations.
+Comprehensive web server scanner that performs complete web server analysis including:
+- Port scanning and service detection
+- TLS/SSL certificate analysis  
+- Technology fingerprinting
+- WAF/CDN detection using integrated tools
+- Security headers analysis
+- Admin panel discovery
+- Vulnerability detection
 """
 
 import socket
@@ -13,16 +19,21 @@ import time
 import asyncio
 from typing import Dict, Any, Optional, List
 from .base_protocol_scanner import ProtocolScanner
+from ...tools import cloudflare, akamai, sucuri
 
 
 class WebServerScanner(ProtocolScanner):
     """
     Web Server protocol scanner for comprehensive web server analysis.
     
-    Scan Levels:
-    - Level 1: Basic web server detection and technology fingerprinting
-    - Level 2: Security headers, WAF detection, and behavioral analysis
-    - Level 3: Advanced vulnerability detection and admin panel discovery
+    Performs complete scanning in a single pass including:
+    - Port scanning and service detection
+    - TLS/SSL certificate analysis
+    - Technology fingerprinting
+    - WAF/CDN detection using integrated tools
+    - Security headers analysis
+    - Admin panel discovery
+    - Vulnerability detection
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -48,25 +59,22 @@ class WebServerScanner(ProtocolScanner):
         return "web"
 
     def get_supported_levels(self) -> List[int]:
-        """Web Server scanner supports all three levels."""
-        return [1, 2, 3]
+        """Web Server scanner performs comprehensive scanning."""
+        return [1]
 
     def describe_levels(self) -> Dict[int, str]:
-        """Describe what each scan level does for web servers."""
+        """Describe the comprehensive scan performed."""
         return {
-            1: "Basic web server detection, port scanning, and technology fingerprinting",
-            2: "Security headers analysis, WAF detection, and behavioral fingerprinting", 
-            3: "Advanced vulnerability detection, admin panel discovery, and comprehensive security assessment"
+            1: "Comprehensive web server analysis including port scanning, TLS analysis, technology fingerprinting, WAF detection, security headers, admin panels, and vulnerability assessment"
         }
 
     def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
-        """Perform web server specific scan at the specified level."""
-        self.logger.info(f"Starting Web Server scan of {target} at level {scan_level}")
+        """Perform comprehensive web server scan."""
+        self.logger.info(f"Starting Web Server scan of {target}")
         scan_start_time = time.time()
         
         results = {
             'scan_type': 'web_server_specific',
-            'scan_level': scan_level,
             'target_ip': target,
             'hostname': hostname,
             'web_server_detected': False,
@@ -76,21 +84,14 @@ class WebServerScanner(ProtocolScanner):
         }
         
         try:
-            if scan_level == 1:
-                level_results = self._scan_level_1(target, hostname)
-            elif scan_level == 2:
-                level_results = self._scan_level_2(target, hostname)
-            elif scan_level == 3:
-                level_results = self._scan_level_3(target, hostname)
-            else:
-                raise ValueError(f"Invalid scan_level: {scan_level}")
-            
-            results.update(level_results)
+            # Perform comprehensive scan
+            comprehensive_results = self._comprehensive_scan(target, hostname)
+            results.update(comprehensive_results)
             
             scan_duration = time.time() - scan_start_time
             results['scan_duration'] = scan_duration
             
-            self.logger.info(f"Completed Web Server scan of {target} at level {scan_level} in {scan_duration:.2f}s")
+            self.logger.info(f"Completed Web Server scan of {target} in {scan_duration:.2f}s")
             
         except Exception as e:
             self.logger.error(f"Web Server scan failed for {target}: {str(e)}")
@@ -99,19 +100,22 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    def _scan_level_1(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
-        """Level 1: Basic web server detection and technology fingerprinting."""
-        self.logger.info(f"Level 1 Web Server scan for {target}")
+    def _comprehensive_scan(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+        """Perform comprehensive web server analysis."""
+        self.logger.info(f"Comprehensive Web Server scan for {target}")
         
+        # Focus on common web ports first for faster scanning
+        common_web_ports = [80, 443, 8080, 8000]
         results = {
-            'open_ports': self._check_open_ports(target, [80, 443, 8080, 8000]),
+            'open_ports': self._check_open_ports(target, common_web_ports),
             'tls_info': {},
             'http_headers': {},
             'technologies': []
         }
         
-        # Check for TLS on common SSL ports
-        if 443 in results['open_ports']:
+        # Check for TLS on SSL ports
+        ssl_ports_found = [port for port in results['open_ports'] if port in self.ssl_ports]
+        if ssl_ports_found:
             results['tls_info'] = self._analyze_tls_certificate(target, hostname)
         
         # Get HTTP headers and basic fingerprinting
@@ -126,26 +130,11 @@ class WebServerScanner(ProtocolScanner):
                 if tech_info:
                     results['technologies'].extend(tech_info)
         
-        # Add WAF detection at level 1
         if results.get('web_server_detected'):
-            waf_info = self._detect_waf(target)
-            results['waf'] = waf_info  # Include even if None/null
-        
-        # Remove duplicate technologies
-        results['technologies'] = list(set(results['technologies']))
-        
-        return results
-
-    def _scan_level_2(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
-        """Level 2: Security headers, WAF detection, and behavioral analysis."""
-        # Get level 1 results first
-        results = self._scan_level_1(target, hostname)
-        
-        # Additional analysis for level 2
-        if results.get('web_server_detected'):
-            # WAF detection
-            waf_info = self._detect_waf(target)
-            results['waf'] = waf_info  # Include even if None/null
+            # WAF/CDN detection using integrated tools
+            waf_info = self._detect_waf_comprehensive(target, results['open_ports'])
+            if waf_info:
+                results['waf'] = waf_info
             
             # Security headers analysis
             security_headers = self._analyze_security_headers(results.get('http_headers', {}))
@@ -156,17 +145,6 @@ class WebServerScanner(ProtocolScanner):
             if extended_tech:
                 results['technologies'].extend(extended_tech)
             
-            # Remove duplicate technologies
-            results['technologies'] = list(set(results['technologies']))
-        
-        return results
-
-    def _scan_level_3(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
-        """Level 3: Advanced vulnerability detection and admin panel discovery."""
-        # Get level 2 results first
-        results = self._scan_level_2(target, hostname)
-        
-        if results.get('web_server_detected'):
             # Admin panel discovery
             admin_panels = self._find_exposed_admin_panels(target)
             if admin_panels:
@@ -179,6 +157,9 @@ class WebServerScanner(ProtocolScanner):
             
             # Security score calculation
             results['security_score'] = self._calculate_security_score(results)
+            
+            # Remove duplicate technologies
+            results['technologies'] = list(set(results['technologies']))
         
         return results
 
@@ -244,33 +225,49 @@ class WebServerScanner(ProtocolScanner):
         
         return technologies
 
-    def _detect_waf(self, target: str) -> Optional[Dict[str, Any]]:
-        """Detect Web Application Firewall."""
-        try:
-            # Test with suspicious payload
-            test_url = f"http://{target}/test?id=1' OR '1'='1"
-            response = requests.get(test_url, timeout=self.timeout)
-            
-            waf_indicators = {
-                "cloudflare": ["cloudflare", "cf-ray"],
-                "akamai": ["akamai", "x-akamai"],
-                "aws": ["x-amzn", "cloudfront"],
-                "sucuri": ["x-sucuri", "sucuri"]
+    def _detect_waf_comprehensive(self, target: str, open_ports: List[int]) -> Optional[Dict[str, Any]]:
+        """Comprehensive WAF/CDN detection using integrated tools."""
+        detected_wafs = []
+        
+        # Test common web ports for WAF/CDN detection
+        web_ports_to_test = [port for port in open_ports if port in [80, 443, 8080, 8000, 8443]]
+        if not web_ports_to_test:
+            web_ports_to_test = [80, 443]  # Default fallback
+        
+        for port in web_ports_to_test:
+            try:
+                # Test Cloudflare
+                cf_result = cloudflare.probe(target, port=port, timeout=self.timeout)
+                if cf_result and cf_result.get('detected'):
+                    detected_wafs.append(cf_result)
+                    continue  # Found one, no need to test others for this port
+                
+                # Test Akamai
+                akamai_result = akamai.probe(target, port=port, timeout=self.timeout)
+                if akamai_result and akamai_result.get('detected'):
+                    detected_wafs.append(akamai_result)
+                    continue
+                
+                # Test Sucuri
+                sucuri_result = sucuri.probe(target, port=port, timeout=self.timeout)
+                if sucuri_result and sucuri_result.get('detected'):
+                    detected_wafs.append(sucuri_result)
+                    
+            except Exception as e:
+                self.logger.debug(f"WAF detection failed for {target}:{port}: {e}")
+                continue
+        
+        # Return results
+        if detected_wafs:
+            # If multiple WAFs detected, return the first one with additional info
+            primary_waf = detected_wafs[0]
+            return {
+                'detected': True,
+                'vendor': primary_waf.get('vendor', 'unknown'),
+                'method': 'header_signature',
+                'details': primary_waf,
+                'all_detected': detected_wafs if len(detected_wafs) > 1 else None
             }
-            
-            response_text = response.text.lower()
-            response_headers = {k.lower(): v.lower() for k, v in response.headers.items()}
-            
-            for waf_name, indicators in waf_indicators.items():
-                for indicator in indicators:
-                    if indicator in response_text or any(indicator in h for h in response_headers):
-                        return {"detected": True, "type": waf_name, "method": "signature"}
-            
-            # Generic WAF detection
-            if response.status_code in [403, 406, 429] or "blocked" in response_text:
-                return {"detected": True, "type": "unknown", "method": "behavior"}
-        except:
-            pass
         
         return None
 
@@ -398,7 +395,7 @@ class WebServerScanner(ProtocolScanner):
         return max(0, score)
 
 
-def run(target, scan_level=1, hostname=None) -> Dict[str, Any]:
+def run(target, hostname=None) -> Dict[str, Any]:
     """Convenience function to run web server scan."""
     scanner = WebServerScanner()
-    return asyncio.run(scanner.scan_protocol(target, hostname=hostname, scan_level=scan_level))
+    return asyncio.run(scanner.scan_protocol(target, hostname=hostname))
