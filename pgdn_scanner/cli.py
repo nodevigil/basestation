@@ -43,12 +43,14 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         'debug': debug
     }
     
-    # Add port-specific parameters for port_scan
+    # Add port-specific parameters for port_scan and ssl_test
     if run_type == 'port_scan':
         scan_kwargs['port'] = port
         scan_kwargs['skip_nmap'] = skip_nmap
         if nmap_args:
             scan_kwargs['nmap_args'] = nmap_args
+    elif run_type == 'ssl_test' and port:
+        scan_kwargs['port'] = port
     
     return scanner.scan(**scan_kwargs)
 
@@ -261,7 +263,7 @@ Examples:
     parser.add_argument(
         '--port', '--ports',
         dest='port',
-        help='Port(s) to scan (required for port_scan). Use comma-separated values for multiple ports, e.g., --port 22,80,443'
+        help='Port(s) to scan (required for port_scan, optional for ssl_test). Use comma-separated values for multiple ports, e.g., --port 22,80,443'
     )
     
     parser.add_argument(
@@ -424,6 +426,7 @@ def list_protocol_scanners():
         print("   pgdn-scanner --target example.com --run whatweb")
         print("   pgdn-scanner --target example.com --run geo")
         print("   pgdn-scanner --target example.com --run ssl_test")
+        print("   pgdn-scanner --target example.com --run ssl_test --port 443,8443")
         print("   pgdn-scanner --target example.com --run ip_classify")
         print("   pgdn-scanner --target example.com --run port_scan --port 22,80,443")
         print("   pgdn-scanner --target example.com --run node_scan --protocol sui")

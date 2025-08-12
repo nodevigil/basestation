@@ -189,7 +189,7 @@ class ScanOrchestrator:
             external_tools_stage_start = time.time()
             self.logger.info(f"Starting external tools stage with {len(external_tools_to_run)} tools")
             
-            external_results = self._run_external_tools_with_schema(target, hostname, external_tools_to_run, resolved_ip)
+            external_results = self._run_external_tools_with_schema(target, hostname, external_tools_to_run, resolved_ip, ports)
             scan_data.extend(external_results)
             tools_used.extend([tool for tool in external_tools_to_run if tool in self.enabled_external_tools])
             
@@ -250,7 +250,7 @@ class ScanOrchestrator:
         self.logger.debug(f"Filtered infrastructure scanners: {infrastructure_scanners}")
         return infrastructure_scanners
     
-    def _run_external_tools(self, target: str, hostname: Optional[str], scan_results: Dict[str, Any], enabled_tools: List[str], resolved_ip: Optional[str] = None) -> Dict[str, Any]:
+    def _run_external_tools(self, target: str, hostname: Optional[str], scan_results: Dict[str, Any], enabled_tools: List[str], resolved_ip: Optional[str] = None, ports: Optional[List[int]] = None) -> Dict[str, Any]:
         """Run external scanning tools based on the routing function's output.
         
         Args:
@@ -331,8 +331,10 @@ class ScanOrchestrator:
         if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
             ssl_start = int(time.time())
             try:
-                self.logger.info(f"Running SSL test")
-                ssl_results = ssl_test(target, port=443)
+                # Use provided ports or default SSL ports
+                ssl_ports = ports if ports else [443, 8443]
+                self.logger.info(f"Running SSL test on ports {ssl_ports}")
+                ssl_results = ssl_test(target, ports=ssl_ports)
                 ssl_end = int(time.time())
                 self.logger.info(f"Completed SSL test in {ssl_end - ssl_start} seconds")
                 
@@ -1274,7 +1276,7 @@ class ScanOrchestrator:
             }
         }
 
-    def _run_external_tools_with_schema(self, target: str, hostname: Optional[str], enabled_tools: List[str], resolved_ip: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _run_external_tools_with_schema(self, target: str, hostname: Optional[str], enabled_tools: List[str], resolved_ip: Optional[str] = None, ports: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         """Run external tools and return results in standardized schema format.
         
         Args:
@@ -1395,17 +1397,34 @@ class ScanOrchestrator:
         if 'ssl' in enabled_tools or 'ssl_test' in enabled_tools:
             ssl_start = time.time()
             try:
-                self.logger.info(f"Running SSL test")
-                ssl_raw = ssl_test(target, port=443)
+                # Use provided ports or default SSL ports
+                ssl_ports = ports if ports else [443, 8443]
+                self.logger.info(f"Running SSL test on ports {ssl_ports}")
+                ssl_raw = ssl_test(target, ports=ssl_ports)
                 ssl_end = time.time()
                 scan_duration = ssl_end - ssl_start
                 
-                clean_result = ScanResultSchema.format_ssl_result(
-                    certificate=ssl_raw.get('certificate'),
-                    ssl_version=ssl_raw.get('ssl_version'),
-                    cipher_suites=ssl_raw.get('cipher_suites', []),
-                    vulnerabilities=ssl_raw.get('vulnerabilities', [])
-                )
+                # Handle both single-port and multi-port SSL results
+                if 'port_results' in ssl_raw:
+                    # Multi-port result - return the full structure with summary
+                    clean_result = ssl_raw
+                else:
+                    # Single-port result - check for errors first
+                    if 'error' in ssl_raw:
+                        # Preserve error information
+                        clean_result = {
+                            'error': ssl_raw['error'],
+                            'port': ssl_raw.get('port'),
+                            'vulnerabilities': ssl_raw.get('vulnerabilities', [])
+                        }
+                    else:
+                        # Success case - use schema formatting
+                        clean_result = ScanResultSchema.format_ssl_result(
+                            certificate=ssl_raw.get('certificate'),
+                            ssl_version=ssl_raw.get('ssl_version'),
+                            cipher_suites=ssl_raw.get('cipher_suites', []),
+                            vulnerabilities=ssl_raw.get('vulnerabilities', [])
+                        )
                 
                 scan_result = ScanResultSchema.create_scan_result(
                     scan_type=ScanType.SSL.value,

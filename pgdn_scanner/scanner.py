@@ -144,9 +144,9 @@ class Scanner:
                 self._update_orchestrator_config(enabled_scanners, enabled_external_tools)
 
 
-            # Convert port string to ports list for port_scan
+            # Convert port string to ports list for port_scan and ssl_test
             orchestrator_kwargs = kwargs.copy()
-            if run == 'port_scan':
+            if run in ['port_scan', 'ssl_test']:
                 # Handle port conversion
                 if 'port' in kwargs:
                     port_str = kwargs['port']
@@ -157,8 +157,8 @@ class Scanner:
                     except ValueError as e:
                         return DictResult.from_error(f"Invalid port format: {e}")
                 
-                # Ensure rich data by providing default nmap_args if none specified
-                if 'nmap_args' not in orchestrator_kwargs:
+                # Ensure rich data by providing default nmap_args if none specified (for port_scan)
+                if run == 'port_scan' and 'nmap_args' not in orchestrator_kwargs:
                     orchestrator_kwargs['nmap_args'] = '-sV'
             
             scan_results = self.orchestrator.scan(
