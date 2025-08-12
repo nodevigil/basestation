@@ -59,14 +59,26 @@ def ssl_test(ip: str, ports: Union[int, List[int], str] = 443) -> Dict[str, Any]
 def _test_ssl_port(ip: str, port: int) -> Dict[str, Any]:
     """Test SSL on a single port."""
     try:
-        # Example using openssl s_client (very basic)
+        # Use openssl s_client with proper SNI and auto-quit
+        cmd = [
+            "openssl", "s_client", 
+            "-connect", f"{ip}:{port}",
+            "-servername", ip,  # Enable SNI
+            "-verify_return_error",
+            "-brief",  # Reduce output noise
+            "-quiet"   # Less verbose
+        ]
+        
         result = subprocess.run(
-            ["openssl", "s_client", "-connect", f"{ip}:{port}", "-tls1_2"],
+            cmd,
+            input="Q\n",  # Send quit command immediately
+            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=10
+            timeout=5  # Reduce timeout to 5 seconds
         )
-        output = result.stdout.decode(errors="ignore")
+        # SSL info often goes to stderr with openssl s_client
+        output = result.stderr + result.stdout
         
         # Parse certificate information
         certificate_info = _parse_certificate(output)
@@ -82,6 +94,27 @@ def _test_ssl_port(ip: str, port: int) -> Dict[str, Any]:
             "vulnerabilities": vulnerabilities,
             "openssl_raw": output[:1000],  # Keep raw output for debugging
         }
+    except subprocess.TimeoutExpired:
+        # Try simpler approach if timeout
+        try:
+            simple_result = subprocess.run(
+                ["openssl", "s_client", "-connect", f"{ip}:{port}"],
+                input="",
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=3
+            )
+            return {
+                "port": port,
+                "certificate": None,
+                "ssl_version": "connection_established" if simple_result.returncode == 0 else None,
+                "cipher_suites": [],
+                "vulnerabilities": ["SSL connection timeout on detailed scan"] if simple_result.returncode != 0 else [],
+                "openssl_raw": simple_result.stdout[:500],
+            }
+        except Exception:
+            return {"port": port, "error": "SSL connection timeout", "vulnerabilities": ["Connection timeout"]}
     except Exception as e:
         return {"port": port, "error": str(e), "vulnerabilities": []}
 
@@ -89,26 +122,39 @@ def _parse_certificate(output):
     """Parse certificate information from openssl output."""
     cert_info = {}
     
-    # Extract subject
-    subject_match = re.search(r'subject=(.+)', output)
-    if subject_match:
-        cert_info["subject"] = subject_match.group(1).strip()
+    # Parse -brief format output  
+    peer_cert_match = re.search(r'Peer certificate:\s*(.+)', output)
+    if peer_cert_match:
+        cert_info["subject"] = peer_cert_match.group(1).strip()
     
-    # Extract issuer
+    # Check verification status
+    if "Verification: OK" in output:
+        cert_info["is_valid"] = True
+        cert_info["verify_message"] = "OK"
+    else:
+        cert_info["is_valid"] = False
+        cert_info["verify_message"] = "Failed"
+    
+    # For legacy format compatibility, try old parsing too
+    if not cert_info.get("subject"):
+        subject_match = re.search(r'subject=(.+)', output)
+        if subject_match:
+            cert_info["subject"] = subject_match.group(1).strip()
+    
+    # Extract issuer (legacy format)
     issuer_match = re.search(r'issuer=(.+)', output)
     if issuer_match:
         cert_info["issuer"] = issuer_match.group(1).strip()
     
-    # Check if certificate is valid
-    verify_match = re.search(r'Verify return code: (\d+) \((.+?)\)', output)
-    if verify_match:
-        return_code = int(verify_match.group(1))
-        cert_info["is_valid"] = return_code == 0
-        cert_info["verify_message"] = verify_match.group(2)
-    else:
-        cert_info["is_valid"] = False
+    # Legacy verify code check
+    if not cert_info.get("is_valid"):
+        verify_match = re.search(r'Verify return code: (\d+) \((.+?)\)', output)
+        if verify_match:
+            return_code = int(verify_match.group(1))
+            cert_info["is_valid"] = return_code == 0
+            cert_info["verify_message"] = verify_match.group(2)
     
-    # Extract validity dates from certificate chain
+    # Extract validity dates
     valid_from_match = re.search(r'NotBefore: (.+?) GMT', output)
     valid_to_match = re.search(r'NotAfter: (.+?) GMT', output)
     
@@ -121,10 +167,15 @@ def _parse_certificate(output):
 
 def _parse_ssl_version(output):
     """Parse SSL/TLS version from openssl output."""
-    # Look for protocol version
-    protocol_match = re.search(r'Protocol\s*:\s*(.+)', output)
+    # Look for -brief format: "Protocol version: TLSv1.3"
+    protocol_match = re.search(r'Protocol version:\s*(.+)', output)
     if protocol_match:
         return protocol_match.group(1).strip()
+    
+    # Legacy format: "Protocol : TLSv1.3"
+    legacy_protocol_match = re.search(r'Protocol\s*:\s*(.+)', output)
+    if legacy_protocol_match:
+        return legacy_protocol_match.group(1).strip()
     
     # Fallback - check for TLS version in other parts
     if "TLSv1.3" in output:
@@ -142,12 +193,19 @@ def _parse_cipher_suites(output):
     """Parse cipher suites from openssl output."""
     cipher_suites = []
     
-    # Look for Cipher line
-    cipher_match = re.search(r'Cipher\s*:\s*(.+)', output)
+    # Look for -brief format: "Ciphersuite: TLS_AES_256_GCM_SHA384"
+    cipher_match = re.search(r'Ciphersuite:\s*(.+)', output)
     if cipher_match:
         cipher = cipher_match.group(1).strip()
         if cipher != "0000" and cipher != "(NONE)":
             cipher_suites.append(cipher)
+    else:
+        # Legacy format: "Cipher : ECDHE-RSA-AES256-GCM-SHA384"
+        legacy_cipher_match = re.search(r'Cipher\s*:\s*(.+)', output)
+        if legacy_cipher_match:
+            cipher = legacy_cipher_match.group(1).strip()
+            if cipher != "0000" and cipher != "(NONE)":
+                cipher_suites.append(cipher)
     
     return cipher_suites
 
@@ -155,15 +213,17 @@ def _check_vulnerabilities(output):
     """Check for SSL/TLS vulnerabilities based on openssl output."""
     vulnerabilities = []
     
-    # Check for certificate issues
-    if "Verify return code: 0 (ok)" not in output:
+    # Check for certificate issues - handle both brief and legacy formats
+    is_valid = "Verification: OK" in output or "Verify return code: 0 (ok)" in output
+    
+    if not is_valid:
         if "certificate has expired" in output.lower():
             vulnerabilities.append("SSL certificate has expired")
         elif "self signed certificate" in output.lower():
             vulnerabilities.append("Self-signed certificate detected")
         elif "unable to verify the first certificate" in output.lower():
             vulnerabilities.append("Unable to verify certificate chain")
-        else:
+        elif "Verify return code:" in output or "Verification:" in output:
             vulnerabilities.append("SSL certificate validation failed")
     
     # Check for weak ciphers
