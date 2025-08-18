@@ -18,8 +18,27 @@ import re
 import time
 import asyncio
 from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, asdict
 from .base_protocol_scanner import ProtocolScanner
 from ...tools import cloudflare, akamai, sucuri
+
+
+@dataclass
+class WebPortResult:
+    """Container for single web port scan results"""
+    port: int
+    scheme: str  # "http" or "https"
+    is_tcp_open: bool = False
+    has_web_server: bool = False
+    http_status_code: Optional[int] = None
+    http_headers: Optional[Dict[str, str]] = None
+    server_banner: Optional[str] = None
+    tls_info: Optional[Dict[str, Any]] = None
+    error_details: Optional[str] = None
+    tcp_connect_time: Optional[float] = None
+    http_response_time: Optional[float] = None
+    content_length: Optional[int] = None
+    final_url: Optional[str] = None
 
 
 class WebServerScanner(ProtocolScanner):
@@ -119,33 +138,50 @@ class WebServerScanner(ProtocolScanner):
             common_web_ports = [port for port in common_web_ports if port not in exclude_ports]
             self.logger.debug(f"Filtered common web ports after exclusions: {common_web_ports}")
         
+        # Scan ports with detailed validation
+        port_results = self._scan_web_ports(target, common_web_ports, hostname)
+        
+        # Build results structure
         results = {
-            'open_ports': self._check_open_ports(target, common_web_ports),
-            'tls_info': {},
-            'http_headers': {},
-            'technologies': []
+            'port_results': [asdict(result) for result in port_results],
+            'web_server_detected': any(result.has_web_server for result in port_results),
+            'technologies': [],
+            'summary': {
+                'tcp_open_ports': [r.port for r in port_results if r.is_tcp_open],
+                'web_server_ports': [r.port for r in port_results if r.has_web_server],
+                'total_ports_tested': len(port_results)
+            },
+            # Legacy compatibility - but now only includes ports with actual web servers
+            'open_ports': [r.port for r in port_results if r.has_web_server]
         }
         
-        # Check for TLS on SSL ports
-        ssl_ports_found = [port for port in results['open_ports'] if port in self.ssl_ports]
-        if ssl_ports_found:
-            results['tls_info'] = self._analyze_tls_certificate(target, hostname)
+        # Collect TLS info from any HTTPS ports
+        tls_info = {}
+        for result in port_results:
+            if result.tls_info:
+                tls_info[str(result.port)] = result.tls_info
+        if tls_info:
+            results['tls_info'] = tls_info
         
-        # Get HTTP headers and basic fingerprinting
-        for port in results['open_ports']:
-            headers = self._fetch_http_headers(target, port)
-            if headers:
-                results['http_headers'][str(port)] = headers
-                results['web_server_detected'] = True
-                
-                # Extract technology information
-                tech_info = self._fingerprint_basic_technologies(headers)
+        # Extract technologies from successful HTTP responses
+        for result in port_results:
+            if result.has_web_server and result.http_headers:
+                tech_info = self._fingerprint_basic_technologies(result.http_headers)
                 if tech_info:
                     results['technologies'].extend(tech_info)
         
+        # Build headers dict for backward compatibility
+        http_headers = {}
+        for result in port_results:
+            if result.has_web_server and result.http_headers:
+                http_headers[str(result.port)] = result.http_headers
+        if http_headers:
+            results['http_headers'] = http_headers
+        
         if results.get('web_server_detected'):
-            # WAF/CDN detection using integrated tools
-            waf_info = self._detect_waf_comprehensive(target, results['open_ports'], exclude_ports)
+            # WAF/CDN detection using integrated tools (use web server ports, not just open ports)
+            web_server_ports = results['summary']['web_server_ports']
+            waf_info = self._detect_waf_comprehensive(target, web_server_ports, exclude_ports)
             if waf_info:
                 results['waf'] = waf_info
             
@@ -176,16 +212,83 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    def _check_open_ports(self, target: str, ports: List[int]) -> List[int]:
-        """Check which ports are open on the target."""
-        open_ports = []
+    def _scan_web_ports(self, target: str, ports: List[int], hostname: Optional[str] = None) -> List[WebPortResult]:
+        """Scan ports for actual web server presence, not just TCP connectivity."""
+        results = []
+        
         for port in ports:
+            # Determine scheme based on port
+            scheme = "https" if port in self.ssl_ports else "http"
+            
+            result = WebPortResult(port=port, scheme=scheme)
+            
+            # Step 1: Test TCP connectivity
+            tcp_start = time.time()
             try:
                 with socket.create_connection((target, port), timeout=2):
-                    open_ports.append(port)
-            except:
+                    result.is_tcp_open = True
+                    result.tcp_connect_time = time.time() - tcp_start
+                    self.logger.debug(f"TCP connection successful to {target}:{port}")
+            except Exception as e:
+                result.error_details = f"TCP connection failed: {str(e)}"
+                self.logger.debug(f"TCP connection failed to {target}:{port}: {e}")
+                results.append(result)
                 continue
-        return open_ports
+            
+            # Step 2: Test HTTP response (only if TCP connected)
+            if result.is_tcp_open:
+                http_start = time.time()
+                try:
+                    url = f"{scheme}://{target}:{port}/"
+                    response = requests.get(
+                        url, 
+                        timeout=self.timeout, 
+                        verify=False, 
+                        allow_redirects=False,
+                        headers={'User-Agent': 'PGDN-Scanner/1.0'}
+                    )
+                    
+                    # Success - we got an HTTP response
+                    result.has_web_server = True
+                    result.http_status_code = response.status_code
+                    result.http_headers = dict(response.headers)
+                    result.server_banner = response.headers.get('Server')
+                    result.content_length = len(response.content)
+                    result.final_url = str(response.url)
+                    result.http_response_time = time.time() - http_start
+                    
+                    self.logger.debug(f"HTTP response received from {target}:{port}: {response.status_code}")
+                    
+                except requests.exceptions.SSLError as e:
+                    # TLS-specific error - still might be a web server with SSL issues
+                    result.tls_info = {"error": str(e)}
+                    result.error_details = f"TLS/SSL error: {str(e)}"
+                    self.logger.debug(f"TLS error on {target}:{port}: {e}")
+                    
+                except requests.exceptions.Timeout:
+                    result.error_details = "HTTP request timeout"
+                    self.logger.debug(f"HTTP timeout on {target}:{port}")
+                    
+                except requests.exceptions.ConnectionError as e:
+                    result.error_details = f"HTTP connection error: {str(e)}"
+                    self.logger.debug(f"HTTP connection error on {target}:{port}: {e}")
+                    
+                except Exception as e:
+                    result.error_details = f"HTTP request failed: {str(e)}"
+                    self.logger.debug(f"HTTP request failed on {target}:{port}: {e}")
+                
+                # Step 3: If HTTPS port, try to get TLS certificate info even if HTTP failed
+                if scheme == "https" and not result.tls_info:
+                    try:
+                        tls_info = self._analyze_tls_certificate(target, hostname)
+                        if tls_info and "error" in tls_info:
+                            result.tls_info = tls_info
+                    except Exception:
+                        pass  # TLS analysis is supplementary
+            
+            results.append(result)
+        
+        return results
 
     def _analyze_tls_certificate(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
         """Analyze TLS certificate information."""
@@ -205,16 +308,6 @@ class WebServerScanner(ProtocolScanner):
                     }
         except Exception as e:
             return {"error": str(e)}
-
-    def _fetch_http_headers(self, target: str, port: int) -> Dict[str, str]:
-        """Fetch HTTP headers from the target."""
-        try:
-            scheme = "https" if port in self.ssl_ports else "http"
-            url = f"{scheme}://{target}:{port}/"
-            response = requests.get(url, timeout=self.timeout, verify=False, allow_redirects=False)
-            return dict(response.headers)
-        except Exception:
-            return {}
 
     def _fingerprint_basic_technologies(self, headers: Dict[str, str]) -> List[str]:
         """Basic technology fingerprinting from headers."""
