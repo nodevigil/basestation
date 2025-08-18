@@ -32,14 +32,16 @@ class WebScanner(BaseScanner):
         self.timeout = self.config.get('timeout', 10)
         self.max_redirects = self.config.get('max_redirects', 5)
         self.user_agent = self.config.get('user_agent', 'PGDN-Scanner/1.0')
+        self.exclude_ports = self.config.get('exclude_ports', [])
     
-    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, ports: Optional[List[int]] = None, scan_level: int = 1, exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Perform web scan based on scan level.
         
         Args:
             target: Target IP/hostname
             ports: List of web ports to scan
             scan_level: Scan level (1-3) determining aggressiveness
+            exclude_ports: List of ports to exclude from scanning
             **kwargs: Additional scan parameters
             
         Returns:
@@ -47,24 +49,36 @@ class WebScanner(BaseScanner):
         """
         self.logger.debug(f"Starting web scan of {target} at level {scan_level}")
         
+        # Apply port exclusions
+        exclude_ports = exclude_ports or self.exclude_ports or []
+        if exclude_ports:
+            self.logger.info(f"Excluding ports from web scan: {exclude_ports}")
+        
         # Level 1: Basic HTTP headers and TLS check
         if scan_level == 1:
-            return self._scan_level_1(target, ports, **kwargs)
+            return self._scan_level_1(target, ports, exclude_ports, **kwargs)
         
         # Level 2: Misconfig checks, technology detection
         elif scan_level == 2:
-            return self._scan_level_2(target, ports, **kwargs)
+            return self._scan_level_2(target, ports, exclude_ports, **kwargs)
         
         # Level 3: Endpoint fuzzing, debug endpoint detection
         elif scan_level == 3:
-            return self._scan_level_3(target, ports, **kwargs)
+            return self._scan_level_3(target, ports, exclude_ports, **kwargs)
         
         else:
             raise ValueError(f"Invalid scan_level: {scan_level}. Must be 1, 2, or 3.")
     
-    def _scan_level_1(self, target: str, ports: Optional[List[int]], **kwargs) -> Dict[str, Any]:
+    def _scan_level_1(self, target: str, ports: Optional[List[int]], exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Level 1: Basic HTTP headers and SSL check."""
         web_ports = ports or [80, 443]
+        
+        # Filter out excluded ports
+        exclude_ports = exclude_ports or []
+        if exclude_ports:
+            web_ports = [port for port in web_ports if port not in exclude_ports]
+            self.logger.debug(f"Filtered web ports after exclusions: {web_ports}")
+        
         results = {}
         
         for port in web_ports:
@@ -82,9 +96,16 @@ class WebScanner(BaseScanner):
             "scanner_type": self.scanner_type
         }
     
-    def _scan_level_2(self, target: str, ports: Optional[List[int]], **kwargs) -> Dict[str, Any]:
+    def _scan_level_2(self, target: str, ports: Optional[List[int]], exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Level 2: Enhanced technology detection and misconfig checks."""
         web_ports = ports or [80, 443, 8080, 8443]
+        
+        # Filter out excluded ports
+        exclude_ports = exclude_ports or []
+        if exclude_ports:
+            web_ports = [port for port in web_ports if port not in exclude_ports]
+            self.logger.debug(f"Filtered web ports after exclusions: {web_ports}")
+        
         results = {}
         
         for port in web_ports:
@@ -102,10 +123,10 @@ class WebScanner(BaseScanner):
             "scanner_type": self.scanner_type
         }
     
-    def _scan_level_3(self, target: str, ports: Optional[List[int]], **kwargs) -> Dict[str, Any]:
+    def _scan_level_3(self, target: str, ports: Optional[List[int]], exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Level 3: Aggressive endpoint fuzzing and debug detection."""
         # Start with level 2 results
-        results = self._scan_level_2(target, ports, **kwargs)
+        results = self._scan_level_2(target, ports, exclude_ports, **kwargs)
         results["scan_level"] = 3
         
         # Add fuzzing and debug endpoint detection

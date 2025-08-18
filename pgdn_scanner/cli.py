@@ -16,7 +16,7 @@ from .core.result import Result, DictResult
 
 
 def perform_scan(scanner, target: str, hostname: str, run_type: str, 
-                protocol: str, port: str, skip_nmap: bool, nmap_args: str, debug: bool) -> Result:
+                protocol: str, port: str, skip_nmap: bool, nmap_args: str, debug: bool, exclude_web_ports: str) -> Result:
     """
     Perform scan based on run type.
     
@@ -30,6 +30,7 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         skip_nmap: Skip nmap for port_scan
         nmap_args: Additional nmap arguments for port_scan
         debug: Debug mode
+        exclude_web_ports: Comma-separated list of web ports to exclude
         
     Returns:
         Result object
@@ -42,6 +43,14 @@ def perform_scan(scanner, target: str, hostname: str, run_type: str,
         'protocol': protocol,
         'debug': debug
     }
+    
+    # Parse exclude_web_ports if provided
+    if exclude_web_ports:
+        try:
+            exclude_ports = [int(p.strip()) for p in exclude_web_ports.split(',')]
+            scan_kwargs['exclude_ports'] = exclude_ports
+        except ValueError as e:
+            raise ValueError(f"Invalid port in --exclude-web-ports: {exclude_web_ports}. Must be comma-separated integers.")
     
     # Add port-specific parameters for port_scan and ssl_test
     if run_type == 'port_scan':
@@ -112,7 +121,8 @@ def main():
             port=args.port,
             skip_nmap=getattr(args, 'skip_nmap', False),
             nmap_args=getattr(args, 'nmap_args', None),
-            debug=args.debug
+            debug=args.debug,
+            exclude_web_ports=getattr(args, 'exclude_web_ports', None)
         )
         
         # Output results
@@ -200,7 +210,9 @@ def parse_arguments():
 Examples:
   # Individual scanner runs
   pgdn-scanner --target example.com --run web
+  pgdn-scanner --target example.com --run web --exclude-web-ports 8080,8443
   pgdn-scanner --target example.com --run whatweb
+  pgdn-scanner --target example.com --run whatweb --exclude-web-ports 8080
   pgdn-scanner --target example.com --run geo
   pgdn-scanner --target example.com --run ssl_test
   pgdn-scanner --target example.com --run ip_classify
@@ -304,6 +316,11 @@ Examples:
         '--debug',
         action='store_true',
         help='Enable debug logging'
+    )
+    
+    parser.add_argument(
+        '--exclude-web-ports',
+        help='Comma-separated list of web ports to exclude from scanning (e.g., --exclude-web-ports 8080,8443)'
     )
     
     return parser.parse_args()

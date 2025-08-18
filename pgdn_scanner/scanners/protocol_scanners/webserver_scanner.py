@@ -44,6 +44,7 @@ class WebServerScanner(ProtocolScanner):
         self.web_ports = self.config.get('web_ports', [80, 443, 8080, 8000, 8443, 3000, 8888])
         self.ssl_ports = self.config.get('ssl_ports', [443, 8443])
         self.timeout = self.config.get('timeout', 10)
+        self.exclude_ports = self.config.get('exclude_ports', [])
         
         # Admin panel paths to check
         self.admin_paths = [
@@ -68,10 +69,15 @@ class WebServerScanner(ProtocolScanner):
             1: "Comprehensive web server analysis including port scanning, TLS analysis, technology fingerprinting, WAF detection, security headers, admin panels, and vulnerability assessment"
         }
 
-    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, **kwargs) -> Dict[str, Any]:
+    def scan_protocol(self, target: str, hostname: Optional[str] = None, scan_level: int = 1, exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive web server scan."""
         self.logger.info(f"Starting Web Server scan of {target}")
         scan_start_time = time.time()
+        
+        # Apply port exclusions
+        exclude_ports = exclude_ports or self.exclude_ports or []
+        if exclude_ports:
+            self.logger.info(f"Excluding ports from web scan: {exclude_ports}")
         
         results = {
             'scan_type': 'web_server_specific',
@@ -85,7 +91,7 @@ class WebServerScanner(ProtocolScanner):
         
         try:
             # Perform comprehensive scan
-            comprehensive_results = self._comprehensive_scan(target, hostname)
+            comprehensive_results = self._comprehensive_scan(target, hostname, exclude_ports)
             results.update(comprehensive_results)
             
             scan_duration = time.time() - scan_start_time
@@ -100,12 +106,19 @@ class WebServerScanner(ProtocolScanner):
         
         return results
 
-    def _comprehensive_scan(self, target: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+    def _comprehensive_scan(self, target: str, hostname: Optional[str] = None, exclude_ports: Optional[List[int]] = None) -> Dict[str, Any]:
         """Perform comprehensive web server analysis."""
         self.logger.info(f"Comprehensive Web Server scan for {target}")
         
         # Focus on common web ports first for faster scanning
         common_web_ports = [80, 443, 8080, 8000]
+        
+        # Filter out excluded ports
+        exclude_ports = exclude_ports or []
+        if exclude_ports:
+            common_web_ports = [port for port in common_web_ports if port not in exclude_ports]
+            self.logger.debug(f"Filtered common web ports after exclusions: {common_web_ports}")
+        
         results = {
             'open_ports': self._check_open_ports(target, common_web_ports),
             'tls_info': {},
@@ -132,7 +145,7 @@ class WebServerScanner(ProtocolScanner):
         
         if results.get('web_server_detected'):
             # WAF/CDN detection using integrated tools
-            waf_info = self._detect_waf_comprehensive(target, results['open_ports'])
+            waf_info = self._detect_waf_comprehensive(target, results['open_ports'], exclude_ports)
             if waf_info:
                 results['waf'] = waf_info
             
@@ -225,14 +238,20 @@ class WebServerScanner(ProtocolScanner):
         
         return technologies
 
-    def _detect_waf_comprehensive(self, target: str, open_ports: List[int]) -> Optional[Dict[str, Any]]:
+    def _detect_waf_comprehensive(self, target: str, open_ports: List[int], exclude_ports: Optional[List[int]] = None) -> Optional[Dict[str, Any]]:
         """Comprehensive WAF/CDN detection using integrated tools."""
         detected_wafs = []
+        exclude_ports = exclude_ports or []
         
         # Test common web ports for WAF/CDN detection
-        web_ports_to_test = [port for port in open_ports if port in [80, 443, 8080, 8000, 8443]]
+        all_web_ports = [80, 443, 8080, 8000, 8443]
+        allowed_web_ports = [port for port in all_web_ports if port not in exclude_ports]
+        web_ports_to_test = [port for port in open_ports if port in allowed_web_ports]
+        
         if not web_ports_to_test:
-            web_ports_to_test = [80, 443]  # Default fallback
+            # Default fallback (also filtered by exclusions)
+            fallback_ports = [80, 443]
+            web_ports_to_test = [port for port in fallback_ports if port not in exclude_ports]
         
         for port in web_ports_to_test:
             try:

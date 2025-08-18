@@ -38,7 +38,7 @@ class ScanOrchestrator:
         self.enabled_external_tools = orchestrator_config.get('enabled_external_tools', ['nmap', 'whatweb', 'ssl_test', 'docker_exposure'])
         self.logger = get_logger(__name__)
     
-    def scan(self, target: str, hostname: Optional[str] = None, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, resolved_ip: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    def scan(self, target: str, hostname: Optional[str] = None, ports: Optional[List[int]] = None, scan_level: int = 1, protocol: Optional[str] = None, resolved_ip: Optional[str] = None, exclude_ports: Optional[List[int]] = None, **kwargs) -> Dict[str, Any]:
         """Perform comprehensive scan using multiple scanner types.
         
         Args:
@@ -48,6 +48,7 @@ class ScanOrchestrator:
             scan_level: Scan level (1-3, default: 1)
             protocol: Optional protocol name for routing
             resolved_ip: Resolved IP address for IP-based operations
+            exclude_ports: List of ports to exclude from web scanning
             **kwargs: Additional scan parameters
             
         Returns:
@@ -107,7 +108,7 @@ class ScanOrchestrator:
                         # All scanners should now be synchronous
                         if hasattr(scanner, 'scan_protocol'):
                             # This is a protocol scanner
-                            raw_result = scanner.scan_protocol(target, hostname=hostname, ports=ports, **kwargs)
+                            raw_result = scanner.scan_protocol(target, hostname=hostname, ports=ports, exclude_ports=exclude_ports, **kwargs)
                         else:
                             # Regular scanner - include protocol in kwargs if provided
                             scanner_kwargs = kwargs.copy()
@@ -121,7 +122,7 @@ class ScanOrchestrator:
                                 scanner_kwargs['banners'] = banners
                                 self.logger.debug(f"Passing {len(banners)} banners to vulnerability scanner")
                             
-                            raw_result = scanner.scan(target, hostname=hostname, ports=ports, **scanner_kwargs)
+                            raw_result = scanner.scan(target, hostname=hostname, ports=ports, exclude_ports=exclude_ports, **scanner_kwargs)
                             
                         scanner_end = time.time()
                         scan_duration = scanner_end - scanner_start
@@ -298,7 +299,7 @@ class ScanOrchestrator:
         if 'whatweb' in enabled_tools:
             whatweb_start = int(time.time())
             self.logger.info(f"Running whatweb scan")
-            web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"))
+            web_ports = self._extract_web_ports(scan_results, external_results.get("nmap"), exclude_ports)
             whatweb_results = {}
             for port, scheme in web_ports:
                 try:
@@ -456,23 +457,30 @@ class ScanOrchestrator:
         except socket.error:
             return False
     
-    def _extract_web_ports(self, scan_results: Dict[str, Any], nmap_results: Optional[Dict[str, Any]] = None) -> List[Tuple[int, str]]:
+    def _extract_web_ports(self, scan_results: Dict[str, Any], nmap_results: Optional[Dict[str, Any]] = None, exclude_ports: Optional[List[int]] = None) -> List[Tuple[int, str]]:
         """Extract web ports and schemes from scan results.
         
         Args:
             scan_results: Scan results dictionary
             nmap_results: Optional nmap results
+            exclude_ports: Optional list of ports to exclude
             
         Returns:
             List of (port, scheme) tuples
         """
         web_ports = []
+        exclude_ports = exclude_ports or []
         
         # Extract from nmap results if available
         if nmap_results and isinstance(nmap_results, dict) and "ports" in nmap_results:
             for port_info in nmap_results["ports"]:
                 service = port_info.get("service", "")
                 port = int(port_info["port"])
+                
+                # Skip excluded ports
+                if port in exclude_ports:
+                    continue
+                    
                 if service == "https" or port == 443:
                     web_ports.append((port, "https"))
                 elif service in ("http", "http-proxy") or port in (80, 8080):
@@ -481,6 +489,10 @@ class ScanOrchestrator:
         # Fallback: check common web ports from generic scan
         open_ports = self._extract_open_ports(scan_results)
         for port in open_ports:
+            # Skip excluded ports
+            if port in exclude_ports:
+                continue
+                
             if port == 443 and (443, "https") not in web_ports:
                 web_ports.append((port, "https"))
             elif port in [80, 8080] and not any(p[0] == port for p in web_ports):
@@ -489,7 +501,9 @@ class ScanOrchestrator:
         # Final fallback: if no web ports found, try default web ports
         if not web_ports:
             self.logger.debug("No web ports detected, trying default ports 80 and 443")
-            web_ports = [(80, "http"), (443, "https")]
+            fallback_ports = [(80, "http"), (443, "https")]
+            # Filter out excluded ports from fallback
+            web_ports = [(port, scheme) for port, scheme in fallback_ports if port not in exclude_ports]
         
         return web_ports
     
